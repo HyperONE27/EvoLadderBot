@@ -1,0 +1,18 @@
+[
+    {"code": "NAW", "name": "Western North America"},
+    {"code": "NAC", "name": "Central North America"},
+    {"code": "NAE", "name": "Eastern North America"},
+    {"code": "CAM", "name": "Central America"},
+    {"code": "SAM", "name": "South America"},
+    {"code": "EUW", "name": "Western Europe"},
+    {"code": "EUE", "name": "Eastern Europe"},
+    {"code": "AFR", "name": "Africa"},
+    {"code": "MEA", "name": "Middle East"},
+    {"code": "SEA", "name": "South and Southeast Asia"},
+    {"code": "KRJ", "name": "Korea and Japan"},
+    {"code": "CHN", "name": "China"},
+    {"code": "THM", "name": "Taiwan, Hong Kong and Macau"},
+    {"code": "OCE", "name": "Oceania"},
+    {"code": "USB", "name": "Urals and Siberia"},
+    {"code": "FER", "name": "Far East Russia"}
+]
