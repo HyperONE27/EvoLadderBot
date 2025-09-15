@@ -9,8 +9,10 @@ EvoLadderBot/
 │   │   ├── enUS.json
 │   │   ├── koKR.json
 │   │   └── zhCN.json
-│   └── starcraft/
-│
+│   └── misc
+│       ├── countries.json
+│       ├── regions.json
+│       └── cross_table.xlsx
 ├── src/
 │   ├── backend/
 │   │   ├── api/
@@ -32,9 +34,8 @@ EvoLadderBot/
 │   │   ├── api/
 │   │   ├── interface/
 │   │   │   ├── __init__.py
-│   │   │   ├── bot_interface_commands.py
-│   │   │   ├── bot_interface_main.py
-│   │   │   └── bot_interface_views.py
+│   │   │   ├── interface_main.py
+│   │   │   └── interface_setup.py
 │   │   └── __init__.py
 │   │
 │   └── utils/
