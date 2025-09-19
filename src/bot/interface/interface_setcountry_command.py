@@ -37,12 +37,55 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
     # Get user information using utility function
     user_info = get_user_info(interaction)
     
-    # TODO: Update in backend with user ID
-    # async with aiohttp.ClientSession() as session:
-    #     await session.patch(
-    #         f'http://backend/api/players/{user_info["id"]}',
-    #         json={'country': country_code, 'discord_user_id': user_info["id"]}
-    #     )
+    # Check if user has accepted terms and completed setup
+    from src.backend.db import get_db_session
+    from src.backend.services import UserService
+    
+    async with get_db_session() as db_session:
+        has_accepted = await UserService.has_accepted_terms(
+            db_session, 
+            interaction.user.id
+        )
+        
+        if not has_accepted:
+            embed = discord.Embed(
+                title="❌ Terms of Service Required",
+                description="You must accept the Terms of Service before updating your country.",
+                color=discord.Color.red()
+            )
+            embed.add_field(
+                name="How to proceed",
+                value="Please use the `/termsofservice` command to review and accept the terms.",
+                inline=False
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        has_setup = await UserService.has_completed_setup(
+            db_session,
+            interaction.user.id
+        )
+        
+        if not has_setup:
+            embed = discord.Embed(
+                title="❌ Setup Required",
+                description="You must complete your profile setup before updating your country.",
+                color=discord.Color.red()
+            )
+            embed.add_field(
+                name="How to proceed", 
+                value="Please use the `/setup` command to set up your profile first.",
+                inline=False
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        # Update country in backend
+        await UserService.update_country(
+            db_session,
+            discord_id=interaction.user.id,
+            country_code=country_code
+        )
     
     embed = discord.Embed(
         title="✅ Country Updated",
