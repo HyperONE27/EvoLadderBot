@@ -1,0 +1,68 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+{
+  "name": "Python Backend Conventions",
+  "description": "Generic rules for Python backend development (FastAPI, SQLAlchemy, pytest, etc.)",
+  "rules": [
+    {
+      "category": "Code Style",
+      "content": [
+        "Follow PEP 8 formatting.",
+        "Use snake_case for functions and variables, PascalCase for classes.",
+        "Keep line length ≤ 100 characters.",
+        "Avoid unused imports."
+      ]
+    },
+    {
+      "category": "Imports",
+      "content": [
+        "Prefer absolute imports (e.g. from app.models import User).",
+        "Do not use star imports (*).",
+        "Group imports in order: standard library, third-party, local modules."
+      ]
+    },
+    {
+      "category": "Type Safety",
+      "content": [
+        "Add type hints for all function arguments and return values.",
+        "Use Optional[...] for nullable parameters.",
+        "Prefer list[str] / dict[str, Any] over untyped containers."
+      ]
+    },
+    {
+      "category": "Async and Database",
+      "content": [
+        "Use async/await for FastAPI and SQLAlchemy where possible.",
+        "Always ensure DB sessions are created and closed safely (context managers).",
+        "Wrap multi-step DB operations in transactions (async with session.begin())."
+      ]
+    },
+    {
+      "category": "Error Handling",
+      "content": [
+        "Raise framework-appropriate exceptions (e.g. HTTPException in FastAPI).",
+        "Catch only specific exceptions, not bare 'except:'.",
+        "Include meaningful error messages."
+      ]
+    },
+    {
+      "category": "Testing",
+      "content": [
+        "Write tests using pytest.",
+        "Name test files test_*.py.",
+        "Include both success and failure cases in tests."
+      ]
+    },
+    {
+      "category": "Documentation",
+      "content": [
+        "Write concise docstrings for all public functions and classes.",
+        "Use a consistent docstring style (Google-style or reST).",
+        "Explain parameters and return values in docstrings."
+      ]
+    }
+  ]
+}
