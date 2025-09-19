@@ -272,20 +272,19 @@ class ConfirmationView(discord.ui.View):
         # Add user information
         embed.add_field(**create_user_embed_field(user_info))
         
-        # Send data to backend
-        from src.backend.db import get_db_session
-        from src.backend.services import UserService
-        
-        async with get_db_session() as db_session:
-            await UserService.update_user_setup(
-                db_session,
-                discord_id=int(user_info["id"]),
-                main_id=self.user_id,
-                alt_ids=self.alt_ids,
-                battle_tag=self.battle_tag,
-                country_code=self.country['code'],
-                region_code=self.region['code']
-            )
+        # TODO: Send data to backend
+        # async with aiohttp.ClientSession() as session:
+        #     await session.post(
+        #         f'http://backend/api/players/{user_info["id"]}',
+        #         json={
+        #             'discord_user_id': user_info["id"],
+        #             'user_id': self.user_id,
+        #             'alt_ids': self.alt_ids,
+        #             'battle_tag': self.battle_tag,
+        #             'country_code': self.country['code'],
+        #             'region_code': self.region['code']
+        #         }
+        #     )
         
         # Log the setup
         log_user_action(user_info, "completed player setup", 
@@ -299,30 +298,6 @@ class ConfirmationView(discord.ui.View):
 
 async def setup_command(interaction: discord.Interaction):
     """Handle the /setup slash command"""
-    # Check if user has accepted terms of service
-    from src.backend.db import get_db_session
-    from src.backend.services import UserService
-    
-    async with get_db_session() as db_session:
-        has_accepted = await UserService.has_accepted_terms(
-            db_session, 
-            interaction.user.id
-        )
-    
-    if not has_accepted:
-        embed = discord.Embed(
-            title="❌ Terms of Service Required",
-            description="You must accept the Terms of Service before setting up your profile.",
-            color=discord.Color.red()
-        )
-        embed.add_field(
-            name="How to proceed",
-            value="Please use the `/termsofservice` command to review and accept the terms.",
-            inline=False
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-        return
-    
     # Send the modal directly as the initial response
     modal = SetupModal()
     await interaction.response.send_modal(modal)

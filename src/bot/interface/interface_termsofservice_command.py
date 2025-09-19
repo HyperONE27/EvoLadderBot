@@ -107,15 +107,12 @@ async def termsofservice_command(interaction: discord.Interaction):
             # Log the confirmation
             log_user_action(self.user_info, "confirmed terms of service")
 
-            # Update in backend that user has confirmed the terms of service
-            from src.backend.db import get_db_session
-            from src.backend.services import UserService
-            
-            async with get_db_session() as db_session:
-                await UserService.accept_terms_of_service(
-                    db_session, 
-                    int(self.user_info["id"])
-                )
+            # TODO: Update in backend that user has confirmed the terms of service
+            # async with aiohttp.ClientSession() as session:
+            #     await session.patch(
+            #         f'http://backend/api/players/{self.user_info["id"]}',
+            #         json={'terms_of_service_confirmed': True, 'discord_user_id': self.user_info["id"]}
+            #     )
 
             confirm_embed = discord.Embed(
                 title="✅ Terms of Service Confirmed",
