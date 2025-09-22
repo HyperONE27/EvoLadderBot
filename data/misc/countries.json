@@ -42,7 +42,7 @@
   {
     "code": "AR",
     "name": "Argentina",
-    "common": false
+    "common": true
   },
   {
     "code": "AM",
@@ -676,7 +676,7 @@
   },
   {
     "code": "MO",
-    "name": "Macao",
+    "name": "Macau",
     "common": false
   },
   {
@@ -942,7 +942,7 @@
   {
     "code": "RO",
     "name": "Romania",
-    "common": false
+    "common": true
   },
   {
     "code": "RU",
@@ -1242,36 +1242,6 @@
   {
     "code": "ZW",
     "name": "Zimbabwe",
-    "common": false
-  },
-  {
-    "code": "XX",
-    "name": "Other",
-    "common": false
-  },
-  {
-    "code": "XX",
-    "name": "Other",
-    "common": false
-  },
-  {
-    "code": "XX",
-    "name": "Other",
-    "common": false
-  },
-  {
-    "code": "XX",
-    "name": "Other",
-    "common": false
-  },
-  {
-    "code": "XX",
-    "name": "Other",
-    "common": false
-  },
-  {
-    "code": "XX",
-    "name": "Other",
     "common": false
   },
   {

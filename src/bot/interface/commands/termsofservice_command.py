@@ -1,7 +1,10 @@
 import discord
 from discord import app_commands
-from src.utils.user_utils import get_user_info, create_user_embed_field, log_user_action
+from src.utils.user_utils import get_user_info, log_user_action
+from components.confirm_embed import ConfirmEmbedView
 
+
+# API Call / Data Handling
 async def termsofservice_command(interaction: discord.Interaction):
     """Show the terms of service"""
     user_info = get_user_info(interaction)
@@ -80,59 +83,76 @@ async def termsofservice_command(interaction: discord.Interaction):
         icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"  # Replace with actual bot icon
     )
 
-    # Add user information
-    embed.add_field(**create_user_embed_field(user_info))
 
     # Log the action
     log_user_action(user_info, "viewed terms of service")
 
-    class ConfirmTOSView(discord.ui.View):
-        """View for confirming Terms of Service."""
+    # Create confirmation callback
+    async def confirm_callback(interaction: discord.Interaction):
+        # Log the confirmation
+        log_user_action(user_info, "confirmed terms of service")
 
-        def __init__(self, user_info: dict[str, str]):
-            super().__init__(timeout=120)
-            self.user_info = user_info
+        # TODO: Update in backend that user has confirmed the terms of service
+        # async with aiohttp.ClientSession() as session:
+        #     await session.patch(
+        #         f'http://backend/api/players/{user_info["id"]}',
+        #         json={'terms_of_service_confirmed': True, 'discord_user_id': user_info["id"]}
+        #     )
 
-        @discord.ui.button(
-            label="Confirm",
-            style=discord.ButtonStyle.success,
-            custom_id="confirm_tos"
+        # Show post-confirmation view
+        post_confirm_view = ConfirmEmbedView(
+            title="Terms of Service Confirmed",
+            description="Thank you for confirming the EvoLadderBot Terms of Service.",
+            fields=[
+                ("User", user_info.get("username", "Unknown")),
+                ("Status", "Terms Accepted"),
+                ("Access", "Full EvoLadderBot features unlocked")
+            ],
+            mode="post_confirmation",
+            reset_target=None,  # No restart option for TOS
+            restart_label="🔄 View Terms Again"
         )
-        async def confirm_button(
-            self,
-            interaction: discord.Interaction,
-            button: discord.ui.Button
-        ):
-            """Handle confirmation of Terms of Service."""
-            # Log the confirmation
-            log_user_action(self.user_info, "confirmed terms of service")
+        post_confirm_view.embed.set_footer(
+            text="You may now use all EvoLadderBot features.",
+            icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
+        )
+        await interaction.response.edit_message(embed=post_confirm_view.embed, view=post_confirm_view)
 
-            # TODO: Update in backend that user has confirmed the terms of service
-            # async with aiohttp.ClientSession() as session:
-            #     await session.patch(
-            #         f'http://backend/api/players/{self.user_info["id"]}',
-            #         json={'terms_of_service_confirmed': True, 'discord_user_id': self.user_info["id"]}
-            #     )
+    # Create a simple view for the reset target
+    class TOSResetView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=60)
+        
+        @discord.ui.button(label="🔄 View Again", style=discord.ButtonStyle.secondary)
+        async def retry(self, interaction: discord.Interaction, button: discord.ui.Button):
+            await interaction.response.send_message(
+                "Please use `/termsofservice` command again to view the terms.",
+                ephemeral=True
+            )
 
-            confirm_embed = discord.Embed(
-                title="✅ Terms of Service Confirmed",
-                description="Thank you for confirming the EvoLadderBot Terms of Service.",
-                color=discord.Color.green()
-            )
-            confirm_embed.set_footer(
-                text="You may now use all EvoLadderBot features.",
-                icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
-            )
-            confirm_embed.add_field(**create_user_embed_field(self.user_info))
-            await interaction.response.send_message(embed=confirm_embed, ephemeral=True)
-            self.stop()
+    # Use the new confirm embed system
+    confirm_view = ConfirmEmbedView(
+        title="Preview Terms Acceptance",
+        description="Please review the terms and confirm your acceptance:",
+        fields=[
+            ("User", user_info.get("username", "Unknown")),
+            ("Status", "Ready to confirm")
+        ],
+        mode="preview",
+        confirm_callback=confirm_callback,
+        reset_target=TOSResetView(),
+        confirm_label="✅ I Accept",
+        cancel_label="❌ Decline"
+    )
 
     await interaction.response.send_message(
         embed=embed,
-        view=ConfirmTOSView(user_info),
+        view=confirm_view,
         ephemeral=True
     )
 
+
+# Register Command
 def register_termsofservice_command(tree: app_commands.CommandTree):
     """Register the termsofservice command.
 
