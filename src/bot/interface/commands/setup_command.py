@@ -74,8 +74,13 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         # Validate user ID
         is_valid, error = validate_user_id(self.user_id.value)
         if not is_valid:
+            error_embed = discord.Embed(
+                title="❌ Invalid User ID",
+                description=f"**Error:** {error}\n\nPlease try again with a valid User ID.",
+                color=discord.Color.red()
+            )
             await interaction.response.send_message(
-                f"❌ **Invalid User ID:** {error}\n\nClick the button below to try again:",
+                embed=error_embed,
                 view=ErrorView(error),
                 ephemeral=True
             )
@@ -84,8 +89,13 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         # Validate BattleTag
         is_valid, error = validate_battle_tag(self.battle_tag.value)
         if not is_valid:
+            error_embed = discord.Embed(
+                title="❌ Invalid BattleTag",
+                description=f"**Error:** {error}\n\nPlease try again with a valid BattleTag.",
+                color=discord.Color.red()
+            )
             await interaction.response.send_message(
-                f"❌ **Invalid BattleTag:** {error}\n\nClick the button below to try again:",
+                embed=error_embed,
                 view=ErrorView(error),
                 ephemeral=True
             )
@@ -98,8 +108,13 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         if self.alt_id_1.value.strip():
             is_valid, error = validate_user_id(self.alt_id_1.value.strip())
             if not is_valid:
+                error_embed = discord.Embed(
+                    title="❌ Invalid Alternative ID 1",
+                    description=f"**Error:** {error}\n\nPlease try again with a valid Alternative ID.",
+                    color=discord.Color.red()
+                )
                 await interaction.response.send_message(
-                    f"❌ **Invalid Alternative ID 1:** {error}\n\nClick the button below to try again:",
+                    embed=error_embed,
                     view=ErrorView(error),
                     ephemeral=True
                 )
@@ -110,8 +125,13 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         if self.alt_id_2.value.strip():
             is_valid, error = validate_user_id(self.alt_id_2.value.strip())
             if not is_valid:
+                error_embed = discord.Embed(
+                    title="❌ Invalid Alternative ID 2",
+                    description=f"**Error:** {error}\n\nPlease try again with a valid Alternative ID.",
+                    color=discord.Color.red()
+                )
                 await interaction.response.send_message(
-                    f"❌ **Invalid Alternative ID 2:** {error}\n\nClick the button below to try again:",
+                    embed=error_embed,
                     view=ErrorView(error),
                     ephemeral=True
                 )
@@ -121,8 +141,13 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         # Check for duplicate IDs
         all_ids = [self.user_id.value] + alt_ids_list
         if len(all_ids) != len(set(all_ids)):
+            error_embed = discord.Embed(
+                title="❌ Duplicate IDs",
+                description="**Error:** All IDs must be unique.\n\nPlease ensure each ID is different from the others.",
+                color=discord.Color.red()
+            )
             await interaction.response.send_message(
-                f"❌ **Duplicate IDs:** All IDs must be unique.\n\nClick the button below to try again:",
+                embed=error_embed,
                 view=ErrorView("Duplicate IDs detected"),
                 ephemeral=True
             )
@@ -132,12 +157,16 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         view = UnifiedSetupView(
             user_id=self.user_id.value,
             alt_ids=alt_ids_list,
-            battle_tag=self.battle_tag.value
+            battle_tag=self.battle_tag.value,
+            selected_country=None,
+            selected_region=None,
+            country_page1_selection=None,
+            country_page2_selection=None
         )
         
         # Create initial blue embed
         initial_embed = discord.Embed(
-            title="🔍 Setup - Country & Region Selection",
+            title="⚙️ Setup - Country & Region Selection",
             description="Please select your country and region.\n\n(Due to Discord UI limitations, we list only 49 countries here. If your country is not listed, please select \"Other\" at the bottom of Page 2, then set it up later with `/setcountry`.)",
             color=discord.Color.blue()
         )
@@ -152,18 +181,32 @@ class ErrorView(discord.ui.View):
     def __init__(self, error_message: str):
         super().__init__(timeout=60)
         self.error_message = error_message
-
-    @discord.ui.button(label=" Try Again", style=discord.ButtonStyle.primary)
-    async def try_again(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = SetupModal()
-        await interaction.response.send_modal(modal)
+        
+        # Add restart and cancel buttons only
+        from components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
+        buttons = ConfirmRestartCancelButtons.create_buttons(
+            reset_target=SetupModal(),
+            restart_label="🔄 Try Again",
+            cancel_label="❌ Cancel",
+            show_cancel_fields=False,
+            include_confirm=False,
+            include_restart=True,
+            include_cancel=True
+        )
+        
+        for button in buttons:
+            self.add_item(button)
 
 class CountryPage1Select(discord.ui.Select):
-    def __init__(self, countries):
+    def __init__(self, countries, selected_country=None):
         # Countries 1-25 (indices 0-24)
         page_countries = countries[:25]
         options = [
-            discord.SelectOption(label=country['name'], value=country['code'])
+            discord.SelectOption(
+                label=country['name'], 
+                value=country['code'],
+                default=(country['code'] == selected_country)
+            )
             for country in page_countries
         ]
         
@@ -191,11 +234,15 @@ class CountryPage1Select(discord.ui.Select):
         await self.view.update_view(interaction)
 
 class CountryPage2Select(discord.ui.Select):
-    def __init__(self, countries):
+    def __init__(self, countries, selected_country=None):
         # Countries 26-50 (indices 25-49)
         page_countries = countries[25:50] if len(countries) > 25 else []
         options = [
-            discord.SelectOption(label=country['name'], value=country['code'])
+            discord.SelectOption(
+                label=country['name'], 
+                value=country['code'],
+                default=(country['code'] == selected_country)
+            )
             for country in page_countries
         ]
         
@@ -223,9 +270,13 @@ class CountryPage2Select(discord.ui.Select):
         await self.view.update_view(interaction)
 
 class RegionSelect(discord.ui.Select):
-    def __init__(self, regions):
+    def __init__(self, regions, selected_region=None):
         options = [
-            discord.SelectOption(label=region['name'], value=region['code'])
+            discord.SelectOption(
+                label=region['name'], 
+                value=region['code'],
+                default=(region['code'] == selected_region)
+            )
             for region in regions
         ]
         
@@ -248,26 +299,26 @@ class RegionSelect(discord.ui.Select):
         await self.view.update_view(interaction)
 
 class UnifiedSetupView(discord.ui.View):
-    def __init__(self, user_id: str, alt_ids: list, battle_tag: str):
+    def __init__(self, user_id: str, alt_ids: list, battle_tag: str, selected_country=None, selected_region=None, country_page1_selection=None, country_page2_selection=None):
         super().__init__(timeout=300)
         self.user_id = user_id
         self.alt_ids = alt_ids
         self.battle_tag = battle_tag
-        self.selected_country = None
-        self.selected_region = None
+        self.selected_country = selected_country
+        self.selected_region = selected_region
         
         # Track which country page has a selection (for mutual exclusion)
-        self.country_page1_selection = None
-        self.country_page2_selection = None
+        self.country_page1_selection = country_page1_selection
+        self.country_page2_selection = country_page2_selection
         
         # Get countries and regions
         self.countries = country_lookup.get_common_countries()
         self.regions = region_lookup.get_all_regions()
         
-        # Create dropdowns
-        self.country_page1_select = CountryPage1Select(self.countries)
-        self.country_page2_select = CountryPage2Select(self.countries)
-        self.region_select = RegionSelect(self.regions)
+        # Create dropdowns with current selections
+        self.country_page1_select = CountryPage1Select(self.countries, self.country_page1_selection)
+        self.country_page2_select = CountryPage2Select(self.countries, self.country_page2_selection)
+        self.region_select = RegionSelect(self.regions, self.selected_region['code'] if self.selected_region else None)
         
         # Add dropdowns to view
         self.add_item(self.country_page1_select)
@@ -282,19 +333,15 @@ class UnifiedSetupView(discord.ui.View):
     async def update_view(self, interaction: discord.Interaction):
         """Update the view with current selections"""
         # Create a new view with current selections to maintain state
-        new_view = UnifiedSetupView(self.user_id, self.alt_ids, self.battle_tag)
-        new_view.selected_country = self.selected_country
-        new_view.selected_region = self.selected_region
-        new_view.country_page1_selection = self.country_page1_selection
-        new_view.country_page2_selection = self.country_page2_selection
-        
-        # Update the dropdowns to show current selections
-        if self.country_page1_selection:
-            new_view.country_page1_select.placeholder = f"Selected: {self.selected_country['name']}"
-        if self.country_page2_selection:
-            new_view.country_page2_select.placeholder = f"Selected: {self.selected_country['name']}"
-        if self.selected_region:
-            new_view.region_select.placeholder = f"Selected: {self.selected_region['name']}"
+        new_view = UnifiedSetupView(
+            self.user_id, 
+            self.alt_ids, 
+            self.battle_tag,
+            selected_country=self.selected_country,
+            selected_region=self.selected_region,
+            country_page1_selection=self.country_page1_selection,
+            country_page2_selection=self.country_page2_selection
+        )
         
         await interaction.response.edit_message(
             embed=new_view.get_status_embed(),
@@ -304,7 +351,7 @@ class UnifiedSetupView(discord.ui.View):
     def get_status_embed(self) -> discord.Embed:
         """Get status embed based on current selections"""
         embed = discord.Embed(
-            title="🔍 Setup - Country & Region Selection",
+            title="⚙️ Setup - Country & Region Selection",
             color=discord.Color.blue()
         )
         
@@ -336,7 +383,7 @@ class UnifiedSetupView(discord.ui.View):
         """Handle confirm button press"""
         if not self.selected_country or not self.selected_region:
             error_embed = discord.Embed(
-                title="🔍 Setup - Country & Region Selection",
+                title="⚙️ Setup - Country & Region Selection",
                 description="❌ Please select both country and region before confirming.",
                 color=discord.Color.blue()
             )

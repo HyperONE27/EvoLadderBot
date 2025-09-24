@@ -64,37 +64,17 @@ class CancelButton(discord.ui.Button):
         self.show_fields = show_fields
 
     async def callback(self, interaction: discord.Interaction):
-        if self.show_fields:
-            # Get the current embed and modify it to show cancellation
-            current_embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed()
-            
-            # Create cancelled embed with same fields but different title/description
-            cancel_embed = discord.Embed(
-                title="❌ Operation Cancelled",
-                description="The operation has been cancelled.",
-                color=discord.Color.red()
-            )
-            
-            # Copy all fields from the original embed
-            for field in current_embed.fields:
-                cancel_embed.add_field(
-                    name=field.name,
-                    value=field.value,
-                    inline=field.inline
-                )
-            
-            await interaction.response.edit_message(
-                content="",
-                embed=cancel_embed,
-                view=None
-            )
-        else:
-            # Simple cancellation without showing fields
-            await interaction.response.edit_message(
-                content="❌ Operation cancelled.",
-                embed=None,
-                view=None
-            )
+        # Import here to avoid circular imports
+        from components.cancel_embed import create_cancel_embed
+        
+        # Always use the cancel embed for consistency
+        cancel_view = create_cancel_embed()
+        
+        await interaction.response.edit_message(
+            content="",
+            embed=cancel_view.embed,
+            view=cancel_view
+        )
 
 
 class ConfirmRestartCancelButtons:
@@ -108,16 +88,34 @@ class ConfirmRestartCancelButtons:
         restart_label: str = "🔄 Restart",
         cancel_label: str = "❌ Cancel",
         show_cancel_fields: bool = True,
-        row: int = 0
+        row: int = 0,
+        include_confirm: bool = True,
+        include_restart: bool = True,
+        include_cancel: bool = True
     ) -> list[discord.ui.Button]:
-        """Create a list of buttons based on provided parameters."""
+        """Create a list of buttons based on provided parameters.
+        
+        Args:
+            confirm_callback: Callback function for confirm button
+            reset_target: Target for restart/cancel buttons
+            confirm_label: Label for confirm button
+            restart_label: Label for restart button
+            cancel_label: Label for cancel button
+            show_cancel_fields: Whether to show fields in cancel embed
+            row: Row position for buttons
+            include_confirm: Whether to include confirm button
+            include_restart: Whether to include restart button
+            include_cancel: Whether to include cancel button
+        """
         buttons = []
         
-        if confirm_callback:
+        if include_confirm and confirm_callback:
             buttons.append(ConfirmButton(confirm_callback, confirm_label, row=row))
         
-        if reset_target:
+        if include_restart and reset_target:
             buttons.append(RestartButton(reset_target, restart_label, row=row))
+        
+        if include_cancel and reset_target:
             buttons.append(CancelButton(reset_target, cancel_label, show_fields=show_cancel_fields, row=row))
         
         return buttons

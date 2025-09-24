@@ -31,8 +31,13 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
     country = country_lookup.get_country_by_code(country_code)
     
     if not country:
+        error_embed = discord.Embed(
+            title="❌ Invalid Country Selection",
+            description="The selected country is not valid. Please try again with a different country.\n\n(If you are sure your country is valid, please ensure you are waiting for Discord's UI to load your country before selecting it and pressing Enter.)",
+            color=discord.Color.red()
+        )
         await interaction.response.send_message(
-            "❌ Invalid country selection.",
+            embed=error_embed,
             ephemeral=True
         )
         return

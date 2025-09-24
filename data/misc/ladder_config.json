@@ -1,0 +1,40 @@
+{
+    "maps": [
+        {
+            "name": "[SC:Evo] Arkanoid (알카노이드)",
+            "short_name": "Arkanoid"
+        },
+        {
+            "name": "[SC:Evo] Death Valley (데스밸리)",
+            "short_name": "Death Valley"
+        },
+        {
+            "name": "Keres Passage SEL",
+            "short_name": "Keres Passage"
+        },
+        {
+            "name": "Khione SEL",
+            "short_name": "Khione"
+        },
+        {
+            "name": "Pylon SEL",
+            "short_name": "Pylon"
+        },
+        {
+            "name": "[SC:Evo] Radeon (라데온)",
+            "short_name": "Radeon"
+        },
+        {
+            "name": "Subsequence SEL",
+            "short_name": "Subsequence"
+        },
+        {
+            "name": "[SC:Evo] Sylphid (실피드)",
+            "short_name": "Sylphid"
+        },
+        {
+            "name": "[SC:Evo] Vermeer (버미어)",
+            "short_name": "Vermeer"
+        }
+    ]
+}

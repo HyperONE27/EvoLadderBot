@@ -1,0 +1,34 @@
+{
+    "races": [
+        {
+            "code": "bw_terran",
+            "name": "BW Terran",
+            "short_name": "T1"
+        },
+        {
+            "code": "bw_zerg",
+            "name": "BW Zerg",
+            "short_name": "Z1"
+        },
+        {
+            "code": "bw_protoss",
+            "name": "BW Protoss",
+            "short_name": "P1"
+        },
+        {
+            "code": "sc2_terran",
+            "name": "SC2 Terran",
+            "short_name": "T2"
+        },
+        {
+            "code": "sc2_zerg",
+            "name": "SC2 Zerg",
+            "short_name": "Z2"
+        },
+        {
+            "code": "sc2_protoss",
+            "name": "SC2 Protoss",
+            "short_name": "P2"
+        }
+    ]
+}

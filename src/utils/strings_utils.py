@@ -11,6 +11,17 @@ def format_race_name(race: str) -> str:
     if not race:
         return "Unknown"
     
+    # Try to use race service first
+    try:
+        from src.backend.services.race_config_service import RaceConfigService
+        race_service = RaceConfigService()
+        formatted_name = race_service.format_race_name(race)
+        if formatted_name != race:  # Service found the race
+            return formatted_name
+    except (ImportError, Exception):
+        pass  # Fall back to manual formatting
+    
+    # Fallback to manual formatting
     # Split by underscore and capitalize each part
     parts = race.split('_')
     
