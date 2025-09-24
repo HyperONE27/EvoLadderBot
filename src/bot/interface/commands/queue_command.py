@@ -62,7 +62,7 @@ class RaceSelect(discord.ui.Select):
             min_values=0,
             max_values=len(options),
             options=options,
-            row=0
+            row=1
         )
     
     async def callback(self, interaction: discord.Interaction):
@@ -88,15 +88,52 @@ class MapVetoSelect(discord.ui.Select):
             )
         
         super().__init__(
-            placeholder="Select maps to veto (multiselect)...",
+            placeholder="Select maps to veto (max 4)...",
             min_values=0,
-            max_values=len(options),
+            max_values=4,
             options=options,
-            row=1
+            row=2
         )
     
     async def callback(self, interaction: discord.Interaction):
         self.view.vetoed_maps = self.values
+        await self.view.update_embed(interaction)
+
+
+class JoinQueueButton(discord.ui.Button):
+    """Join queue button"""
+    
+    def __init__(self):
+        super().__init__(
+            label="Join Queue",
+            style=discord.ButtonStyle.primary,  # Blurple
+            row=0
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        # TODO: Implement actual queue joining logic
+        await interaction.response.send_message(
+            "🚀 Joining queue with your current selections...",
+            ephemeral=True
+        )
+
+
+class ClearSelectionsButton(discord.ui.Button):
+    """Clear all selections button"""
+    
+    def __init__(self):
+        super().__init__(
+            label="Clear All Selections",
+            style=discord.ButtonStyle.danger,  # Red
+            row=0
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        # Clear all selections
+        self.view.selected_races = []
+        self.view.vetoed_maps = []
+        
+        # Update the view with cleared selections
         await self.view.update_embed(interaction)
 
 
@@ -107,6 +144,10 @@ class QueueView(discord.ui.View):
         super().__init__(timeout=300)
         self.selected_races = default_races or []
         self.vetoed_maps = default_maps or []
+        
+        # Add action buttons at the top
+        self.add_item(JoinQueueButton())
+        self.add_item(ClearSelectionsButton())
         
         # Add selection dropdowns with default values
         self.add_item(RaceSelect(default_values=default_races))
@@ -140,19 +181,20 @@ class QueueView(discord.ui.View):
             )
         
         # Add map veto info
+        veto_count = len(self.vetoed_maps)
         if self.vetoed_maps:
             # Sort maps according to the service's defined order
             map_order = ladder_service.get_map_short_names()
             sorted_maps = [map_name for map_name in map_order if map_name in self.vetoed_maps]
             map_list = "\n".join([f"• {map_name}" for map_name in sorted_maps])
             embed.add_field(
-                name="Vetoed Maps",
+                name=f"Vetoed Maps ({veto_count}/4)",
                 value=map_list,
                 inline=False
             )
         else:
             embed.add_field(
-                name="Vetoed Maps",
+                name="Vetoed Maps (0/4)",
                 value="No vetoes",
                 inline=False
             )
