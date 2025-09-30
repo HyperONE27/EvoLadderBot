@@ -8,11 +8,11 @@ class ConfirmButton(discord.ui.Button):
     def __init__(
         self,
         callback: Callable,
-        label: str = "✅ Confirm",
+        label: str = "Confirm",
         style: discord.ButtonStyle = discord.ButtonStyle.success,
         row: int = 0
     ):
-        super().__init__(label=label, style=style, row=row)
+        super().__init__(label=label, style=style, emoji="✅", row=row)
         self.callback_func = callback
 
     async def callback(self, interaction: discord.Interaction):
@@ -25,20 +25,29 @@ class RestartButton(discord.ui.Button):
     def __init__(
         self,
         reset_target: Union[discord.ui.View, discord.ui.Modal],
-        label: str = "🔄 Restart",
+        label: str = "Restart",
         style: discord.ButtonStyle = discord.ButtonStyle.secondary,
         row: int = 0
     ):
-        super().__init__(label=label, style=style, row=row)
+        super().__init__(label=label, style=style, emoji="🔄", row=row)
         self.reset_target = reset_target
 
     async def callback(self, interaction: discord.Interaction):
         if isinstance(self.reset_target, discord.ui.View):
-            await interaction.response.edit_message(
-                content="🔄 Restarted.",
-                embed=None,
-                view=self.reset_target
-            )
+            # Check if the view has a get_embed method to get the proper embed
+            if hasattr(self.reset_target, 'get_embed'):
+                embed = self.reset_target.get_embed()
+                await interaction.response.edit_message(
+                    content="",
+                    embed=embed,
+                    view=self.reset_target
+                )
+            else:
+                await interaction.response.edit_message(
+                    content="",
+                    embed=None,
+                    view=self.reset_target
+                )
         elif isinstance(self.reset_target, discord.ui.Modal):
             await interaction.response.send_modal(self.reset_target)
         else:
@@ -54,12 +63,12 @@ class CancelButton(discord.ui.Button):
     def __init__(
         self,
         reset_target: Union[discord.ui.View, discord.ui.Modal],
-        label: str = "❌ Cancel",
+        label: str = "Cancel",
         style: discord.ButtonStyle = discord.ButtonStyle.danger,
         row: int = 0,
         show_fields: bool = True
     ):
-        super().__init__(label=label, style=style, row=row)
+        super().__init__(label=label, style=style, emoji="❌", row=row)
         self.reset_target = reset_target
         self.show_fields = show_fields
 
@@ -84,9 +93,9 @@ class ConfirmRestartCancelButtons:
     def create_buttons(
         confirm_callback: Optional[Callable] = None,
         reset_target: Optional[Union[discord.ui.View, discord.ui.Modal]] = None,
-        confirm_label: str = "✅ Confirm",
-        restart_label: str = "🔄 Restart",
-        cancel_label: str = "❌ Cancel",
+        confirm_label: str = "Confirm",
+        restart_label: str = "Restart",
+        cancel_label: str = "Cancel",
         show_cancel_fields: bool = True,
         row: int = 0,
         include_confirm: bool = True,
@@ -98,9 +107,9 @@ class ConfirmRestartCancelButtons:
         Args:
             confirm_callback: Callback function for confirm button
             reset_target: Target for restart/cancel buttons
-            confirm_label: Label for confirm button
-            restart_label: Label for restart button
-            cancel_label: Label for cancel button
+            confirm_label: Label for confirm button (emoji automatically added)
+            restart_label: Label for restart button (emoji automatically added)
+            cancel_label: Label for cancel button (emoji automatically added)
             show_cancel_fields: Whether to show fields in cancel embed
             row: Row position for buttons
             include_confirm: Whether to include confirm button

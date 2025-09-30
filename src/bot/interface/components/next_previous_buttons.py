@@ -8,12 +8,12 @@ class NextPageButton(discord.ui.Button):
     def __init__(
         self,
         callback: Callable,
-        label: str = "➡️ Next Page",
+        label: str = "Next Page",
         style: discord.ButtonStyle = discord.ButtonStyle.primary,
         row: int = 0,
         disabled: bool = False
     ):
-        super().__init__(label=label, style=style, row=row, disabled=disabled)
+        super().__init__(label=label, style=style, emoji="➡️", row=row, disabled=disabled)
         self.callback_func = callback
 
     async def callback(self, interaction: discord.Interaction):
@@ -26,12 +26,12 @@ class PreviousPageButton(discord.ui.Button):
     def __init__(
         self,
         callback: Callable,
-        label: str = "⬅️ Previous Page",
+        label: str = "Previous Page",
         style: discord.ButtonStyle = discord.ButtonStyle.primary,
         row: int = 0,
         disabled: bool = False
     ):
-        super().__init__(label=label, style=style, row=row, disabled=disabled)
+        super().__init__(label=label, style=style, emoji="⬅️", row=row, disabled=disabled)
         self.callback_func = callback
 
     async def callback(self, interaction: discord.Interaction):
@@ -47,8 +47,8 @@ class NextPreviousButtons:
         previous_callback: Optional[Callable] = None,
         next_disabled: bool = False,
         previous_disabled: bool = False,
-        next_label: str = "➡️ Next Page",
-        previous_label: str = "⬅️ Previous Page",
+        next_label: str = "Next Page",
+        previous_label: str = "Previous Page",
         row: int = 0
     ) -> list[discord.ui.Button]:
         """Create a list of next/previous buttons based on provided parameters."""

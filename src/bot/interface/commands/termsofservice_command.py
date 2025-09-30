@@ -123,7 +123,7 @@ async def termsofservice_command(interaction: discord.Interaction):
         def __init__(self):
             super().__init__(timeout=60)
         
-        @discord.ui.button(label="🔄 View Again", style=discord.ButtonStyle.secondary)
+        @discord.ui.button(label="View Again", emoji="🔄", style=discord.ButtonStyle.secondary)
         async def retry(self, interaction: discord.Interaction, button: discord.ui.Button):
             await interaction.response.send_message(
                 "Please use `/termsofservice` command again to view the terms.",

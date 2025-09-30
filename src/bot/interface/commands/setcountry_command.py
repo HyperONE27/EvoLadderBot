@@ -3,6 +3,7 @@ from discord import app_commands
 from src.utils.country_region_utils import CountryLookup
 from src.utils.user_utils import get_user_info, log_user_action
 from components.confirm_embed import ConfirmEmbedView
+from components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
 
 country_lookup = CountryLookup()
 
@@ -45,7 +46,7 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
     # Get user information using utility function
     user_info = get_user_info(interaction)
     
-    # Show preview with confirm/restart/cancel options
+    # Show preview with confirm/cancel options only
     async def confirm_callback(interaction: discord.Interaction):
         # TODO: Update in backend with user ID
         # async with aiohttp.ClientSession() as session:
@@ -64,36 +65,44 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
             fields=[
                 (":map: **Selected Country**", f"{country['name']} ({country_code})")
             ],
-            mode="post_confirmation",
-            reset_target=None,  # No restart option for country setting
-            restart_label="🔄 Change Country"
+            mode="post_confirmation"
         )
         await interaction.response.edit_message(embed=post_confirm_view.embed, view=post_confirm_view)
     
-    # Create a simple view for the reset target (just show the command again)
-    class CountryResetView(discord.ui.View):
+    # Create a simple view for the cancel target (just show the command again)
+    class CountryCancelView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=60)
         
-        @discord.ui.button(label="🔄 Try Again", style=discord.ButtonStyle.secondary)
+        @discord.ui.button(label="Try Again", emoji="🔄", style=discord.ButtonStyle.secondary)
         async def retry(self, interaction: discord.Interaction, button: discord.ui.Button):
             await interaction.response.send_message(
                 "Please use `/setcountry` command again to select a different country.",
                 ephemeral=True
             )
     
-    confirm_view = ConfirmEmbedView(
-        title="Preview Country Selection",
+    # Create custom view with only confirm and cancel buttons
+    class CountryConfirmView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=300)
+            self.add_item(ConfirmButton(confirm_callback, "Confirm"))
+            self.add_item(CancelButton(CountryCancelView(), "Cancel"))
+    
+    # Create the embed
+    embed = discord.Embed(
+        title="🔍 Preview Country Selection",
         description="Please review your country selection before confirming:",
-        fields=[
-            (":map: **Country of Citizenship/Nationality**", f"{country['name']}"),
-        ],
-        mode="preview",
-        confirm_callback=confirm_callback,
-        reset_target=CountryResetView()
+        color=discord.Color.blue()
+    )
+    embed.add_field(
+        name=":map: **Country of Citizenship/Nationality**",
+        value=f"{country['name']}",
+        inline=False
     )
     
-    await interaction.response.send_message(embed=confirm_view.embed, view=confirm_view, ephemeral=True)
+    confirm_view = CountryConfirmView()
+    
+    await interaction.response.send_message(embed=embed, view=confirm_view, ephemeral=True)
 
 
 # Register Command

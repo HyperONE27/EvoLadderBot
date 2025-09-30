@@ -320,7 +320,8 @@ class PreviousPageButton(discord.ui.Button):
     
     def __init__(self, disabled=False):
         super().__init__(
-            label="⬅️ Previous Page",
+            label="Previous Page",
+            emoji="⬅️",
             style=discord.ButtonStyle.secondary,
             row=0,
             disabled=disabled
@@ -337,7 +338,8 @@ class NextPageButton(discord.ui.Button):
     
     def __init__(self, disabled=False):
         super().__init__(
-            label="Next Page ➡️",
+            label="Next Page",
+            emoji="➡️",
             style=discord.ButtonStyle.secondary,
             row=0,
             disabled=disabled
@@ -355,14 +357,15 @@ class BestRaceOnlyButton(discord.ui.Button):
     def __init__(self, disabled=False, best_race_only=False):
         # Set initial state based on best_race_only parameter
         if best_race_only:
-            label = "☑️ Best Race Only"
+            emoji = "✅"
             style = discord.ButtonStyle.primary
         else:
-            label = "🟪 Best Race Only"
+            emoji = "🟩"
             style = discord.ButtonStyle.secondary
         
         super().__init__(
-            label=label,
+            label="Best Race Only",
+            emoji=emoji,
             style=style,
             row=0,
             disabled=disabled
@@ -372,12 +375,12 @@ class BestRaceOnlyButton(discord.ui.Button):
         # Toggle best race only mode
         self.view.leaderboard_service.toggle_best_race_only()
         
-        # Update button label and style based on state
+        # Update button emoji and style based on state
         if self.view.leaderboard_service.best_race_only:
-            self.label = "☑️ Best Race Only"
+            self.emoji = "✅"
             self.style = discord.ButtonStyle.primary
         else:
-            self.label = "🟪 Best Race Only"
+            self.emoji = "🟩"
             self.style = discord.ButtonStyle.secondary
         
         # Update the view
@@ -389,7 +392,8 @@ class ClearFiltersButton(discord.ui.Button):
     
     def __init__(self):
         super().__init__(
-            label="🗑️ Clear All Filters",
+            label="Clear All Filters",
+            emoji="🗑️",
             style=discord.ButtonStyle.danger,
             row=0
         )
@@ -401,8 +405,9 @@ class ClearFiltersButton(discord.ui.Button):
         # Reset best race only button
         for item in self.view.children:
             if isinstance(item, BestRaceOnlyButton):
-                item.label = "🟪 Best Race Only"
-                item.style = discord.ButtonStyle.primary
+                item.label = "Best Race Only"
+                item.emoji = "🟩"
+                item.style = discord.ButtonStyle.secondary
         
         await self.view.update_view(interaction)
 

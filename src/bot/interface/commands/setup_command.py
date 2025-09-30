@@ -5,7 +5,7 @@ from src.utils.country_region_utils import CountryLookup, RegionLookup
 from src.utils.user_utils import get_user_info, log_user_action
 from src.utils.validation_utils import validate_user_id, validate_battle_tag, validate_alt_ids
 from components.confirm_embed import ConfirmEmbedView
-from components.confirm_restart_cancel_buttons import ConfirmButton, RestartButton, CancelButton
+from components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 
 country_lookup = CountryLookup()
 region_lookup = RegionLookup()
@@ -183,7 +183,6 @@ class ErrorView(discord.ui.View):
         self.error_message = error_message
         
         # Add restart and cancel buttons only
-        from components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
         buttons = ConfirmRestartCancelButtons.create_buttons(
             reset_target=SetupModal(),
             restart_label="🔄 Try Again",
@@ -325,10 +324,22 @@ class UnifiedSetupView(discord.ui.View):
         self.add_item(self.country_page2_select)
         self.add_item(self.region_select)
         
-        # Add action buttons
-        self.add_item(ConfirmButton(self.confirm_callback, "✅ Confirm", row=3))
-        self.add_item(RestartButton(SetupModal(), "🔄 Restart", row=3))
-        self.add_item(CancelButton(SetupModal(), "❌ Cancel", row=3, show_fields=False))
+        # Add action buttons using the unified approach
+        buttons = ConfirmRestartCancelButtons.create_buttons(
+            confirm_callback=self.confirm_callback,
+            reset_target=SetupModal(),
+            confirm_label="Confirm",
+            restart_label="Restart", 
+            cancel_label="Cancel",
+            show_cancel_fields=False,
+            row=3,
+            include_confirm=True,
+            include_restart=True,
+            include_cancel=True
+        )
+        
+        for button in buttons:
+            self.add_item(button)
 
     async def update_view(self, interaction: discord.Interaction):
         """Update the view with current selections"""

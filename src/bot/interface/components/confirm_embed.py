@@ -1,6 +1,6 @@
 import discord
 from typing import Optional, Union, Callable
-from .confirm_restart_cancel_buttons import ConfirmButton, RestartButton, CancelButton
+from .confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 
 
 class ConfirmEmbedView(discord.ui.View):
@@ -18,9 +18,9 @@ class ConfirmEmbedView(discord.ui.View):
         mode: str = "preview",  # "preview" or "post_confirmation"
         reset_target: Optional[Union[discord.ui.View, discord.ui.Modal]] = None,
         confirm_callback: Optional[Callable] = None,
-        restart_label: str = "🔄 Restart",
-        confirm_label: str = "✅ Confirm",
-        cancel_label: str = "❌ Cancel",
+        restart_label: str = "Restart",
+        confirm_label: str = "Confirm",
+        cancel_label: str = "Cancel",
         color: discord.Color = None  # Will be set based on mode
     ):
         super().__init__(timeout=300)
@@ -50,11 +50,20 @@ class ConfirmEmbedView(discord.ui.View):
         # Add appropriate buttons based on mode
         if mode == "preview":
             # Preview mode: Confirm, Restart, Cancel
-            if confirm_callback:
-                self.add_item(ConfirmButton(confirm_callback, confirm_label))
-            if reset_target:
-                self.add_item(RestartButton(reset_target, restart_label))
-                self.add_item(CancelButton(reset_target, cancel_label))
+            buttons = ConfirmRestartCancelButtons.create_buttons(
+                confirm_callback=confirm_callback,
+                reset_target=reset_target,
+                confirm_label=confirm_label,
+                restart_label=restart_label,
+                cancel_label=cancel_label,
+                show_cancel_fields=True,
+                include_confirm=bool(confirm_callback),
+                include_restart=bool(reset_target),
+                include_cancel=bool(reset_target)
+            )
+            
+            for button in buttons:
+                self.add_item(button)
         elif mode == "post_confirmation":
             # Post-confirmation mode: No buttons - this is the end of the interaction
             pass

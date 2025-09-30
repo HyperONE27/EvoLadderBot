@@ -2,7 +2,7 @@
 Race configuration service.
 
 This module defines the RaceConfigService class, which contains methods for:
-- Loading race configuration from game_config.json
+- Loading race configuration from races.json
 - Providing race data for UI components
 - Formatting race names consistently
 
@@ -20,7 +20,7 @@ from typing import List, Dict, Optional, Tuple, Any
 class RaceConfigService:
     """Service for managing race configuration data."""
     
-    def __init__(self, config_path: str = "data/misc/game_config.json"):
+    def __init__(self, config_path: str = "data/misc/races.json"):
         self.config_path = config_path
         self._races_cache = None
     

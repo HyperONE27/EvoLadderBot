@@ -2,7 +2,7 @@
 Ladder configuration service.
 
 This module defines the LadderConfigService class, which contains methods for:
-- Loading ladder configuration from ladder_config.json
+- Loading ladder configuration from maps.json
 - Providing map data for UI components
 
 Intended usage:
@@ -19,7 +19,7 @@ from typing import List, Dict, Optional
 class LadderConfigService:
     """Service for managing ladder configuration data."""
     
-    def __init__(self, config_path: str = "data/misc/ladder_config.json"):
+    def __init__(self, config_path: str = "data/misc/maps.json"):
         self.config_path = config_path
         self._maps_cache = None
     
