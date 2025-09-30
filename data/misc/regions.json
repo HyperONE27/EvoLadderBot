@@ -29,8 +29,8 @@
         {"code": "TWN", "name": "Taiwan",                "region_code": "AS"}
     ],
     "game_regions": [
-        {"code": "AM", "name": "Americas"},
-        {"code": "EU", "name": "Europe"},
-        {"code": "AS", "name": "Asia"}
-    ]
+        {"code": "AM",  "name": "Americas"},
+        {"code": "EU",  "name": "Europe"},
+        {"code": "AS",  "name": "Asia"}
+    ]   
 }
