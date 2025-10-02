@@ -1,15 +1,15 @@
 import asyncio
 import discord
 from discord import app_commands
-from src.backend.services.race_config_service import RaceConfigService
-from src.backend.services.ladder_config_service import LadderConfigService
+from src.backend.services.races_service import RacesService
+from src.backend.services.maps_service import MapsService
 from src.bot.interface.components.error_embed import ErrorEmbedException, create_error_view_from_exception
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.backend.services.matchmaking_service import matchmaker, Player, QueuePreferences, MatchResult
 from src.utils.user_utils import get_user_info
 
-race_service = RaceConfigService()
-ladder_service = LadderConfigService()
+race_service = RacesService()
+maps_service = MapsService()
 
 
 # Register Command
@@ -77,7 +77,7 @@ class MapVetoSelect(discord.ui.Select):
     
     def __init__(self, default_values=None):
         # Get map options from ladder service
-        maps = ladder_service.get_maps()
+        maps = maps_service.get_maps()
         
         options = []
         for map_data in maps:
@@ -254,7 +254,7 @@ class QueueView(discord.ui.View):
         veto_count = len(self.vetoed_maps)
         if self.vetoed_maps:
             # Sort maps according to the service's defined order
-            map_order = ladder_service.get_map_short_names()
+            map_order = maps_service.get_map_short_names()
             sorted_maps = [map_name for map_name in map_order if map_name in self.vetoed_maps]
             map_list = "\n".join([f"• {map_name}" for map_name in sorted_maps])
             embed.add_field(

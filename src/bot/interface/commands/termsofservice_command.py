@@ -103,14 +103,8 @@ async def termsofservice_command(interaction: discord.Interaction):
         post_confirm_view = ConfirmEmbedView(
             title="Terms of Service Confirmed",
             description="Thank you for confirming the EvoLadderBot Terms of Service.",
-            fields=[
-                ("User", user_info.get("username", "Unknown")),
-                ("Status", "Terms Accepted"),
-                ("Access", "Full EvoLadderBot features unlocked")
-            ],
             mode="post_confirmation",
-            reset_target=None,  # No restart option for TOS
-            restart_label="🔄 View Terms Again"
+            reset_target=None  # No restart option for TOS
         )
         post_confirm_view.embed.set_footer(
             text="You may now use all EvoLadderBot features.",
@@ -118,33 +112,40 @@ async def termsofservice_command(interaction: discord.Interaction):
         )
         await interaction.response.edit_message(embed=post_confirm_view.embed, view=post_confirm_view)
 
-    # Create a simple view for the reset target
-    class TOSResetView(discord.ui.View):
+    # Create custom cancel callback for terms of service
+    async def cancel_callback(interaction: discord.Interaction):
+        # Log the decline
+        log_user_action(user_info, "declined terms of service")
+
+        # Create custom decline embed
+        decline_embed = discord.Embed(
+            title="❌ Terms of Service Declined",
+            description="Since you have declined the Terms of Service, you may not use EvoLadderBot services.",
+            color=discord.Color.red()
+        )
+        decline_embed.set_footer(
+            text="You may use /termsofservice to review the terms again if you change your mind.",
+            icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
+        )
+
+        await interaction.response.edit_message(embed=decline_embed, view=None)
+
+    # Create custom view with only confirm and cancel buttons (no restart)
+    class TOSConfirmView(discord.ui.View):
         def __init__(self):
-            super().__init__(timeout=60)
+            super().__init__(timeout=300)
         
-        @discord.ui.button(label="View Again", emoji="🔄", style=discord.ButtonStyle.secondary)
-        async def retry(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.send_message(
-                "Please use `/termsofservice` command again to view the terms.",
-                ephemeral=True
-            )
+        @discord.ui.button(label="I Accept These Terms", emoji="✅", style=discord.ButtonStyle.success)
+        async def accept_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
+            await confirm_callback(interaction)
+        
+        @discord.ui.button(label="I Decline These Terms", emoji="❌", style=discord.ButtonStyle.danger)
+        async def decline_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
+            await cancel_callback(interaction)
 
-    # Use the new confirm embed system
-    confirm_view = ConfirmEmbedView(
-        title="Preview Terms Acceptance",
-        description="Please review the terms and confirm your acceptance:",
-        fields=[
-            ("User", user_info.get("username", "Unknown")),
-            ("Status", "Ready to confirm")
-        ],
-        mode="preview",
-        confirm_callback=confirm_callback,
-        reset_target=TOSResetView(),
-        confirm_label="✅ I Accept",
-        cancel_label="❌ Decline"
-    )
+    confirm_view = TOSConfirmView()
 
+    # Send the full terms of service first
     await interaction.response.send_message(
         embed=embed,
         view=confirm_view,

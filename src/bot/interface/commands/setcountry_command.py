@@ -1,11 +1,11 @@
 import discord
 from discord import app_commands
-from src.utils.country_region_utils import CountryLookup
+from src.backend.services.countries_service import CountriesService
 from src.utils.user_utils import get_user_info, log_user_action
 from components.confirm_embed import ConfirmEmbedView
 from components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
 
-country_lookup = CountryLookup()
+countries_service = CountriesService()
 
 
 # API Call / Data Handling
@@ -16,10 +16,10 @@ async def country_autocomplete(
     """Autocomplete for country names"""
     if not current:
         # Show first 25 countries if nothing typed
-        countries = country_lookup.get_sorted_countries()[:25]
+        countries = countries_service.get_sorted_countries()[:25]
     else:
         # Search for matching countries
-        countries = country_lookup.search_countries(current, limit=25)
+        countries = countries_service.search_countries(current, limit=25)
     
     return [
         app_commands.Choice(name=country['name'], value=country['code'])
@@ -29,7 +29,7 @@ async def country_autocomplete(
 
 async def setcountry_command(interaction: discord.Interaction, country_code: str):
     """Set or update your country"""
-    country = country_lookup.get_country_by_code(country_code)
+    country = countries_service.get_country_by_code(country_code)
     
     if not country:
         error_embed = discord.Embed(

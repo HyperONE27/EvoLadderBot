@@ -1,23 +1,23 @@
 """
-Country configuration service.
+Countries service.
 
-This module defines the CountryConfigService class, which contains methods for:
+This module defines the CountriesService class, which contains methods for:
 - Loading country data from countries.json
 - Managing country filtering and pagination
 - Providing country data for UI components
 
 Intended usage:
-    from backend.services.country_config_service import CountryConfigService
+    from backend.services.countries_service import CountriesService
 
-    country_service = CountryConfigService()
-    countries = country_service.get_common_countries()
+    countries_service = CountriesService()
+    countries = countries_service.get_common_countries()
 """
 
 import json
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 
 
-class CountryConfigService:
+class CountriesService:
     """Service for managing country configuration data."""
     
     def __init__(self, config_path: str = "data/misc/countries.json"):
@@ -48,7 +48,18 @@ class CountryConfigService:
     def _load_common_countries(self):
         """Load common countries from configuration file."""
         countries = self.get_countries()
-        self._common_countries_cache = [c for c in countries if c.get("common", False)]
+        common_countries = [c for c in countries if c.get("common", False)]
+        
+        # Sort alphabetically by name, but put "Other" at the end
+        common_countries = sorted(
+            [c for c in common_countries if c['code'] != 'XX'],
+            key=lambda x: x['name']
+        )
+        other = next((c for c in countries if c['code'] == 'XX'), None)
+        if other:
+            common_countries.append(other)
+        
+        self._common_countries_cache = common_countries
     
     def get_country_by_code(self, country_code: str) -> Optional[Dict[str, any]]:
         """Get country data by code."""
@@ -94,3 +105,32 @@ class CountryConfigService:
         # Filter selected countries and maintain order
         ordered_countries = [code for code in all_country_codes if code in country_codes]
         return self.get_country_names_for_codes(ordered_countries)
+    
+    def get_sorted_countries(self) -> List[Dict[str, Any]]:
+        """Get all countries sorted by name."""
+        countries = self.get_countries()
+        return sorted(countries, key=lambda x: x["name"])
+    
+    def search_countries(self, query: str, limit: int = 25) -> List[Dict[str, Any]]:
+        """Search countries by name."""
+        countries = self.get_countries()
+        query_lower = query.lower()
+        # Exclude "Other" from search results
+        results = [
+            c for c in countries 
+            if query_lower in c['name'].lower() and c['code'] != 'XX'
+        ]
+        return results[:limit]
+    
+    # Backward compatibility methods
+    def get_country_from_code(self, code: str) -> str:
+        """Get country name from code (backward compatibility)."""
+        return self.get_country_name(code)
+    
+    def get_code_from_country(self, name: str) -> str:
+        """Get country code from name (backward compatibility)."""
+        countries = self.get_countries()
+        for country in countries:
+            if country.get("name") == name:
+                return country.get("code", name)
+        return name

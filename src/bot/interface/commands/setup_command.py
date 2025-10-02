@@ -1,14 +1,15 @@
 import discord
 from discord import app_commands
 import re
-from src.utils.country_region_utils import CountryLookup, RegionLookup
+from src.backend.services.countries_service import CountriesService
+from src.backend.services.regions_service import RegionsService
 from src.utils.user_utils import get_user_info, log_user_action
 from src.utils.validation_utils import validate_user_id, validate_battle_tag, validate_alt_ids
 from components.confirm_embed import ConfirmEmbedView
 from components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 
-country_lookup = CountryLookup()
-region_lookup = RegionLookup()
+countries_service = CountriesService()
+regions_service = RegionsService()
 
 
 # API Call / Data Handling
@@ -311,8 +312,8 @@ class UnifiedSetupView(discord.ui.View):
         self.country_page2_selection = country_page2_selection
         
         # Get countries and regions
-        self.countries = country_lookup.get_common_countries()
-        self.regions = region_lookup.get_all_regions()
+        self.countries = countries_service.get_common_countries()
+        self.regions = regions_service.get_all_regions()
         
         # Create dropdowns with current selections
         self.country_page1_select = CountryPage1Select(self.countries, self.country_page1_selection)
@@ -370,19 +371,19 @@ class UnifiedSetupView(discord.ui.View):
             embed.description = (
                 "**Selected:**\n"
                 f"- Country of citizenship/nationality: `{self.selected_country['name']}`\n"
-                f"- Region of residence: `{self.selected_region['name']}`\n\n"
+                f"- Region of residency: `{self.selected_region['name']}`\n\n"
                 "Click Confirm to proceed."
             )
         elif self.selected_country:
             embed.description = (
                 "**Selected:**\n"
                 f"- Country of citizenship/nationality: `{self.selected_country['name']}`\n\n"
-                "Please select your region of residence."
+                "Please select your region of residency."
             )
         elif self.selected_region:
             embed.description = (
                 "**Selected:**\n"
-                f"- Region of residence: `{self.selected_region['name']}`\n\n"
+                f"- Region of residency: `{self.selected_region['name']}`\n\n"
                 "Please select your country of citizenship/nationality.\n\n(Due to Discord UI limitations, we list only 49 countries here. If your country is not listed, please select \"Other\" at the bottom of Page 2, then set it up later with `/setcountry`.)"
             )
         else:
@@ -428,7 +429,7 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
         (":id: **User ID**", user_id),
         (":hash: **BattleTag**", battle_tag),
         (":map: **Country of Citizenship/Nationality**", country['name']),
-        (":map: **Region of Residence**", region['name'])
+        (":map: **Region of Residency**", region['name'])
     ]
     
     if alt_ids:

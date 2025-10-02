@@ -18,8 +18,8 @@ Intended usage:
 import json
 import os
 from typing import Dict, List, Optional, Any
-from src.backend.services.country_config_service import CountryConfigService
-from src.backend.services.race_config_service import RaceConfigService
+from src.backend.services.countries_service import CountriesService
+from src.backend.services.races_service import RacesService
 
 
 class LeaderboardService:
@@ -29,8 +29,8 @@ class LeaderboardService:
         self.data_file_path = "data/misc/leaderboard.json"
         
         # Services
-        self.country_service = CountryConfigService()
-        self.race_service = RaceConfigService()
+        self.country_service = CountriesService()
+        self.race_service = RacesService()
         
         # Filter state
         self.current_page: int = 1

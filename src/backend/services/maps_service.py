@@ -1,23 +1,23 @@
 """
-Ladder configuration service.
+Maps service.
 
-This module defines the LadderConfigService class, which contains methods for:
-- Loading ladder configuration from maps.json
+This module defines the MapsService class, which contains methods for:
+- Loading map configuration from maps.json
 - Providing map data for UI components
 
 Intended usage:
-    from backend.services.ladder_config_service import LadderConfigService
+    from backend.services.maps_service import MapsService
 
-    ladder_service = LadderConfigService()
-    maps = ladder_service.get_maps()
+    maps_service = MapsService()
+    maps = maps_service.get_maps()
 """
 
 import json
 from typing import List, Dict, Optional
 
 
-class LadderConfigService:
-    """Service for managing ladder configuration data."""
+class MapsService:
+    """Service for managing map configuration data."""
     
     def __init__(self, config_path: str = "data/misc/maps.json"):
         self.config_path = config_path
@@ -34,7 +34,14 @@ class LadderConfigService:
         try:
             with open(self.config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
-                self._maps_cache = config.get("maps", [])
+                maps_data = config.get("maps", {})
+                # Handle the new structure with seasons
+                if isinstance(maps_data, dict) and "season_0" in maps_data:
+                    self._maps_cache = maps_data["season_0"]
+                elif isinstance(maps_data, list):
+                    self._maps_cache = maps_data
+                else:
+                    self._maps_cache = []
         except (FileNotFoundError, json.JSONDecodeError, KeyError):
             self._maps_cache = []
     

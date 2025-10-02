@@ -1,23 +1,23 @@
 """
-Race configuration service.
+Races service.
 
-This module defines the RaceConfigService class, which contains methods for:
+This module defines the RacesService class, which contains methods for:
 - Loading race configuration from races.json
 - Providing race data for UI components
 - Formatting race names consistently
 
 Intended usage:
-    from backend.services.race_config_service import RaceConfigService
+    from backend.services.races_service import RacesService
 
-    race_service = RaceConfigService()
-    races = race_service.get_races()
+    races_service = RacesService()
+    races = races_service.get_races()
 """
 
 import json
 from typing import List, Dict, Optional, Tuple, Any
 
 
-class RaceConfigService:
+class RacesService:
     """Service for managing race configuration data."""
     
     def __init__(self, config_path: str = "data/misc/races.json"):
