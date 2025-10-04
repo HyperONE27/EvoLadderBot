@@ -2,13 +2,20 @@ import discord
 from discord import app_commands
 from components.confirm_embed import ConfirmEmbedView
 from components.error_embed import ErrorEmbedException, create_simple_error_view
+from src.backend.services.user_info_service import UserInfoService
 
 
 # API Call / Data Handling
 def submit_activation_code(user_id: int, code: str) -> dict:
     """
-    Stub function: bundle inputs and forward to backend later.
-    For now, just logs and echoes the code.
+    Submit activation code to backend.
+    
+    Args:
+        user_id: Discord user ID.
+        code: Activation code.
+    
+    Returns:
+        Dictionary with status and code.
     """
     print(f"[TERMINAL] Activation attempt by {user_id} with code: {code}")
     
@@ -24,13 +31,16 @@ def submit_activation_code(user_id: int, code: str) -> dict:
             ]
         )
     
-    if code.lower() == "error":
+    # Submit to backend
+    user_service = UserInfoService()
+    result = user_service.submit_activation_code(user_id, code)
+    
+    if result["status"] == "error":
         raise ErrorEmbedException(
             title="Activation Failed",
-            description="The activation code is invalid or has expired.",
+            description=result.get("message", "An error occurred while processing your activation code."),
             error_fields=[
-                ("Error Code", "INVALID_CODE"),
-                ("Reason", "Code not found in database"),
+                ("Error Code", "ACTIVATION_ERROR"),
                 ("Suggestion", "Please check your code and try again")
             ]
         )
@@ -59,6 +69,10 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
+            # Ensure player exists in database
+            user_service = UserInfoService()
+            user_service.ensure_player_exists(interaction.user.id)
+            
             result = submit_activation_code(interaction.user.id, self.code_input.value)
 
             # Show preview with confirm/restart/cancel options

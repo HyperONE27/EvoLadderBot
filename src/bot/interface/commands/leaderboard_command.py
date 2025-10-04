@@ -1,6 +1,5 @@
 import discord
 from discord import app_commands
-from src.utils.strings_utils import format_race_name
 from src.backend.services.leaderboard_service import LeaderboardService
 
 
@@ -20,6 +19,11 @@ def register_leaderboard_command(tree: app_commands.CommandTree):
 # UI Elements
 async def leaderboard_command(interaction: discord.Interaction):
     """Handle the /leaderboard slash command"""
+    # Ensure player exists in database
+    from src.backend.services.user_info_service import UserInfoService
+    user_info_service = UserInfoService()
+    user_info_service.ensure_player_exists(interaction.user.id)
+    
     leaderboard_service = LeaderboardService()
     view = LeaderboardView(leaderboard_service)
     

@@ -1,5 +1,390 @@
 """
 User info service.
 
-This module defines the UserInfoService class, which handles the updating of user info and settings. It contains methods for:
+This module defines the UserInfoService class, which handles user information management.
+It contains methods for:
+- Creating and updating user profiles
+- Managing user settings (country, region, etc.)
+- Handling activation codes
+- Accepting terms of service
+- Completing setup
 """
+
+from typing import Optional, Dict, Any
+from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
+
+
+class UserInfoService:
+    """Service for managing user information and settings."""
+    
+    def __init__(self):
+        self.reader = DatabaseReader()
+        self.writer = DatabaseWriter()
+    
+    def get_player(self, discord_uid: int) -> Optional[Dict[str, Any]]:
+        """
+        Get player information by Discord UID.
+        
+        Args:
+            discord_uid: Discord user ID.
+        
+        Returns:
+            Player data dictionary or None if not found.
+        """
+        return self.reader.get_player_by_discord_uid(discord_uid)
+    
+    def player_exists(self, discord_uid: int) -> bool:
+        """
+        Check if a player exists.
+        
+        Args:
+            discord_uid: Discord user ID.
+        
+        Returns:
+            True if player exists, False otherwise.
+        """
+        return self.reader.player_exists(discord_uid)
+    
+    def ensure_player_exists(self, discord_uid: int) -> Dict[str, Any]:
+        """
+        Ensure a player record exists in the database.
+        
+        If the player doesn't exist, creates a minimal record with just the discord_uid.
+        If the player already exists, returns their existing data.
+        
+        This should be called at the start of any slash command to ensure the user
+        has a database record before any operations are performed.
+        
+        Args:
+            discord_uid: Discord user ID.
+        
+        Returns:
+            Player data dictionary (either existing or newly created).
+        """
+        player = self.get_player(discord_uid)
+        
+        if player is None:
+            # Create minimal player record
+            self.create_player(discord_uid=discord_uid)
+            player = self.get_player(discord_uid)
+        
+        return player
+    
+    def create_player(
+        self,
+        discord_uid: int,
+        player_name: Optional[str] = None,
+        battletag: Optional[str] = None,
+        country: Optional[str] = None,
+        region: Optional[str] = None,
+        activation_code: Optional[str] = None
+    ) -> int:
+        """
+        Create a new player.
+        
+        Args:
+            discord_uid: Discord user ID.
+            player_name: Player's in-game name.
+            battletag: Player's BattleTag.
+            country: Country code.
+            region: Region code.
+            activation_code: Activation code.
+        
+        Returns:
+            The ID of the newly created player.
+        """
+        return self.writer.create_player(
+            discord_uid=discord_uid,
+            player_name=player_name,
+            battletag=battletag,
+            country=country,
+            region=region,
+            activation_code=activation_code
+        )
+    
+    def update_player(
+        self,
+        discord_uid: int,
+        player_name: Optional[str] = None,
+        battletag: Optional[str] = None,
+        alt_player_name_1: Optional[str] = None,
+        alt_player_name_2: Optional[str] = None,
+        country: Optional[str] = None,
+        region: Optional[str] = None,
+        log_changes: bool = False
+    ) -> bool:
+        """
+        Update player information.
+        
+        Args:
+            discord_uid: Discord user ID.
+            player_name: Player's in-game name.
+            battletag: Player's BattleTag.
+            alt_player_name_1: First alternative name.
+            alt_player_name_2: Second alternative name.
+            country: Country code.
+            region: Region code.
+            log_changes: If True, logs each field change individually to player_action_logs.
+        
+        Returns:
+            True if successful, False otherwise.
+        """
+        # Get old values before update if logging is enabled
+        old_player = None
+        if log_changes:
+            old_player = self.get_player(discord_uid)
+        
+        # Perform the update
+        success = self.writer.update_player(
+            discord_uid=discord_uid,
+            player_name=player_name,
+            battletag=battletag,
+            alt_player_name_1=alt_player_name_1,
+            alt_player_name_2=alt_player_name_2,
+            country=country,
+            region=region
+        )
+        
+        # Log each field change individually
+        if success and log_changes and old_player:
+            # Use updated player_name if provided, otherwise use old value
+            current_player_name = player_name if player_name is not None else old_player.get("player_name", "Unknown")
+            
+            # Log each field that was provided and actually changed
+            if player_name is not None and old_player.get("player_name") != player_name:
+                self.writer.log_player_action(
+                    discord_uid=discord_uid,
+                    player_name=current_player_name,
+                    setting_name="player_name",
+                    old_value=old_player.get("player_name"),
+                    new_value=player_name
+                )
+            
+            if battletag is not None and old_player.get("battletag") != battletag:
+                self.writer.log_player_action(
+                    discord_uid=discord_uid,
+                    player_name=current_player_name,
+                    setting_name="battletag",
+                    old_value=old_player.get("battletag"),
+                    new_value=battletag
+                )
+            
+            if alt_player_name_1 is not None and old_player.get("alt_player_name_1") != alt_player_name_1:
+                self.writer.log_player_action(
+                    discord_uid=discord_uid,
+                    player_name=current_player_name,
+                    setting_name="alt_player_name_1",
+                    old_value=old_player.get("alt_player_name_1"),
+                    new_value=alt_player_name_1
+                )
+            
+            if alt_player_name_2 is not None and old_player.get("alt_player_name_2") != alt_player_name_2:
+                self.writer.log_player_action(
+                    discord_uid=discord_uid,
+                    player_name=current_player_name,
+                    setting_name="alt_player_name_2",
+                    old_value=old_player.get("alt_player_name_2"),
+                    new_value=alt_player_name_2
+                )
+            
+            if country is not None and old_player.get("country") != country:
+                self.writer.log_player_action(
+                    discord_uid=discord_uid,
+                    player_name=current_player_name,
+                    setting_name="country",
+                    old_value=old_player.get("country"),
+                    new_value=country
+                )
+            
+            if region is not None and old_player.get("region") != region:
+                self.writer.log_player_action(
+                    discord_uid=discord_uid,
+                    player_name=current_player_name,
+                    setting_name="region",
+                    old_value=old_player.get("region"),
+                    new_value=region
+                )
+        
+        return success
+    
+    def update_country(self, discord_uid: int, country: str) -> bool:
+        """
+        Update player's country.
+        
+        Args:
+            discord_uid: Discord user ID.
+            country: Country code.
+        
+        Returns:
+            True if successful, False otherwise.
+        """
+        player = self.get_player(discord_uid)
+        old_country = player.get("country") if player else None
+        
+        success = self.writer.update_player_country(discord_uid, country)
+        
+        if success and player:
+            self.writer.log_player_action(
+                discord_uid=discord_uid,
+                player_name=player.get("player_name", "Unknown"),
+                setting_name="country",
+                old_value=old_country,
+                new_value=country
+            )
+        
+        return success
+    
+    def submit_activation_code(self, discord_uid: int, activation_code: str) -> Dict[str, Any]:
+        """
+        Submit an activation code for a player.
+        
+        Args:
+            discord_uid: Discord user ID.
+            activation_code: The activation code to submit.
+        
+        Returns:
+            Dictionary with status and message.
+        """
+        # Check if player exists
+        player = self.get_player(discord_uid)
+        
+        if player:
+            # Update existing player's activation code
+            success = self.writer.update_player_activation_code(discord_uid, activation_code)
+            if success:
+                self.writer.log_player_action(
+                    discord_uid=discord_uid,
+                    player_name=player.get("player_name", "Unknown"),
+                    setting_name="activation_code",
+                    old_value=player.get("activation_code"),
+                    new_value=activation_code
+                )
+                return {"status": "ok", "message": "Activation code updated"}
+            else:
+                return {"status": "error", "message": "Failed to update activation code"}
+        else:
+            # Create new player with activation code
+            player_id = self.create_player(
+                discord_uid=discord_uid,
+                activation_code=activation_code
+            )
+            if player_id:
+                return {"status": "ok", "message": "Player created with activation code"}
+            else:
+                return {"status": "error", "message": "Failed to create player"}
+    
+    def accept_terms_of_service(self, discord_uid: int) -> bool:
+        """
+        Mark player as having accepted terms of service.
+        
+        Args:
+            discord_uid: Discord user ID.
+        
+        Returns:
+            True if successful, False otherwise.
+        """
+        player = self.get_player(discord_uid)
+        
+        # Create player if they don't exist
+        if not player:
+            self.create_player(discord_uid=discord_uid)
+            player = self.get_player(discord_uid)
+        
+        success = self.writer.accept_terms_of_service(discord_uid)
+        
+        if success and player:
+            self.writer.log_player_action(
+                discord_uid=discord_uid,
+                player_name=player.get("player_name", "Unknown"),
+                setting_name="accepted_tos",
+                old_value="False",
+                new_value="True"
+            )
+        
+        return success
+    
+    def complete_setup(
+        self,
+        discord_uid: int,
+        player_name: str,
+        battletag: str,
+        alt_player_name_1: Optional[str] = None,
+        alt_player_name_2: Optional[str] = None,
+        country: Optional[str] = None,
+        region: Optional[str] = None
+    ) -> bool:
+        """
+        Complete player setup.
+        
+        Logs each field change individually in player_action_logs.
+        
+        Args:
+            discord_uid: Discord user ID.
+            player_name: Player's in-game name.
+            battletag: Player's BattleTag.
+            alt_player_name_1: First alternative name.
+            alt_player_name_2: Second alternative name.
+            country: Country code.
+            region: Region code.
+        
+        Returns:
+            True if successful, False otherwise.
+        """
+        player = self.get_player(discord_uid)
+        
+        # Create player if they don't exist
+        if not player:
+            self.create_player(
+                discord_uid=discord_uid,
+                player_name=player_name,
+                battletag=battletag,
+                country=country,
+                region=region
+            )
+        
+        # Update player information with logging enabled
+        # This will log each field change as a separate row in player_action_logs
+        self.update_player(
+            discord_uid=discord_uid,
+            player_name=player_name,
+            battletag=battletag,
+            alt_player_name_1=alt_player_name_1,
+            alt_player_name_2=alt_player_name_2,
+            country=country,
+            region=region,
+            log_changes=True  # Enable individual field logging
+        )
+        
+        # Mark setup as complete
+        old_player = self.get_player(discord_uid)
+        success = self.writer.complete_setup(discord_uid)
+        
+        if success:
+            # Only log if completed_setup actually changed
+            if old_player and not old_player.get("completed_setup"):
+                self.writer.log_player_action(
+                    discord_uid=discord_uid,
+                    player_name=player_name,
+                    setting_name="completed_setup",
+                    old_value="False",
+                    new_value="True"
+                )
+        
+        return success
+    
+    def get_player_action_logs(
+        self,
+        discord_uid: Optional[int] = None,
+        limit: int = 100
+    ) -> list:
+        """
+        Get player action logs.
+        
+        Args:
+            discord_uid: Discord user ID (optional, None for all players).
+            limit: Maximum number of logs to return.
+        
+        Returns:
+            List of action log dictionaries.
+        """
+        return self.reader.get_player_action_logs(discord_uid, limit)

@@ -3,6 +3,7 @@ from discord import app_commands
 import re
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.regions_service import RegionsService
+from src.backend.services.user_info_service import UserInfoService
 from src.utils.user_utils import get_user_info, log_user_action
 from src.utils.validation_utils import validate_user_id, validate_battle_tag, validate_alt_ids
 from components.confirm_embed import ConfirmEmbedView
@@ -10,11 +11,15 @@ from components.confirm_restart_cancel_buttons import ConfirmRestartCancelButton
 
 countries_service = CountriesService()
 regions_service = RegionsService()
+user_info_service = UserInfoService()
 
 
 # API Call / Data Handling
 async def setup_command(interaction: discord.Interaction):
     """Handle the /setup slash command"""
+    # Ensure player exists in database
+    user_info_service.ensure_player_exists(interaction.user.id)
+    
     # Send the modal directly as the initial response
     modal = SetupModal()
     await interaction.response.send_modal(modal)
@@ -442,19 +447,28 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
     async def confirm_callback(interaction: discord.Interaction):
         user_info = get_user_info(interaction)
         
-        # TODO: Send data to backend
-        # async with aiohttp.ClientSession() as session:
-        #     await session.post(
-        #         f'http://backend/api/players/{user_info["id"]}',
-        #         json={
-        #             'discord_user_id': user_info["id"],
-        #             'user_id': user_id,
-        #             'alt_ids': alt_ids,
-        #             'battle_tag': battle_tag,
-        #             'country_code': country['code'],
-        #             'region_code': region['code']
-        #         }
-        #     )
+        # Send data to backend
+        success = user_info_service.complete_setup(
+            discord_uid=user_info["id"],
+            player_name=user_id,
+            battletag=battle_tag,
+            alt_player_name_1=alt_ids[0] if len(alt_ids) > 0 else None,
+            alt_player_name_2=alt_ids[1] if len(alt_ids) > 1 else None,
+            country=country['code'],
+            region=region['code']
+        )
+        
+        if not success:
+            error_embed = discord.Embed(
+                title="❌ Setup Failed",
+                description="An error occurred while saving your profile. Please try again.",
+                color=discord.Color.red()
+            )
+            await interaction.response.edit_message(
+                embed=error_embed,
+                view=None
+            )
+            return
         
         # Log the setup
         log_user_action(user_info, "completed player setup", 

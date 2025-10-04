@@ -1,11 +1,13 @@
 import discord
 from discord import app_commands
 from src.backend.services.countries_service import CountriesService
+from src.backend.services.user_info_service import UserInfoService
 from src.utils.user_utils import get_user_info, log_user_action
 from components.confirm_embed import ConfirmEmbedView
 from components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
 
 countries_service = CountriesService()
+user_info_service = UserInfoService()
 
 
 # API Call / Data Handling
@@ -29,6 +31,9 @@ async def country_autocomplete(
 
 async def setcountry_command(interaction: discord.Interaction, country_code: str):
     """Set or update your country"""
+    # Ensure player exists in database
+    user_info_service.ensure_player_exists(interaction.user.id)
+    
     country = countries_service.get_country_by_code(country_code)
     
     if not country:
@@ -48,12 +53,20 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
     
     # Show preview with confirm/cancel options only
     async def confirm_callback(interaction: discord.Interaction):
-        # TODO: Update in backend with user ID
-        # async with aiohttp.ClientSession() as session:
-        #     await session.patch(
-        #         f'http://backend/api/players/{user_info["id"]}',
-        #         json={'country': country_code, 'discord_user_id': user_info["id"]}
-        #     )
+        # Update in backend with user ID
+        success = user_info_service.update_country(user_info["id"], country_code)
+        
+        if not success:
+            error_embed = discord.Embed(
+                title="❌ Update Failed",
+                description="An error occurred while updating your country. Please try again.",
+                color=discord.Color.red()
+            )
+            await interaction.response.edit_message(
+                embed=error_embed,
+                view=None
+            )
+            return
         
         # Log the action using utility function
         log_user_action(user_info, "set country", f"to {country['name']} ({country_code})")

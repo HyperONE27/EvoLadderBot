@@ -20,6 +20,7 @@ import os
 from typing import Dict, List, Optional, Any
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.races_service import RacesService
+from src.backend.db.db_reader_writer import DatabaseReader
 
 
 class LeaderboardService:
@@ -31,6 +32,7 @@ class LeaderboardService:
         # Services
         self.country_service = CountriesService()
         self.race_service = RacesService()
+        self.db_reader = DatabaseReader()
         
         # Filter state
         self.current_page: int = 1
@@ -80,20 +82,34 @@ class LeaderboardService:
         Returns:
             Dictionary containing players, pagination info, and totals
         """
-        # Load mock data
-        try:
-            with open(self.data_file_path, "r") as f:
-                all_players = json.load(f)
-        except FileNotFoundError:
-            return {
-                "players": [],
-                "total_pages": 1,
-                "current_page": self.current_page,
-                "total_players": 0
-            }
+        # Get data from database
+        all_players = []
+        
+        # If filtering by specific race(s), query each race
+        if self.race_filter:
+            for race in self.race_filter:
+                race_players = self.db_reader.get_leaderboard_1v1(
+                    race=race,
+                    limit=10000  # Large limit to get all players
+                )
+                all_players.extend(race_players)
+        else:
+            # Get all players regardless of race
+            all_players = self.db_reader.get_leaderboard_1v1(limit=10000)
+        
+        # Convert database format to expected format
+        formatted_players = []
+        for player in all_players:
+            formatted_players.append({
+                "player_id": player.get("player_name", "Unknown"),
+                "elo": player.get("mmr", 0),
+                "race": player.get("race", "Unknown"),
+                "country": player.get("country", "Unknown"),
+                "discord_uid": player.get("discord_uid")
+            })
         
         # Apply filters
-        filtered_players = self._apply_filters(all_players)
+        filtered_players = self._apply_filters(formatted_players)
         
         # Sort by ELO (descending)
         filtered_players.sort(key=lambda x: x["elo"], reverse=True)

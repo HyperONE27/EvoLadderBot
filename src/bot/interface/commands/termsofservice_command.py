@@ -1,12 +1,18 @@
 import discord
 from discord import app_commands
+from src.backend.services.user_info_service import UserInfoService
 from src.utils.user_utils import get_user_info, log_user_action
 from components.confirm_embed import ConfirmEmbedView
+
+user_info_service = UserInfoService()
 
 
 # API Call / Data Handling
 async def termsofservice_command(interaction: discord.Interaction):
     """Show the terms of service"""
+    # Ensure player exists in database
+    user_info_service.ensure_player_exists(interaction.user.id)
+    
     user_info = get_user_info(interaction)
     
     # Create the Terms of Service embed
@@ -89,15 +95,23 @@ async def termsofservice_command(interaction: discord.Interaction):
 
     # Create confirmation callback
     async def confirm_callback(interaction: discord.Interaction):
+        # Update in backend that user has confirmed the terms of service
+        success = user_info_service.accept_terms_of_service(user_info["id"])
+        
+        if not success:
+            error_embed = discord.Embed(
+                title="❌ Error",
+                description="An error occurred while confirming your acceptance. Please try again.",
+                color=discord.Color.red()
+            )
+            await interaction.response.edit_message(
+                embed=error_embed,
+                view=None
+            )
+            return
+        
         # Log the confirmation
         log_user_action(user_info, "confirmed terms of service")
-
-        # TODO: Update in backend that user has confirmed the terms of service
-        # async with aiohttp.ClientSession() as session:
-        #     await session.patch(
-        #         f'http://backend/api/players/{user_info["id"]}',
-        #         json={'terms_of_service_confirmed': True, 'discord_user_id': user_info["id"]}
-        #     )
 
         # Show post-confirmation view
         post_confirm_view = ConfirmEmbedView(
