@@ -22,7 +22,7 @@ async def leaderboard_command(interaction: discord.Interaction):
     # Ensure player exists in database
     from src.backend.services.user_info_service import UserInfoService
     user_info_service = UserInfoService()
-    user_info_service.ensure_player_exists(interaction.user.id)
+    user_info_service.ensure_player_exists(interaction.user.id, interaction.user.name)
     
     leaderboard_service = LeaderboardService()
     view = LeaderboardView(leaderboard_service)

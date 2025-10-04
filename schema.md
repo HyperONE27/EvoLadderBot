@@ -5,6 +5,7 @@ My current plan for the SQL database schema is:
 CREATE TABLE players (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
     discord_uid             INTEGER NOT NULL,
+    discord_username        TEXT NOT NULL,
     player_name             TEXT,
     battletag               TEXT,
     alt_player_name_1       TEXT,

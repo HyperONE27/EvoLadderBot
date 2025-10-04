@@ -6,7 +6,7 @@ from src.backend.services.maps_service import MapsService
 from src.bot.interface.components.error_embed import ErrorEmbedException, create_error_view_from_exception
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.backend.services.matchmaking_service import matchmaker, Player, QueuePreferences, MatchResult
-from src.utils.user_utils import get_user_info
+from src.backend.services.user_info_service import get_user_info
 
 race_service = RacesService()
 maps_service = MapsService()

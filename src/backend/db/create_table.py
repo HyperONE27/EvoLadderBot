@@ -25,6 +25,7 @@ def create_database(db_path: str = "evoladder.db") -> None:
         CREATE TABLE IF NOT EXISTS players (
             id                      INTEGER PRIMARY KEY AUTOINCREMENT,
             discord_uid             INTEGER NOT NULL UNIQUE,
+            discord_username        TEXT NOT NULL,
             player_name             TEXT,
             battletag               TEXT,
             alt_player_name_1       TEXT,

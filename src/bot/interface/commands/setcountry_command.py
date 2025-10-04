@@ -1,8 +1,7 @@
 import discord
 from discord import app_commands
 from src.backend.services.countries_service import CountriesService
-from src.backend.services.user_info_service import UserInfoService
-from src.utils.user_utils import get_user_info, log_user_action
+from src.backend.services.user_info_service import UserInfoService, get_user_info, log_user_action
 from components.confirm_embed import ConfirmEmbedView
 from components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
 
@@ -32,7 +31,7 @@ async def country_autocomplete(
 async def setcountry_command(interaction: discord.Interaction, country_code: str):
     """Set or update your country"""
     # Ensure player exists in database
-    user_info_service.ensure_player_exists(interaction.user.id)
+    user_info_service.ensure_player_exists(interaction.user.id, interaction.user.name)
     
     country = countries_service.get_country_by_code(country_code)
     

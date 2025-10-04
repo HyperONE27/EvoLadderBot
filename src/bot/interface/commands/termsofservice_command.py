@@ -1,7 +1,6 @@
 import discord
 from discord import app_commands
-from src.backend.services.user_info_service import UserInfoService
-from src.utils.user_utils import get_user_info, log_user_action
+from src.backend.services.user_info_service import UserInfoService, get_user_info, log_user_action
 from components.confirm_embed import ConfirmEmbedView
 
 user_info_service = UserInfoService()
@@ -11,7 +10,7 @@ user_info_service = UserInfoService()
 async def termsofservice_command(interaction: discord.Interaction):
     """Show the terms of service"""
     # Ensure player exists in database
-    user_info_service.ensure_player_exists(interaction.user.id)
+    user_info_service.ensure_player_exists(interaction.user.id, interaction.user.name)
     
     user_info = get_user_info(interaction)
     

@@ -71,7 +71,7 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
         try:
             # Ensure player exists in database
             user_service = UserInfoService()
-            user_service.ensure_player_exists(interaction.user.id)
+            user_service.ensure_player_exists(interaction.user.id, interaction.user.name)
             
             result = submit_activation_code(interaction.user.id, self.code_input.value)
 

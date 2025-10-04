@@ -11,6 +11,16 @@ from datetime import datetime
 from contextlib import contextmanager
 
 
+def get_timestamp() -> str:
+    """
+    Get current timestamp formatted to second precision.
+    
+    Returns:
+        ISO format timestamp string truncated to seconds.
+    """
+    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+
 class Database:
     """
     Base database connection manager.
@@ -250,6 +260,7 @@ class DatabaseWriter:
     def create_player(
         self,
         discord_uid: int,
+        discord_username: str = "Unknown",
         player_name: Optional[str] = None,
         battletag: Optional[str] = None,
         country: Optional[str] = None,
@@ -259,6 +270,16 @@ class DatabaseWriter:
         """
         Create a new player.
         
+        Args:
+            discord_uid: Discord user ID (unique identifier).
+            discord_username: Discord username (e.g., "username" from username#1234 or @username).
+                              Defaults to "Unknown" if not provided.
+            player_name: In-game player name (optional).
+            battletag: Battle.net BattleTag (optional).
+            country: Country code (optional).
+            region: Region code (optional).
+            activation_code: Activation code (optional).
+        
         Returns:
             The ID of the newly created player.
         """
@@ -267,11 +288,11 @@ class DatabaseWriter:
             cursor.execute(
                 """
                 INSERT INTO players (
-                    discord_uid, player_name, battletag, country, region, activation_code
+                    discord_uid, discord_username, player_name, battletag, country, region, activation_code
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (discord_uid, player_name, battletag, country, region, activation_code)
+                (discord_uid, discord_username, player_name, battletag, country, region, activation_code)
             )
             conn.commit()
             return cursor.lastrowid
@@ -279,6 +300,7 @@ class DatabaseWriter:
     def update_player(
         self,
         discord_uid: int,
+        discord_username: Optional[str] = None,
         player_name: Optional[str] = None,
         battletag: Optional[str] = None,
         alt_player_name_1: Optional[str] = None,
@@ -306,6 +328,10 @@ class DatabaseWriter:
             # Build dynamic update query
             updates = []
             params = []
+            
+            if discord_username is not None:
+                updates.append("discord_username = ?")
+                params.append(discord_username)
             
             if player_name is not None:
                 updates.append("player_name = ?")
@@ -337,7 +363,7 @@ class DatabaseWriter:
                 # Only set accepted_tos_date if it's currently NULL (can't be overwritten)
                 if accepted_tos:
                     updates.append("accepted_tos_date = COALESCE(accepted_tos_date, ?)")
-                    params.append(datetime.now().isoformat())
+                    params.append(get_timestamp())
             
             if completed_setup is not None:
                 updates.append("completed_setup = ?")
@@ -345,7 +371,7 @@ class DatabaseWriter:
                 # Only set completed_setup_date if it's currently NULL (can't be overwritten)
                 if completed_setup:
                     updates.append("completed_setup_date = COALESCE(completed_setup_date, ?)")
-                    params.append(datetime.now().isoformat())
+                    params.append(get_timestamp())
             
             if activation_code is not None:
                 updates.append("activation_code = ?")
@@ -356,7 +382,7 @@ class DatabaseWriter:
             
             # Always update the updated_at timestamp
             updates.append("updated_at = ?")
-            params.append(datetime.now().isoformat())
+            params.append(get_timestamp())
             
             # Add discord_uid to params
             params.append(discord_uid)
@@ -399,13 +425,15 @@ class DatabaseWriter:
         changed_by: str = "player"
     ) -> int:
         """
-        Log a player action.
+        Log a player action and update the updated_at timestamp.
         
         Returns:
             The ID of the newly created log entry.
         """
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
+            
+            # Log the action
             cursor.execute(
                 """
                 INSERT INTO player_action_logs (
@@ -416,8 +444,20 @@ class DatabaseWriter:
                 """,
                 (discord_uid, player_name, setting_name, old_value, new_value, changed_by)
             )
+            
+            # Update the updated_at timestamp in players table
+            cursor.execute(
+                """
+                UPDATE players 
+                SET updated_at = ? 
+                WHERE discord_uid = ?
+                """,
+                (get_timestamp(), discord_uid)
+            )
+            
             conn.commit()
             return cursor.lastrowid
+    
     
     # ========== MMRs 1v1 Table ==========
     
@@ -459,7 +499,7 @@ class DatabaseWriter:
                 (
                     discord_uid, player_name, race, mmr,
                     games_played, games_won, games_lost, games_drawn,
-                    datetime.now().isoformat()
+                    get_timestamp()
                 )
             )
             conn.commit()

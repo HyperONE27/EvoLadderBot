@@ -3,8 +3,7 @@ from discord import app_commands
 import re
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.regions_service import RegionsService
-from src.backend.services.user_info_service import UserInfoService
-from src.utils.user_utils import get_user_info, log_user_action
+from src.backend.services.user_info_service import UserInfoService, get_user_info, log_user_action
 from src.utils.validation_utils import validate_user_id, validate_battle_tag, validate_alt_ids
 from components.confirm_embed import ConfirmEmbedView
 from components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
@@ -18,7 +17,7 @@ user_info_service = UserInfoService()
 async def setup_command(interaction: discord.Interaction):
     """Handle the /setup slash command"""
     # Ensure player exists in database
-    user_info_service.ensure_player_exists(interaction.user.id)
+    user_info_service.ensure_player_exists(interaction.user.id, interaction.user.name)
     
     # Send the modal directly as the initial response
     modal = SetupModal()
