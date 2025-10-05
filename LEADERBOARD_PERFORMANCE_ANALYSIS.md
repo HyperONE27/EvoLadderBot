@@ -42,11 +42,11 @@ def _apply_filters(self, players: List[Dict]) -> List[Dict]:
 
 ```python
 if self.best_race_only:
-    # Group by player_id and keep only the highest ELO entry for each player
+    # Group by player_id and keep only the highest MMR entry for each player
     player_best_races = {}
     for player in filtered_players:
         player_id = player["player_id"]
-        if player_id not in player_best_races or player["elo"] > player_best_races[player_id]["elo"]:
+        if player_id not in player_best_races or player["mmr"] > player_best_races[player_id]["mmr"]:
             player_best_races[player_id] = player
     filtered_players = list(player_best_races.values())
 ```
@@ -63,8 +63,8 @@ if self.best_race_only:
 ### 4. ❌ **Post-Filter Sorting** (Line 115)
 
 ```python
-# Sort by ELO (descending)
-filtered_players.sort(key=lambda x: x["elo"], reverse=True)
+# Sort by MMR (descending)
+filtered_players.sort(key=lambda x: x["mmr"], reverse=True)
 ```
 
 **Issue**: Sorts entire filtered list in Python after fetching.
@@ -100,7 +100,7 @@ player_id = player["player_id"]  # This is player_name, not discord_uid!
 4. Python: Filter by country                    [SLOW - loop]
 5. Python: Filter by race                       [SLOW - loop]
 6. Python: Group by player_id (dictionary)      [SLOW - loop + dict ops]
-7. Python: Sort by ELO                          [SLOW - O(n log n)]
+7. Python: Sort by MMR                          [SLOW - O(n log n)]
 8. Python: Paginate (slice)                     [FAST]
 ```
 

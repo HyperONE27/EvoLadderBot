@@ -2,700 +2,700 @@
   {
     "player_id": "Player001",
     "main_id": "Player001",
-    "elo": 4850,
+    "mmr": 4850,
     "race": "bw_terran",
     "country": "US"
   },
   {
     "player_id": "Player001",
     "main_id": "Player001",
-    "elo": 4200,
+    "mmr": 4200,
     "race": "bw_zerg",
     "country": "US"
   },
   {
     "player_id": "Player001",
     "main_id": "Player001",
-    "elo": 3800,
+    "mmr": 3800,
     "race": "sc2_terran",
     "country": "US"
   },
   {
     "player_id": "Player001",
     "main_id": "Player001",
-    "elo": 3500,
+    "mmr": 3500,
     "race": "sc2_protoss",
     "country": "US"
   },
   {
     "player_id": "Player002",
     "main_id": "Player002",
-    "elo": 4720,
+    "mmr": 4720,
     "race": "bw_protoss",
     "country": "KR"
   },
   {
     "player_id": "Player002",
     "main_id": "Player002",
-    "elo": 4500,
+    "mmr": 4500,
     "race": "bw_terran",
     "country": "KR"
   },
   {
     "player_id": "Player002",
     "main_id": "Player002",
-    "elo": 4100,
+    "mmr": 4100,
     "race": "sc2_zerg",
     "country": "KR"
   },
   {
     "player_id": "Player002",
     "main_id": "Player002",
-    "elo": 3900,
+    "mmr": 3900,
     "race": "sc2_terran",
     "country": "KR"
   },
   {
     "player_id": "Player003",
     "main_id": "Player003",
-    "elo": 4680,
+    "mmr": 4680,
     "race": "bw_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player003",
     "main_id": "Player003",
-    "elo": 4400,
+    "mmr": 4400,
     "race": "bw_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player003",
     "main_id": "Player003",
-    "elo": 4000,
+    "mmr": 4000,
     "race": "sc2_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player003",
     "main_id": "Player003",
-    "elo": 3600,
+    "mmr": 3600,
     "race": "sc2_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player004",
     "main_id": "Player004",
-    "elo": 4520,
+    "mmr": 4520,
     "race": "sc2_terran",
     "country": "US"
   },
   {
     "player_id": "Player004",
     "main_id": "Player004",
-    "elo": 4300,
+    "mmr": 4300,
     "race": "bw_terran",
     "country": "US"
   },
   {
     "player_id": "Player004",
     "main_id": "Player004",
-    "elo": 3900,
+    "mmr": 3900,
     "race": "bw_zerg",
     "country": "US"
   },
   {
     "player_id": "Player004",
     "main_id": "Player004",
-    "elo": 3700,
+    "mmr": 3700,
     "race": "sc2_protoss",
     "country": "US"
   },
   {
     "player_id": "Player005",
     "main_id": "Player005",
-    "elo": 4380,
+    "mmr": 4380,
     "race": "bw_protoss",
     "country": "KR"
   },
   {
     "player_id": "Player005",
     "main_id": "Player005",
-    "elo": 4100,
+    "mmr": 4100,
     "race": "bw_zerg",
     "country": "KR"
   },
   {
     "player_id": "Player005",
     "main_id": "Player005",
-    "elo": 3800,
+    "mmr": 3800,
     "race": "sc2_terran",
     "country": "KR"
   },
   {
     "player_id": "Player005",
     "main_id": "Player005",
-    "elo": 3500,
+    "mmr": 3500,
     "race": "sc2_zerg",
     "country": "KR"
   },
   {
     "player_id": "Player006",
     "main_id": "Player006",
-    "elo": 4250,
+    "mmr": 4250,
     "race": "sc2_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player006",
     "main_id": "Player006",
-    "elo": 4000,
+    "mmr": 4000,
     "race": "bw_terran",
     "country": "DK"
   },
   {
     "player_id": "Player006",
     "main_id": "Player006",
-    "elo": 3700,
+    "mmr": 3700,
     "race": "bw_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player006",
     "main_id": "Player006",
-    "elo": 3400,
+    "mmr": 3400,
     "race": "sc2_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player007",
     "main_id": "Player007",
-    "elo": 4120,
+    "mmr": 4120,
     "race": "bw_terran",
     "country": "US"
   },
   {
     "player_id": "Player007",
     "main_id": "Player007",
-    "elo": 3850,
+    "mmr": 3850,
     "race": "bw_protoss",
     "country": "US"
   },
   {
     "player_id": "Player007",
     "main_id": "Player007",
-    "elo": 3600,
+    "mmr": 3600,
     "race": "sc2_terran",
     "country": "US"
   },
   {
     "player_id": "Player007",
     "main_id": "Player007",
-    "elo": 3300,
+    "mmr": 3300,
     "race": "sc2_zerg",
     "country": "US"
   },
   {
     "player_id": "Player008",
     "main_id": "Player008",
-    "elo": 3980,
+    "mmr": 3980,
     "race": "sc2_protoss",
     "country": "KR"
   },
   {
     "player_id": "Player008",
     "main_id": "Player008",
-    "elo": 3750,
+    "mmr": 3750,
     "race": "bw_zerg",
     "country": "KR"
   },
   {
     "player_id": "Player008",
     "main_id": "Player008",
-    "elo": 3500,
+    "mmr": 3500,
     "race": "bw_terran",
     "country": "KR"
   },
   {
     "player_id": "Player008",
     "main_id": "Player008",
-    "elo": 3200,
+    "mmr": 3200,
     "race": "sc2_terran",
     "country": "KR"
   },
   {
     "player_id": "Player009",
     "main_id": "Player009",
-    "elo": 3850,
+    "mmr": 3850,
     "race": "bw_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player009",
     "main_id": "Player009",
-    "elo": 3600,
+    "mmr": 3600,
     "race": "bw_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player009",
     "main_id": "Player009",
-    "elo": 3400,
+    "mmr": 3400,
     "race": "sc2_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player009",
     "main_id": "Player009",
-    "elo": 3100,
+    "mmr": 3100,
     "race": "sc2_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player010",
     "main_id": "Player010",
-    "elo": 3720,
+    "mmr": 3720,
     "race": "sc2_terran",
     "country": "US"
   },
   {
     "player_id": "Player010",
     "main_id": "Player010",
-    "elo": 3500,
+    "mmr": 3500,
     "race": "bw_terran",
     "country": "US"
   },
   {
     "player_id": "Player010",
     "main_id": "Player010",
-    "elo": 3200,
+    "mmr": 3200,
     "race": "bw_protoss",
     "country": "US"
   },
   {
     "player_id": "Player010",
     "main_id": "Player010",
-    "elo": 2900,
+    "mmr": 2900,
     "race": "sc2_zerg",
     "country": "US"
   },
   {
     "player_id": "Player011",
     "main_id": "Player011",
-    "elo": 3580,
+    "mmr": 3580,
     "race": "bw_protoss",
     "country": "KR"
   },
   {
     "player_id": "Player011",
     "main_id": "Player011",
-    "elo": 3350,
+    "mmr": 3350,
     "race": "bw_zerg",
     "country": "KR"
   },
   {
     "player_id": "Player011",
     "main_id": "Player011",
-    "elo": 3100,
+    "mmr": 3100,
     "race": "sc2_terran",
     "country": "KR"
   },
   {
     "player_id": "Player011",
     "main_id": "Player011",
-    "elo": 2800,
+    "mmr": 2800,
     "race": "sc2_protoss",
     "country": "KR"
   },
   {
     "player_id": "Player012",
     "main_id": "Player012",
-    "elo": 3450,
+    "mmr": 3450,
     "race": "sc2_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player012",
     "main_id": "Player012",
-    "elo": 3200,
+    "mmr": 3200,
     "race": "bw_terran",
     "country": "DK"
   },
   {
     "player_id": "Player012",
     "main_id": "Player012",
-    "elo": 2950,
+    "mmr": 2950,
     "race": "bw_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player012",
     "main_id": "Player012",
-    "elo": 2700,
+    "mmr": 2700,
     "race": "sc2_terran",
     "country": "DK"
   },
   {
     "player_id": "Player013",
     "main_id": "Player013",
-    "elo": 3320,
+    "mmr": 3320,
     "race": "bw_terran",
     "country": "US"
   },
   {
     "player_id": "Player013",
     "main_id": "Player013",
-    "elo": 3100,
+    "mmr": 3100,
     "race": "bw_protoss",
     "country": "US"
   },
   {
     "player_id": "Player013",
     "main_id": "Player013",
-    "elo": 2850,
+    "mmr": 2850,
     "race": "sc2_terran",
     "country": "US"
   },
   {
     "player_id": "Player013",
     "main_id": "Player013",
-    "elo": 2600,
+    "mmr": 2600,
     "race": "sc2_zerg",
     "country": "US"
   },
   {
     "player_id": "Player014",
     "main_id": "Player014",
-    "elo": 3180,
+    "mmr": 3180,
     "race": "sc2_protoss",
     "country": "KR"
   },
   {
     "player_id": "Player014",
     "main_id": "Player014",
-    "elo": 2950,
+    "mmr": 2950,
     "race": "bw_zerg",
     "country": "KR"
   },
   {
     "player_id": "Player014",
     "main_id": "Player014",
-    "elo": 2700,
+    "mmr": 2700,
     "race": "bw_terran",
     "country": "KR"
   },
   {
     "player_id": "Player014",
     "main_id": "Player014",
-    "elo": 2450,
+    "mmr": 2450,
     "race": "sc2_terran",
     "country": "KR"
   },
   {
     "player_id": "Player015",
     "main_id": "Player015",
-    "elo": 3050,
+    "mmr": 3050,
     "race": "bw_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player015",
     "main_id": "Player015",
-    "elo": 2800,
+    "mmr": 2800,
     "race": "bw_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player015",
     "main_id": "Player015",
-    "elo": 2550,
+    "mmr": 2550,
     "race": "sc2_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player015",
     "main_id": "Player015",
-    "elo": 2300,
+    "mmr": 2300,
     "race": "sc2_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player016",
     "main_id": "Player016",
-    "elo": 2920,
+    "mmr": 2920,
     "race": "sc2_terran",
     "country": "US"
   },
   {
     "player_id": "Player016",
     "main_id": "Player016",
-    "elo": 2700,
+    "mmr": 2700,
     "race": "bw_terran",
     "country": "US"
   },
   {
     "player_id": "Player016",
     "main_id": "Player016",
-    "elo": 2450,
+    "mmr": 2450,
     "race": "bw_protoss",
     "country": "US"
   },
   {
     "player_id": "Player016",
     "main_id": "Player016",
-    "elo": 2200,
+    "mmr": 2200,
     "race": "sc2_zerg",
     "country": "US"
   },
   {
     "player_id": "Player017",
     "main_id": "Player017",
-    "elo": 2780,
+    "mmr": 2780,
     "race": "bw_protoss",
     "country": "KR"
   },
   {
     "player_id": "Player017",
     "main_id": "Player017",
-    "elo": 2550,
+    "mmr": 2550,
     "race": "bw_zerg",
     "country": "KR"
   },
   {
     "player_id": "Player017",
     "main_id": "Player017",
-    "elo": 2300,
+    "mmr": 2300,
     "race": "sc2_terran",
     "country": "KR"
   },
   {
     "player_id": "Player017",
     "main_id": "Player017",
-    "elo": 2050,
+    "mmr": 2050,
     "race": "sc2_protoss",
     "country": "KR"
   },
   {
     "player_id": "Player018",
     "main_id": "Player018",
-    "elo": 2650,
+    "mmr": 2650,
     "race": "sc2_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player018",
     "main_id": "Player018",
-    "elo": 2400,
+    "mmr": 2400,
     "race": "bw_terran",
     "country": "DK"
   },
   {
     "player_id": "Player018",
     "main_id": "Player018",
-    "elo": 2150,
+    "mmr": 2150,
     "race": "bw_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player018",
     "main_id": "Player018",
-    "elo": 1900,
+    "mmr": 1900,
     "race": "sc2_terran",
     "country": "DK"
   },
   {
     "player_id": "Player019",
     "main_id": "Player019",
-    "elo": 2520,
+    "mmr": 2520,
     "race": "bw_terran",
     "country": "US"
   },
   {
     "player_id": "Player019",
     "main_id": "Player019",
-    "elo": 2300,
+    "mmr": 2300,
     "race": "bw_protoss",
     "country": "US"
   },
   {
     "player_id": "Player019",
     "main_id": "Player019",
-    "elo": 2050,
+    "mmr": 2050,
     "race": "sc2_terran",
     "country": "US"
   },
   {
     "player_id": "Player019",
     "main_id": "Player019",
-    "elo": 1800,
+    "mmr": 1800,
     "race": "sc2_zerg",
     "country": "US"
   },
   {
     "player_id": "Player020",
     "main_id": "Player020",
-    "elo": 2380,
+    "mmr": 2380,
     "race": "sc2_protoss",
     "country": "KR"
   },
   {
     "player_id": "Player020",
     "main_id": "Player020",
-    "elo": 2150,
+    "mmr": 2150,
     "race": "bw_zerg",
     "country": "KR"
   },
   {
     "player_id": "Player020",
     "main_id": "Player020",
-    "elo": 1900,
+    "mmr": 1900,
     "race": "bw_terran",
     "country": "KR"
   },
   {
     "player_id": "Player020",
     "main_id": "Player020",
-    "elo": 1650,
+    "mmr": 1650,
     "race": "sc2_terran",
     "country": "KR"
   },
   {
     "player_id": "Player021",
     "main_id": "Player021",
-    "elo": 2250,
+    "mmr": 2250,
     "race": "bw_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player021",
     "main_id": "Player021",
-    "elo": 2000,
+    "mmr": 2000,
     "race": "bw_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player021",
     "main_id": "Player021",
-    "elo": 1750,
+    "mmr": 1750,
     "race": "sc2_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player021",
     "main_id": "Player021",
-    "elo": 1500,
+    "mmr": 1500,
     "race": "sc2_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player022",
     "main_id": "Player022",
-    "elo": 2120,
+    "mmr": 2120,
     "race": "sc2_terran",
     "country": "US"
   },
   {
     "player_id": "Player022",
     "main_id": "Player022",
-    "elo": 1900,
+    "mmr": 1900,
     "race": "bw_terran",
     "country": "US"
   },
   {
     "player_id": "Player022",
     "main_id": "Player022",
-    "elo": 1650,
+    "mmr": 1650,
     "race": "bw_protoss",
     "country": "US"
   },
   {
     "player_id": "Player022",
     "main_id": "Player022",
-    "elo": 1400,
+    "mmr": 1400,
     "race": "sc2_zerg",
     "country": "US"
   },
   {
     "player_id": "Player023",
     "main_id": "Player023",
-    "elo": 1980,
+    "mmr": 1980,
     "race": "bw_protoss",
     "country": "KR"
   },
   {
     "player_id": "Player023",
     "main_id": "Player023",
-    "elo": 1750,
+    "mmr": 1750,
     "race": "bw_zerg",
     "country": "KR"
   },
   {
     "player_id": "Player023",
     "main_id": "Player023",
-    "elo": 1500,
+    "mmr": 1500,
     "race": "sc2_terran",
     "country": "KR"
   },
   {
     "player_id": "Player023",
     "main_id": "Player023",
-    "elo": 1250,
+    "mmr": 1250,
     "race": "sc2_protoss",
     "country": "KR"
   },
   {
     "player_id": "Player024",
     "main_id": "Player024",
-    "elo": 1850,
+    "mmr": 1850,
     "race": "sc2_zerg",
     "country": "DK"
   },
   {
     "player_id": "Player024",
     "main_id": "Player024",
-    "elo": 1600,
+    "mmr": 1600,
     "race": "bw_terran",
     "country": "DK"
   },
   {
     "player_id": "Player024",
     "main_id": "Player024",
-    "elo": 1350,
+    "mmr": 1350,
     "race": "bw_protoss",
     "country": "DK"
   },
   {
     "player_id": "Player024",
     "main_id": "Player024",
-    "elo": 1100,
+    "mmr": 1100,
     "race": "sc2_terran",
     "country": "DK"
   },
   {
     "player_id": "Player025",
     "main_id": "Player025",
-    "elo": 1720,
+    "mmr": 1720,
     "race": "bw_terran",
     "country": "US"
   },
   {
     "player_id": "Player025",
     "main_id": "Player025",
-    "elo": 1500,
+    "mmr": 1500,
     "race": "bw_protoss",
     "country": "US"
   },
   {
     "player_id": "Player025",
     "main_id": "Player025",
-    "elo": 1250,
+    "mmr": 1250,
     "race": "sc2_terran",
     "country": "US"
   },
   {
     "player_id": "Player025",
     "main_id": "Player025",
-    "elo": 1000,
+    "mmr": 1000,
     "race": "sc2_zerg",
     "country": "US"
   }

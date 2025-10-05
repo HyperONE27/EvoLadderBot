@@ -2,7 +2,7 @@
 Leaderboard service.
 
 This module defines the LeaderboardService class, which contains methods for:
-- Periodically retrieving leaderboard data from the database and storing it perpertually in memory
+- Retrieving leaderboard data from the database
 - Filtering the leaderboard based on provided criteria
 - Returning the leaderboard data in a formatted manner
 - Managing filter state internally
@@ -15,8 +15,6 @@ Intended usage:
     data = await leaderboard.get_leaderboard_data()
 """
 
-import json
-import os
 from typing import Dict, List, Optional, Any
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.races_service import RacesService
@@ -27,8 +25,6 @@ class LeaderboardService:
     """Service for handling leaderboard data operations with integrated filter management."""
     
     def __init__(self):
-        self.data_file_path = "data/misc/leaderboard.json"
-        
         # Services
         self.country_service = CountriesService()
         self.race_service = RacesService()
@@ -102,7 +98,7 @@ class LeaderboardService:
         for player in all_players:
             formatted_players.append({
                 "player_id": player.get("player_name", "Unknown"),
-                "elo": player.get("mmr", 0),
+                "mmr": player.get("mmr", 0),
                 "race": player.get("race", "Unknown"),
                 "country": player.get("country", "Unknown"),
                 "discord_uid": player.get("discord_uid")
@@ -111,8 +107,8 @@ class LeaderboardService:
         # Apply filters
         filtered_players = self._apply_filters(formatted_players)
         
-        # Sort by ELO (descending)
-        filtered_players.sort(key=lambda x: x["elo"], reverse=True)
+        # Sort by MMR (descending)
+        filtered_players.sort(key=lambda x: x["mmr"], reverse=True)
         
         # Calculate pagination
         total_players = len(filtered_players)
@@ -144,11 +140,11 @@ class LeaderboardService:
         
         # Apply best race only filtering if enabled
         if self.best_race_only:
-            # Group by player_id and keep only the highest ELO entry for each player
+            # Group by player_id and keep only the highest MMR entry for each player
             player_best_races = {}
             for player in filtered_players:
                 player_id = player["player_id"]
-                if player_id not in player_best_races or player["elo"] > player_best_races[player_id]["elo"]:
+                if player_id not in player_best_races or player["mmr"] > player_best_races[player_id]["mmr"]:
                     player_best_races[player_id] = player
             filtered_players = list(player_best_races.values())
         
@@ -197,7 +193,7 @@ class LeaderboardService:
             formatted_players.append({
                 "rank": rank,
                 "player_id": player.get('player_id', 'Unknown'),
-                "elo": player.get('elo', 0),
+                "mmr": player.get('mmr', 0),
                 "race": self.race_service.format_race_name(player.get('race', 'Unknown')),
                 "country": player.get('country', 'Unknown')
             })

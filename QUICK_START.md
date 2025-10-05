@@ -99,7 +99,7 @@ async def check_leaderboard():
     print(f"Total players: {data['total_players']}")
     print(f"Total pages: {data['total_pages']}")
     for player in data['players']:
-        print(f"  {player['player_id']} - {player['elo']} MMR")
+        print(f"  {player['player_id']} - {player['mmr']} MMR")
 
 asyncio.run(check_leaderboard())
 ```

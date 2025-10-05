@@ -300,7 +300,7 @@ class LeaderboardView(discord.ui.View):
         else:
             leaderboard_text = "```\n"
             for player in formatted_players:
-                leaderboard_text += f"{player['rank']:2d}. {player['player_id']} - {player['elo']} ELO ({player['race']}, {player['country']})\n"
+                leaderboard_text += f"{player['rank']:2d}. {player['player_id']} - {player['mmr']} MMR ({player['race']}, {player['country']})\n"
             leaderboard_text += "```"
         
         embed.add_field(
