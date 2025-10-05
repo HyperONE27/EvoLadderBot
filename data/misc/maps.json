@@ -2,18 +2,18 @@
     "maps": {
         "season_0": [
             {
-                "name": "[SC:Evo] Arkanoid (알카노이드)",
-                "short_name": "Arkanoid",
-                "am_link": "battlenet:://starcraft/map/1/367489",
-                "eu_link": "battlenet:://starcraft/map/2/258885",
-                "as_link": "battlenet:://starcraft/map/3/184679"
-            },
-            {
                 "name": "[SC:Evo] Death Valley (데스밸리)",
                 "short_name": "Death Valley",
                 "am_link": "battlenet:://starcraft/map/1/367495",
                 "eu_link": "battlenet:://starcraft/map/2/258890",
                 "as_link": "battlenet:://starcraft/map/3/184685"
+            },
+            {
+                "name": "[SC:Evo] Holy World (홀리울드)",
+                "short_name": "Holy World",
+                "am_link": "battlenet:://starcraft/map/1/367497",
+                "eu_link": "battlenet:://starcraft/map/2/258892",
+                "as_link": "battlenet:://starcraft/map/3/184687"
             },
             {
                 "name": "Keres Passage SEL",

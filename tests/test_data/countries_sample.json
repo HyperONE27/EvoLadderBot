@@ -1,0 +1,7 @@
+[
+  {"code": "US", "name": "United States", "common": true},
+  {"code": "GB", "name": "United Kingdom", "common": true},
+  {"code": "XX", "name": "Other", "common": true},
+  {"code": "BR", "name": "Brazil", "common": false}
+]
+

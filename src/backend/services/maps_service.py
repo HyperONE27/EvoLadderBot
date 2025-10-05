@@ -20,14 +20,8 @@ class MapsService(BaseConfigService):
         if isinstance(raw_data, dict):
             maps_data = raw_data.get("maps", {})
             if isinstance(maps_data, dict):
-                # Prefer "season_0" if available, fallback to concatenated values
-                if "season_0" in maps_data and isinstance(maps_data["season_0"], list):
-                    return list(maps_data["season_0"])
-                combined: List[Dict[str, Any]] = []
-                for value in maps_data.values():
-                    if isinstance(value, list):
-                        combined.extend(value)
-                return combined
+                season_0 = maps_data.get("season_0")
+                return list(season_0) if isinstance(season_0, list) else []
             if isinstance(maps_data, list):
                 return list(maps_data)
         elif isinstance(raw_data, list):

@@ -1,0 +1,6 @@
+{
+    "races": [
+        {"code": "sc2_terran", "name": "SC2 Terran", "short_name": "Terran"},
+        {"code": "sc2_zerg", "name": "SC2 Zerg", "short_name": "Zerg"}
+    ]
+}
