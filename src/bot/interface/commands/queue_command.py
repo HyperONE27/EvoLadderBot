@@ -1,4 +1,5 @@
 import asyncio
+import json
 import discord
 from discord import app_commands
 from src.backend.services.races_service import RacesService
@@ -7,9 +8,15 @@ from src.bot.interface.components.error_embed import ErrorEmbedException, create
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.backend.services.matchmaking_service import matchmaker, Player, QueuePreferences, MatchResult
 from src.backend.services.user_info_service import get_user_info
+from src.backend.db.db_reader_writer import DatabaseWriter
+from typing import Optional
+import logging
 
 race_service = RacesService()
 maps_service = MapsService()
+db_writer = DatabaseWriter()
+
+logger = logging.getLogger(__name__)
 
 
 # Register Command
@@ -33,43 +40,16 @@ async def queue_command(interaction: discord.Interaction):
     default_races = []  # TODO: Get from user preferences service
     default_maps = []   # TODO: Get from user preferences service
     
-    view = QueueView(default_races=default_races, default_maps=default_maps)
+    view = await QueueView.create(
+        discord_user_id=interaction.user.id,
+        default_races=default_races,
+        default_maps=default_maps,
+    )
     
     # Use the same embed format as the updated embed
     embed = view.get_embed()
     
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-
-class RaceSelect(discord.ui.Select):
-    """Multiselect dropdown for race selection"""
-    
-    def __init__(self, default_values=None):
-        # Get race options from service
-        race_options = race_service.get_race_options_for_dropdown()
-        
-        options = []
-        for label, value, description in race_options:
-            options.append(
-                discord.SelectOption(
-                    label=label,
-                    value=value,
-                    description=description,
-                    default=value in (default_values or [])
-                )
-            )
-        
-        super().__init__(
-            placeholder="Select your races (multiselect)...",
-            min_values=0,
-            max_values=len(options),
-            options=options,
-            row=1
-        )
-    
-    async def callback(self, interaction: discord.Interaction):
-        self.view.selected_races = self.values
-        await self.view.update_embed(interaction)
 
 
 class MapVetoSelect(discord.ui.Select):
@@ -94,11 +74,12 @@ class MapVetoSelect(discord.ui.Select):
             min_values=0,
             max_values=4,
             options=options,
-            row=2
+            row=3
         )
     
     async def callback(self, interaction: discord.Interaction):
         self.view.vetoed_maps = self.values
+        await self.view.persist_preferences()
         await self.view.update_embed(interaction)
 
 
@@ -115,7 +96,7 @@ class JoinQueueButton(discord.ui.Button):
     
     async def callback(self, interaction: discord.Interaction):
         # Validate that at least one race is selected
-        if not self.view.selected_races or len(self.view.selected_races) == 0:
+        if not self.view.get_selected_race_codes():
             # Create error exception with restart button only
             error = ErrorEmbedException(
                 title="No Race Selected",
@@ -147,7 +128,7 @@ class JoinQueueButton(discord.ui.Button):
         
         # Create queue preferences
         preferences = QueuePreferences(
-            selected_races=self.view.selected_races,
+            selected_races=self.view.get_selected_race_codes(),
             vetoed_maps=self.view.vetoed_maps,
             discord_user_id=user_info["id"],
             user_id="Player" + str(user_info["id"])  # TODO: Get actual user ID from database
@@ -167,7 +148,7 @@ class JoinQueueButton(discord.ui.Button):
         # Show searching state
         searching_view = QueueSearchingView(
             original_view=self.view,
-            selected_races=self.view.selected_races,
+            selected_races=self.view.get_selected_race_codes(),
             vetoed_maps=self.view.vetoed_maps,
             player=player
         )
@@ -200,28 +181,63 @@ class ClearSelectionsButton(discord.ui.Button):
     
     async def callback(self, interaction: discord.Interaction):
         # Clear all selections
-        self.view.selected_races = []
+        self.view.selected_bw_race = None
+        self.view.selected_sc2_race = None
         self.view.vetoed_maps = []
         
         # Update the view with cleared selections
+        await self.view.persist_preferences()
         await self.view.update_embed(interaction)
 
 
 class QueueView(discord.ui.View):
     """Main queue view with race and map veto selections"""
     
-    def __init__(self, default_races=None, default_maps=None):
+    def __init__(self, discord_user_id: int, default_races=None, default_maps=None):
         super().__init__(timeout=300)
-        self.selected_races = default_races or []
+        self.discord_user_id = discord_user_id
+        default_races = default_races or []
+        self.selected_bw_race = next((race for race in default_races if race.startswith("bw_")), None)
+        self.selected_sc2_race = next((race for race in default_races if race.startswith("sc2_")), None)
         self.vetoed_maps = default_maps or []
-        
-        # Add action buttons at the top
         self.add_item(JoinQueueButton())
         self.add_item(ClearSelectionsButton())
-        
-        # Add selection dropdowns with default values
-        self.add_item(RaceSelect(default_values=default_races))
+        self.add_item(BroodWarRaceSelect(default_value=self.selected_bw_race))
+        self.add_item(StarCraftRaceSelect(default_value=self.selected_sc2_race))
         self.add_item(MapVetoSelect(default_values=default_maps))
+
+
+    @classmethod
+    async def create(cls, discord_user_id: int, default_races=None, default_maps=None) -> "QueueView":
+        view = cls(discord_user_id, default_races=default_races, default_maps=default_maps)
+        await view.persist_preferences()
+        return view
+
+    def get_selected_race_codes(self) -> list[str]:
+        races: list[str] = []
+        if self.selected_bw_race:
+            races.append(self.selected_bw_race)
+        if self.selected_sc2_race:
+            races.append(self.selected_sc2_race)
+        return races
+
+    async def persist_preferences(self) -> None:
+        races_payload = json.dumps(self.get_selected_race_codes())
+        vetoes_payload = json.dumps(self.vetoed_maps)
+
+        loop = asyncio.get_running_loop()
+
+        def _write_preferences() -> None:
+            try:
+                db_writer.update_preferences_1v1(
+                    discord_uid=self.discord_user_id,
+                    last_chosen_races=races_payload,
+                    last_chosen_vetoes=vetoes_payload,
+                )
+            except Exception as exc:  # pragma: no cover — log and continue
+                logger.error("Failed to update 1v1 preferences for user %s: %s", self.discord_user_id, exc)
+
+        await loop.run_in_executor(None, _write_preferences)
     
     def get_embed(self):
         """Get the embed for this view without requiring an interaction"""
@@ -232,12 +248,14 @@ class QueueView(discord.ui.View):
         )
         
         # Add race selection info
-        if self.selected_races:
-            # Sort races according to the service's defined order
-            race_order = race_service.get_race_order()
-            sorted_races = [race for race in race_order if race in self.selected_races]
-            race_names = [race_service.get_race_name(race) for race in sorted_races]
-            race_list = "\n".join([f"• {name}" for name in race_names])
+        selected_codes = self.get_selected_race_codes()
+        if selected_codes:
+            details = []
+            for code in selected_codes:
+                label = race_service.get_race_group_label(code)
+                name = race_service.get_race_name(code)
+                details.append(f"• {label}: {name}")
+            race_list = "\n".join(details)
             embed.add_field(
                 name="Selected Races",
                 value=race_list,
@@ -274,9 +292,11 @@ class QueueView(discord.ui.View):
     async def update_embed(self, interaction: discord.Interaction):
         """Update the embed with current selections"""
         embed = self.get_embed()
-        
-        # Recreate the view with current selections to maintain persistence
-        new_view = QueueView(default_races=self.selected_races, default_maps=self.vetoed_maps)
+        new_view = await QueueView.create(
+            discord_user_id=self.discord_user_id,
+            default_races=self.get_selected_race_codes(),
+            default_maps=self.vetoed_maps,
+        )
         await interaction.response.edit_message(embed=embed, view=new_view)
 
 
@@ -286,7 +306,8 @@ class QueueSearchingView(discord.ui.View):
     def __init__(self, original_view, selected_races, vetoed_maps, player):
         super().__init__(timeout=300)
         self.original_view = original_view
-        self.selected_races = selected_races
+        self.selected_bw_race = next((code for code in selected_races if code.startswith("bw_")), None)
+        self.selected_sc2_race = next((code for code in selected_races if code.startswith("sc2_")), None)
         self.vetoed_maps = vetoed_maps
         self.player = player
         self.last_interaction = None
@@ -654,4 +675,54 @@ class MatchResultSelect(discord.ui.Select):
                         )
                     except:
                         pass  # Interaction might be expired
+
+
+class BroodWarRaceSelect(discord.ui.Select):
+    def __init__(self, default_value: Optional[str] = None):
+        options = [
+            discord.SelectOption(
+                label=label,
+                value=value,
+                description=description,
+                default=value == default_value,
+            )
+            for label, value, description in race_service.get_race_dropdown_groups()["brood_war"]
+        ]
+        super().__init__(
+            placeholder="Select your Brood War race (max 1)",
+            min_values=0,
+            max_values=1,
+            options=options,
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.selected_bw_race = self.values[0] if self.values else None
+        await self.view.persist_preferences()
+        await self.view.update_embed(interaction)
+
+
+class StarCraftRaceSelect(discord.ui.Select):
+    def __init__(self, default_value: Optional[str] = None):
+        options = [
+            discord.SelectOption(
+                label=label,
+                value=value,
+                description=description,
+                default=value == default_value,
+            )
+            for label, value, description in race_service.get_race_dropdown_groups()["starcraft2"]
+        ]
+        super().__init__(
+            placeholder="Select your StarCraft II race (max 1)",
+            min_values=0,
+            max_values=1,
+            options=options,
+            row=2,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.selected_sc2_race = self.values[0] if self.values else None
+        await self.view.persist_preferences()
+        await self.view.update_embed(interaction)
 

@@ -35,6 +35,37 @@ class RacesService(BaseConfigService):
     def get_races(self) -> List[Dict[str, Any]]:
         return list(self.get_data())
 
+    def get_races_by_game(self) -> Dict[str, List[Dict[str, Any]]]:
+        brood_war: List[Dict[str, Any]] = []
+        starcraft2: List[Dict[str, Any]] = []
+        for race in self.get_races():
+            code = race.get("code", "")
+            if code.startswith("bw_"):
+                brood_war.append(race)
+            elif code.startswith("sc2_"):
+                starcraft2.append(race)
+        return {"brood_war": brood_war, "starcraft2": starcraft2}
+
+    def get_race_dropdown_groups(self) -> Dict[str, List[Tuple[str, str, str]]]:
+        grouped = self.get_races_by_game()
+        return {
+            "brood_war": [
+                (race.get("name", ""), race.get("code", ""), race.get("description", ""))
+                for race in grouped["brood_war"]
+            ],
+            "starcraft2": [
+                (race.get("name", ""), race.get("code", ""), race.get("description", ""))
+                for race in grouped["starcraft2"]
+            ],
+        }
+
+    def get_race_group_label(self, code: str) -> str:
+        if code.startswith("bw_"):
+            return "Brood War"
+        if code.startswith("sc2_"):
+            return "StarCraft II"
+        return "Other"
+
     def get_race_options_for_dropdown(self) -> List[Tuple[str, str, str]]:
         return [
             (race.get("name", ""), race.get("code", ""), race.get("description", ""))
@@ -47,9 +78,6 @@ class RacesService(BaseConfigService):
     def format_race_name(self, race_code: str) -> str:
         return self.get_race_name(race_code)
 
-    # ------------------------------------------------------------------
-    # Backwards compatibility helpers
-    # ------------------------------------------------------------------
     def get_race_by_code(self, race_code: str) -> Optional[Dict[str, Any]]:
         return self.get_by_code(race_code)
 
@@ -67,82 +95,3 @@ class RacesService(BaseConfigService):
 
     def get_race_names(self) -> List[str]:
         return self.get_names()
-"""
-Races service.
-
-This module defines the RacesService class, which contains methods for:
-- Loading race configuration from races.json
-- Providing race data for UI components
-- Formatting race names consistently
-
-Intended usage:
-    from backend.services.races_service import RacesService
-
-    races_service = RacesService()
-    races = races_service.get_races()
-"""
-
-import json
-from typing import List, Dict, Optional, Tuple, Any
-
-
-class RacesService:
-    """Service for managing race configuration data."""
-    
-    def __init__(self, config_path: str = "data/misc/races.json"):
-        self.config_path = config_path
-        self._races_cache = None
-    
-    def get_races(self) -> List[Dict[str, str]]:
-        """Get all available races."""
-        if self._races_cache is None:
-            self._load_races()
-        return self._races_cache
-    
-    def _load_races(self):
-        """Load races from configuration file."""
-        try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-                self._races_cache = config.get("races", [])
-        except (FileNotFoundError, json.JSONDecodeError, KeyError):
-            self._races_cache = []
-    
-    def get_race_by_code(self, race_code: str) -> Optional[Dict[str, str]]:
-        """Get race data by code."""
-        races = self.get_races()
-        for race in races:
-            if race.get("code") == race_code:
-                return race
-        return None
-    
-    def get_race_name(self, race_code: str) -> str:
-        """Get display name for race code."""
-        race = self.get_race_by_code(race_code)
-        return race.get("name", race_code) if race else race_code
-    
-    def get_race_short_name(self, race_code: str) -> str:
-        """Get short name for race code."""
-        race = self.get_race_by_code(race_code)
-        return race.get("short_name", race_code) if race else race_code
-    
-    def get_race_codes(self) -> List[str]:
-        """Get list of all race codes."""
-        return [race.get("code") for race in self.get_races() if race.get("code")]
-    
-    def get_race_names(self) -> List[str]:
-        """Get list of all race names."""
-        return [race.get("name") for race in self.get_races() if race.get("name")]
-    
-    def get_race_options_for_dropdown(self) -> List[Tuple[str, str, str]]:
-        """Get race options formatted for dropdown (label, value, description)."""
-        races = self.get_races()
-        return [(race.get("name", ""), race.get("code", ""), "") for race in races]
-    
-    def get_race_order(self) -> List[str]:
-        """Get race codes in the order they should appear in UI."""
-        return [race.get("code") for race in self.get_races() if race.get("code")]
-    
-    def format_race_name(self, race_code: str) -> str:
-        """Format race name using the configuration data."""
-        return self.get_race_name(race_code)

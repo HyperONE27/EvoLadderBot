@@ -16,7 +16,13 @@ TEST_CASES: list[tuple[str, Dict[str, Any]]] = [
     ("race_names", {"method": "get_race_names", "expected": ["SC2 Terran", "SC2 Zerg"]}),
     ("race_name_lookup", {"method": "get_race_name", "args": ("sc2_zerg",), "expected": "SC2 Zerg"}),
     ("race_short_name", {"method": "get_race_short_name", "args": ("sc2_terran",), "expected": "Terran"}),
-    ("dropdown_options", {"method": "get_race_options_for_dropdown", "expected": [("SC2 Terran", "sc2_terran", ""), ("SC2 Zerg", "sc2_zerg", "")] }),
+    (
+        "dropdown_options",
+        {
+            "method": "get_race_options_for_dropdown",
+            "expected": [("SC2 Terran", "sc2_terran", ""), ("SC2 Zerg", "sc2_zerg", "")],
+        },
+    ),
 ]
 
 
