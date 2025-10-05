@@ -15,7 +15,8 @@ Intended usage:
     data = await leaderboard.get_leaderboard_data()
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.races_service import RacesService
 from src.backend.db.db_reader_writer import DatabaseReader
@@ -23,12 +24,18 @@ from src.backend.db.db_reader_writer import DatabaseReader
 
 class LeaderboardService:
     """Service for handling leaderboard data operations with integrated filter management."""
-    
-    def __init__(self):
+
+    def __init__(
+        self,
+        *,
+        country_service: Optional[CountriesService] = None,
+        race_service: Optional[RacesService] = None,
+        db_reader: Optional[DatabaseReader] = None,
+    ) -> None:
         # Services
-        self.country_service = CountriesService()
-        self.race_service = RacesService()
-        self.db_reader = DatabaseReader()
+        self.country_service = country_service or CountriesService()
+        self.race_service = race_service or RacesService()
+        self.db_reader = db_reader or DatabaseReader()
         
         # Filter state
         self.current_page: int = 1
