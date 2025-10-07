@@ -1,12 +1,19 @@
 import discord
 from discord import app_commands
+import os
 from src.backend.services.countries_service import CountriesService
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from src.backend.services.user_info_service import UserInfoService, get_user_info, log_user_action
-from components.confirm_embed import ConfirmEmbedView
-from components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
+from src.bot.utils.discord_utils import send_ephemeral_response
+from src.bot.interface.components.confirm_embed import ConfirmEmbedView
+from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
 
 countries_service = CountriesService()
 user_info_service = UserInfoService()
+guard_service = CommandGuardService()
+
+# Get global timeout from environment
+GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
 
 
 # API Call / Data Handling
@@ -30,22 +37,34 @@ async def country_autocomplete(
 
 async def setcountry_command(interaction: discord.Interaction, country_code: str):
     """Set or update your country"""
-    # Ensure player exists in database
-    user_info_service.ensure_player_exists(interaction.user.id, interaction.user.name)
+    try:
+        player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        guard_service.require_tos_accepted(player)
+    except CommandGuardError as exc:
+        await send_ephemeral_response(interaction, content=str(exc))
+        return
     
     country = countries_service.get_country_by_code(country_code)
     
+    # If no exact match by code, try to find by name (fallback for early Enter)
     if not country:
-        error_embed = discord.Embed(
-            title="❌ Invalid Country Selection",
-            description="The selected country is not valid. Please try again with a different country.\n\n(If you are sure your country is valid, please ensure you are waiting for Discord's UI to load your country before selecting it and pressing Enter.)",
-            color=discord.Color.red()
-        )
-        await interaction.response.send_message(
-            embed=error_embed,
-            ephemeral=True
-        )
-        return
+        # Search for countries that match the input as a name
+        search_results = countries_service.search_countries(country_code, limit=1)
+        if search_results:
+            # Use the first search result as a fallback
+            country = search_results[0]
+            country_code = country['code']  # Update to use the correct code
+        else:
+            error_embed = discord.Embed(
+                title="❌ Invalid Country Selection",
+                description="The selected country is not valid. Please try again with a different country.\n\n(If you are sure your country is valid, please ensure you are waiting for Discord's UI to load your country before selecting it and pressing Enter.)",
+                color=discord.Color.red()
+            )
+            await send_ephemeral_response(
+                interaction,
+                embed=error_embed
+            )
+            return
     
     # Get user information using utility function
     user_info = get_user_info(interaction)
@@ -83,20 +102,20 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
     
     # Create a simple view for the cancel target (just show the command again)
     class CountryCancelView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=60)
+        def __init__(self) -> None:
+            super().__init__(timeout=GLOBAL_TIMEOUT)
         
         @discord.ui.button(label="Try Again", emoji="🔄", style=discord.ButtonStyle.secondary)
         async def retry(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.send_message(
-                "Please use `/setcountry` command again to select a different country.",
-                ephemeral=True
+            await send_ephemeral_response(
+                interaction,
+                content="Please use `/setcountry` command again to select a different country."
             )
     
     # Create custom view with only confirm and cancel buttons
     class CountryConfirmView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=300)
+        def __init__(self) -> None:
+            super().__init__(timeout=GLOBAL_TIMEOUT)
             self.add_item(ConfirmButton(confirm_callback, "Confirm"))
             self.add_item(CancelButton(CountryCancelView(), "Cancel"))
     
@@ -114,7 +133,7 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
     
     confirm_view = CountryConfirmView()
     
-    await interaction.response.send_message(embed=embed, view=confirm_view, ephemeral=True)
+    await send_ephemeral_response(interaction, embed=embed, view=confirm_view)
 
 
 # Register Command

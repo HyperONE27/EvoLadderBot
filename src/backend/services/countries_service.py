@@ -72,18 +72,9 @@ class CountriesService(BaseConfigService):
     def get_sorted_countries(self) -> List[Dict[str, Any]]:
         return sorted(self.get_data(), key=lambda entry: entry.get("name", ""))
 
-    def get_country_codes(self) -> List[str]:
-        return [country.get("code", "") for country in self.get_countries() if country.get("code")]
-
-    def get_common_country_codes(self) -> List[str]:
-        return [country.get("code", "") for country in self.get_common_countries() if country.get("code")]
-
     def search_countries(self, query: str, limit: int = 25) -> List[Dict[str, Any]]:
         results = self.search_by_name(query, limit=limit)
         return [entry for entry in results if entry.get("code") != "XX"]
 
     def get_country_by_code(self, country_code: str) -> Optional[Dict[str, Any]]:
         return self.get_by_code(country_code)
-
-    def get_country_name(self, country_code: str) -> str:
-        return self.get_name_by_code(country_code)

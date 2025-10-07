@@ -1,5 +1,6 @@
 import discord
 from typing import Optional, Union, Callable, Any
+from src.bot.utils.discord_utils import send_ephemeral_response
 
 
 class ErrorEmbedException(Exception):
@@ -97,9 +98,9 @@ class RetryTargetButton(discord.ui.Button):
         elif isinstance(self.reset_target, discord.ui.Modal):
             await interaction.response.send_modal(self.reset_target)
         else:
-            await interaction.response.send_message(
-                "⚠️ Unable to retry - no valid target provided.",
-                ephemeral=True
+            await send_ephemeral_response(
+                interaction,
+                content="⚠️ Unable to retry - no valid target provided."
             )
 
 

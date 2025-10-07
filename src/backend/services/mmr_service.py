@@ -1,5 +1,5 @@
 """
-MMR service implementing rating updates using a probabilistic model.
+MMR service implementing rating updates using a Elo-based probabilistic model.
 
 The goal of this service is to expose MMR-focused helpers that hide the
 underlying rating mathematics. It is intentionally stateless so consumers can

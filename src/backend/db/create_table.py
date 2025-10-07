@@ -1,24 +1,34 @@
 """
 Creates the SQLite database tables based on schema.md.
 
-This script should be run once to initialize the database.
+This script drops and recreates all tables, then populates with mock data.
 All subsequent database operations should go through db_reader_writer.py.
 """
 
 import sqlite3
 import os
+import json
 from datetime import datetime
 
 
 def create_database(db_path: str = "evoladder.db") -> None:
     """
     Create the SQLite database with all tables from schema.md.
+    Drops existing tables and recreates them with mock data.
     
     Args:
         db_path: Path to the SQLite database file.
     """
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+    
+    # Drop all existing tables
+    print("🗑️  Dropping existing tables...")
+    cursor.execute("DROP TABLE IF EXISTS preferences_1v1")
+    cursor.execute("DROP TABLE IF EXISTS matches_1v1")
+    cursor.execute("DROP TABLE IF EXISTS mmrs_1v1")
+    cursor.execute("DROP TABLE IF EXISTS player_action_logs")
+    cursor.execute("DROP TABLE IF EXISTS players")
     
     # Create players table
     cursor.execute("""
@@ -96,55 +106,204 @@ def create_database(db_path: str = "evoladder.db") -> None:
         )
     """)
     
-    # Create mmrs_2v2 table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS mmrs_2v2 (
-            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-            player_1_discord_uid    INTEGER NOT NULL,
-            player_2_discord_uid    INTEGER,
-            player_1_race           TEXT NOT NULL,
-            player_2_race           TEXT,
-            mmr                     INTEGER NOT NULL,
-            last_played             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(player_1_discord_uid, player_2_discord_uid, player_1_race, player_2_race)
-        )
-    """)
+    print("✅ All tables created successfully")
     
-    # Create matches_2v2 table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS matches_2v2 (
-            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-            player_1_discord_uid    INTEGER NOT NULL,
-            player_2_discord_uid    INTEGER NOT NULL,
-            player_3_discord_uid    INTEGER NOT NULL,
-            player_4_discord_uid    INTEGER NOT NULL,
-            winner_discord_uid      INTEGER,
-            map_played              TEXT NOT NULL,
-            server_used             TEXT NOT NULL,
-            played_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+    # Create and populate mock data
+    print("📊 Creating mock player data...")
+    mock_data = create_mock_data()
     
-    # Create preferences_2v2 table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS preferences_2v2 (
-            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-            player_1_discord_uid    INTEGER NOT NULL,
-            player_2_discord_uid    INTEGER,
-            player_1_race           TEXT NOT NULL,
-            player_2_race           TEXT,
-            last_chosen_races       TEXT,
-            last_chosen_vetoes      TEXT,
-            UNIQUE(player_1_discord_uid, player_2_discord_uid)
-        )
-    """)
+    # Save mock data to JSON file
+    mock_data_path = os.path.join(os.path.dirname(__file__), "mock_data.json")
+    with open(mock_data_path, 'w') as f:
+        json.dump(mock_data, f, indent=2)
+    print(f"💾 Mock data saved to: {mock_data_path}")
+    
+    # Populate database with mock data
+    populate_database(cursor, mock_data)
     
     conn.commit()
     conn.close()
     
-    print(f"Database created successfully at: {os.path.abspath(db_path)}")
+    print(f"🎉 Database created and populated successfully at: {os.path.abspath(db_path)}")
+
+
+def create_mock_data():
+    """Create mock player data for testing."""
+    import random
+    
+    # Load regions and countries data
+    # Get the project root directory (3 levels up from this file)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    regions_path = os.path.join(project_root, "data", "misc", "regions.json")
+    countries_path = os.path.join(project_root, "data", "misc", "countries.json")
+    
+    with open(regions_path, 'r') as f:
+        regions_data = json.load(f)
+    
+    with open(countries_path, 'r') as f:
+        countries_data = json.load(f)
+    
+    # Get common countries
+    common_countries = [country for country in countries_data if country.get("common", False)]
+    selected_countries = random.sample(common_countries, 10)
+    
+    # Get residential regions
+    residential_regions = regions_data["residential_regions"]
+    
+    # All 4 races
+    races = ["bw_terran", "bw_protoss", "bw_zerg", "sc2_terran", "sc2_protoss", "sc2_zerg"]
+    
+    players = []
+    mmrs = []
+    preferences = []
+    
+    # Generate 50 players
+    for i in range(50):
+        discord_uid = 100000000 + i
+        country = random.choice(selected_countries)
+        region = random.choice(residential_regions)
+        
+        # Generate player names
+        player_names = [
+            "StarCraftPro", "BWMaster", "ZergRush", "TerranTank", "ProtossPylon",
+            "SC2Champion", "BroodWarKing", "RTSLegend", "MicroGod", "MacroMaster",
+            "BuildOrder", "RushPlayer", "DefenseKing", "AttackWave", "StrategyPro",
+            "GameMaster", "LadderKing", "RankedPro", "Competitive", "Tournament",
+            "ProGamer", "ElitePlayer", "SkillMaster", "Tactical", "Strategic",
+            "Warrior", "Commander", "General", "Captain", "Admiral",
+            "Champion", "Hero", "Legend", "Master", "Expert",
+            "Veteran", "Rookie", "Novice", "Beginner", "Advanced",
+            "Elite", "Pro", "SemiPro", "Amateur", "Casual",
+            "Hardcore", "Competitive", "Ranked", "Ladder", "Tournament"
+        ]
+        
+        player_name = random.choice(player_names) + str(random.randint(1, 999))
+        discord_username = f"Player{i+1}"
+        battletag = f"{player_name}#{random.randint(1000, 9999)}"
+        
+        # Create player
+        player = {
+            "discord_uid": discord_uid,
+            "discord_username": discord_username,
+            "player_name": player_name,
+            "battletag": battletag,
+            "country": country["code"],
+            "region": region["code"],
+            "accepted_tos": True,
+            "completed_setup": True
+        }
+        players.append(player)
+        
+        # Generate MMR for all 4 races (2 BW + 2 SC2)
+        bw_races = ["bw_terran", "bw_protoss", "bw_zerg"]
+        sc2_races = ["sc2_terran", "sc2_protoss", "sc2_zerg"]
+        
+        # Pick 2 BW races and 2 SC2 races
+        selected_bw_races = random.sample(bw_races, 2)
+        selected_sc2_races = random.sample(sc2_races, 2)
+        selected_races = selected_bw_races + selected_sc2_races
+        
+        for race in selected_races:
+            # Random MMR between 1000-2000
+            mmr = round(random.uniform(1000.0, 2000.0), 1)
+            
+            # Random game stats
+            games_played = random.randint(10, 100)
+            games_won = random.randint(0, games_played)
+            games_lost = games_played - games_won - random.randint(0, 5)  # Some draws possible
+            games_drawn = games_played - games_won - games_lost
+            
+            mmr_entry = {
+                "discord_uid": discord_uid,
+                "player_name": player_name,
+                "race": race,
+                "mmr": mmr,
+                "games_played": games_played,
+                "games_won": games_won,
+                "games_lost": games_lost,
+                "games_drawn": max(0, games_drawn)
+            }
+            mmrs.append(mmr_entry)
+        
+        # Create preferences
+        races_json = json.dumps(selected_races)
+        # Random map vetoes (0-3 maps)
+        map_names = ["Arkanoid", "Khione", "Pylon", "Neo", "Fighting Spirit", "Circuit Breaker"]
+        vetoed_maps = random.sample(map_names, random.randint(0, 3))
+        vetoes_json = json.dumps(vetoed_maps)
+        
+        preference = {
+            "discord_uid": discord_uid,
+            "last_chosen_races": races_json,
+            "last_chosen_vetoes": vetoes_json
+        }
+        preferences.append(preference)
+    
+    return {
+        "players": players,
+        "mmrs": mmrs,
+        "preferences": preferences
+    }
+
+
+def populate_database(cursor, mock_data):
+    """Populate database with mock data."""
+    # Insert players
+    print("👥 Inserting mock players...")
+    for player in mock_data["players"]:
+        cursor.execute("""
+            INSERT INTO players (
+                discord_uid, discord_username, player_name, battletag,
+                country, region, accepted_tos, completed_setup
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            player["discord_uid"], player["discord_username"], player["player_name"],
+            player["battletag"], player["country"], player["region"],
+            player["accepted_tos"], player["completed_setup"]
+        ))
+    
+    # Insert MMRs
+    print("📊 Inserting mock MMR data...")
+    for mmr in mock_data["mmrs"]:
+        cursor.execute("""
+            INSERT INTO mmrs_1v1 (
+                discord_uid, player_name, race, mmr,
+                games_played, games_won, games_lost, games_drawn
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            mmr["discord_uid"], mmr["player_name"], mmr["race"], mmr["mmr"],
+            mmr["games_played"], mmr["games_won"], mmr["games_lost"], mmr["games_drawn"]
+        ))
+    
+    # Insert preferences
+    print("⚙️  Inserting mock preferences...")
+    for pref in mock_data["preferences"]:
+        cursor.execute("""
+            INSERT INTO preferences_1v1 (
+                discord_uid, last_chosen_races, last_chosen_vetoes
+            ) VALUES (?, ?, ?)
+        """, (
+            pref["discord_uid"], pref["last_chosen_races"], pref["last_chosen_vetoes"]
+        ))
+    
+    
+    print("✅ Mock data population complete!")
+
+
+def load_mock_data():
+    """Load mock data from JSON file."""
+    mock_data_path = os.path.join(os.path.dirname(__file__), "mock_data.json")
+    try:
+        with open(mock_data_path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"❌ Mock data file not found: {mock_data_path}")
+        print("💡 Run create_database() first to generate mock data")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"❌ Error parsing mock data JSON: {e}")
+        return None
 
 
 if __name__ == "__main__":
     create_database()
-

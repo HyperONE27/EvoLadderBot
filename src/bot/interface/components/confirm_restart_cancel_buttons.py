@@ -1,5 +1,6 @@
 import discord
 from typing import Optional, Union, Callable
+from src.bot.utils.discord_utils import send_ephemeral_response
 
 
 class ConfirmButton(discord.ui.Button):
@@ -51,9 +52,9 @@ class RestartButton(discord.ui.Button):
         elif isinstance(self.reset_target, discord.ui.Modal):
             await interaction.response.send_modal(self.reset_target)
         else:
-            await interaction.response.send_message(
-                "⚠️ Nothing to restart to.",
-                ephemeral=True
+            await send_ephemeral_response(
+                interaction,
+                content="⚠️ Nothing to restart to."
             )
 
 
@@ -74,7 +75,7 @@ class CancelButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         # Import here to avoid circular imports
-        from components.cancel_embed import create_cancel_embed
+        from src.bot.interface.components.cancel_embed import create_cancel_embed
         
         # Always use the cancel embed for consistency
         cancel_view = create_cancel_embed()

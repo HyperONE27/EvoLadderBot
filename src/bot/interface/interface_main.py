@@ -3,6 +3,10 @@ import asyncio
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+
+# Load environment variables first
+load_dotenv()
+
 from src.bot.interface.commands.activate_command import register_activate_command
 from src.bot.interface.commands.leaderboard_command import register_leaderboard_command
 from src.bot.interface.commands.queue_command import register_queue_command
@@ -38,6 +42,5 @@ def register_commands(bot: commands.Bot):
     register_termsofservice_command(bot.tree)
 
 if __name__ == "__main__":
-    load_dotenv()
     TOKEN = os.getenv("EVOLADDERBOT_TOKEN")
     bot.run(TOKEN)

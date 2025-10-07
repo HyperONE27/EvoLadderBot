@@ -62,7 +62,7 @@ def create_user_embed_field(user_info: Dict[str, Any], title: str = "User Inform
     }
 
 
-def log_user_action(user_info: Dict[str, Any], action: str, details: str = ""):
+def log_user_action(user_info: Dict[str, Any], action: str, details: str = "") -> None:
     """
     Log user action with consistent formatting.
     
@@ -80,7 +80,7 @@ def log_user_action(user_info: Dict[str, Any], action: str, details: str = ""):
 class UserInfoService:
     """Service for managing user information and settings."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.reader = DatabaseReader()
         self.writer = DatabaseWriter()
     

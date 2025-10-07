@@ -2,19 +2,25 @@ import asyncio
 import json
 import discord
 from discord import app_commands
+import os
 from src.backend.services.races_service import RacesService
 from src.backend.services.maps_service import MapsService
 from src.bot.interface.components.error_embed import ErrorEmbedException, create_error_view_from_exception
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.backend.services.matchmaking_service import matchmaker, Player, QueuePreferences, MatchResult
 from src.backend.services.user_info_service import get_user_info
-from src.backend.db.db_reader_writer import DatabaseWriter
+from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader
+from src.bot.utils.discord_utils import send_ephemeral_response
 from typing import Optional
 import logging
 
 race_service = RacesService()
 maps_service = MapsService()
 db_writer = DatabaseWriter()
+db_reader = DatabaseReader()
+
+# Get global timeout from environment
+GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +41,22 @@ def register_queue_command(tree: app_commands.CommandTree):
 # UI Elements
 async def queue_command(interaction: discord.Interaction):
     """Handle the /queue slash command"""
-    # Get user's saved preferences (can be implemented later with a user service)
-    # For now, we'll use empty defaults
-    default_races = []  # TODO: Get from user preferences service
-    default_maps = []   # TODO: Get from user preferences service
+    # Get user's saved preferences from database
+    user_preferences = db_reader.get_preferences_1v1(interaction.user.id)
+    
+    if user_preferences:
+        # Parse saved preferences from database
+        try:
+            default_races = json.loads(user_preferences.get('last_chosen_races', '[]'))
+            default_maps = json.loads(user_preferences.get('last_chosen_vetoes', '[]'))
+        except (json.JSONDecodeError, TypeError):
+            # Fallback to empty defaults if parsing fails
+            default_races = []
+            default_maps = []
+    else:
+        # No saved preferences, use empty defaults
+        default_races = []
+        default_maps = []
     
     view = await QueueView.create(
         discord_user_id=interaction.user.id,
@@ -49,7 +67,7 @@ async def queue_command(interaction: discord.Interaction):
     # Use the same embed format as the updated embed
     embed = view.get_embed()
     
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    await send_ephemeral_response(interaction, embed=embed, view=view)
 
 
 class MapVetoSelect(discord.ui.Select):
@@ -194,7 +212,7 @@ class QueueView(discord.ui.View):
     """Main queue view with race and map veto selections"""
     
     def __init__(self, discord_user_id: int, default_races=None, default_maps=None):
-        super().__init__(timeout=300)
+        super().__init__(timeout=GLOBAL_TIMEOUT)
         self.discord_user_id = discord_user_id
         default_races = default_races or []
         self.selected_bw_race = next((race for race in default_races if race.startswith("bw_")), None)
@@ -210,7 +228,7 @@ class QueueView(discord.ui.View):
     @classmethod
     async def create(cls, discord_user_id: int, default_races=None, default_maps=None) -> "QueueView":
         view = cls(discord_user_id, default_races=default_races, default_maps=default_maps)
-        await view.persist_preferences()
+        # Don't persist preferences immediately - only when user makes changes
         return view
 
     def get_selected_race_codes(self) -> list[str]:
@@ -304,7 +322,7 @@ class QueueSearchingView(discord.ui.View):
     """View shown while searching for a match"""
     
     def __init__(self, original_view, selected_races, vetoed_maps, player):
-        super().__init__(timeout=300)
+        super().__init__(timeout=GLOBAL_TIMEOUT)
         self.original_view = original_view
         self.selected_bw_race = next((code for code in selected_races if code.startswith("bw_")), None)
         self.selected_sc2_race = next((code for code in selected_races if code.startswith("sc2_")), None)
@@ -416,7 +434,7 @@ class MatchFoundView(discord.ui.View):
     """View shown when a match is found"""
     
     def __init__(self, match_result: MatchResult, is_player1: bool):
-        super().__init__(timeout=300)
+        super().__init__(timeout=GLOBAL_TIMEOUT)
         self.match_result = match_result
         self.is_player1 = is_player1
         
@@ -439,6 +457,26 @@ class MatchFoundView(discord.ui.View):
             opponent_user_id = self.match_result.player1_user_id
             opponent_discord_id = self.match_result.player1_discord_id
         
+        # Determine race information
+        if self.is_player1:
+            player_race = self.match_result.player1_race
+            opponent_race = self.match_result.player2_race
+        else:
+            player_race = self.match_result.player2_race
+            opponent_race = self.match_result.player1_race
+        
+        embed.add_field(
+            name="Your Race",
+            value=f"`{player_race}`",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="Opponent's Race", 
+            value=f"`{opponent_race}`",
+            inline=True
+        )
+        
         embed.add_field(
             name="Opponent's User ID",
             value=f"`{opponent_user_id}`",
@@ -446,27 +484,21 @@ class MatchFoundView(discord.ui.View):
         )
         
         embed.add_field(
-            name="Opponent's Discord ID",
-            value=f"`{opponent_discord_id}`",
-            inline=False
-        )
-        
-        embed.add_field(
             name="Map Choice",
             value=f"`{self.match_result.map_choice}`",
-            inline=False
+            inline=True
         )
         
         embed.add_field(
             name="Server Choice",
             value=f"`{self.match_result.server_choice}`",
-            inline=False
+            inline=True
         )
         
         embed.add_field(
             name="In-Game Channel",
             value=f"`{self.match_result.in_game_channel}`",
-            inline=False
+            inline=True
         )
         
         return embed
@@ -560,15 +592,33 @@ class MatchResultSelect(discord.ui.Select):
     
     async def process_match_result(self, interaction: discord.Interaction, result: str):
         """Process a match result when both players agree"""
+        # Determine winner Discord ID for database
         if result == "player1_win":
+            winner_discord_id = self.match_result.player1_discord_id
             winner = self.match_result.player1_user_id
             loser = self.match_result.player2_user_id
         elif result == "player2_win":
+            winner_discord_id = self.match_result.player2_discord_id
             winner = self.match_result.player2_user_id
             loser = self.match_result.player1_user_id
         else:  # draw
+            winner_discord_id = -1  # -1 for draw
             winner = "Draw"
             loser = "Draw"
+        
+        # Record the result in the database
+        from src.backend.services.matchmaking_service import matchmaker
+        success = matchmaker.record_match_result(self.match_result.match_id, winner_discord_id)
+        
+        if not success:
+            # Handle database error
+            error_embed = discord.Embed(
+                title="❌ Database Error",
+                description="Failed to record match result. Please contact an administrator.",
+                color=discord.Color.red()
+            )
+            await interaction.response.edit_message(embed=error_embed)
+            return
         
         # Get the original match embed
         original_embed = self.view.get_embed()
@@ -593,8 +643,7 @@ class MatchResultSelect(discord.ui.Select):
         # Also update the other player's message
         await self.notify_other_player_result(original_embed, result_embed)
         
-        # TODO: Send result to backend API
-        print(f"📊 Match result: {winner} defeated {loser} on {self.match_result.map_choice}")
+        print(f"📊 Match result recorded: {winner} defeated {loser} on {self.match_result.map_choice} (Match ID: {self.match_result.match_id})")
     
     async def handle_disagreement(self, interaction: discord.Interaction):
         """Handle when players report different results"""

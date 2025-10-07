@@ -234,6 +234,17 @@ class DatabaseReader:
             )
             return [dict(row) for row in cursor.fetchall()]
     
+    def get_match_1v1(self, match_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific 1v1 match by ID."""
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM matches_1v1 WHERE id = ?",
+                (match_id,)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+    
     # ========== Preferences 1v1 Table ==========
     
     def get_preferences_1v1(self, discord_uid: int) -> Optional[Dict[str, Any]]:
@@ -466,7 +477,7 @@ class DatabaseWriter:
         discord_uid: int,
         player_name: str,
         race: str,
-        mmr: int,
+        mmr: float,
         games_played: int = 0,
         games_won: int = 0,
         games_lost: int = 0,
@@ -498,6 +509,81 @@ class DatabaseWriter:
                 """,
                 (
                     discord_uid, player_name, race, mmr,
+                    games_played, games_won, games_lost, games_drawn,
+                    get_timestamp()
+                )
+            )
+            conn.commit()
+            return True
+    
+    def update_mmr_after_match(
+        self,
+        discord_uid: int,
+        race: str,
+        new_mmr: float,
+        won: bool = False,
+        lost: bool = False,
+        drawn: bool = False
+    ) -> bool:
+        """
+        Update a player's MMR and match statistics after a match.
+        
+        Args:
+            discord_uid: Player's Discord UID
+            race: Race played
+            new_mmr: New MMR value
+            won: Whether the player won
+            lost: Whether the player lost
+            drawn: Whether the match was a draw
+            
+        Returns:
+            True if successful
+        """
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Get current stats
+            cursor.execute(
+                "SELECT games_played, games_won, games_lost, games_drawn FROM mmrs_1v1 WHERE discord_uid = ? AND race = ?",
+                (discord_uid, race)
+            )
+            result = cursor.fetchone()
+            
+            if result:
+                games_played, games_won, games_lost, games_drawn = result
+                # Increment stats
+                games_played += 1
+                if won:
+                    games_won += 1
+                elif lost:
+                    games_lost += 1
+                elif drawn:
+                    games_drawn += 1
+            else:
+                # No existing record, start with 1 game
+                games_played = 1
+                games_won = 1 if won else 0
+                games_lost = 1 if lost else 0
+                games_drawn = 1 if drawn else 0
+            
+            # Update or create the record
+            cursor.execute(
+                """
+                INSERT INTO mmrs_1v1 (
+                    discord_uid, player_name, race, mmr,
+                    games_played, games_won, games_lost, games_drawn, last_played
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(discord_uid, race) DO UPDATE SET
+                    mmr = excluded.mmr,
+                    games_played = excluded.games_played,
+                    games_won = excluded.games_won,
+                    games_lost = excluded.games_lost,
+                    games_drawn = excluded.games_drawn,
+                    last_played = excluded.last_played
+                """,
+                (
+                    discord_uid, f"Player{discord_uid}", race, new_mmr,
                     games_played, games_won, games_lost, games_drawn,
                     get_timestamp()
                 )
@@ -541,6 +627,34 @@ class DatabaseWriter:
     
     # ========== Preferences 1v1 Table ==========
     
+    def update_match_result_1v1(
+        self,
+        match_id: int,
+        winner_discord_uid: Optional[int]
+    ) -> bool:
+        """
+        Update the result of a 1v1 match.
+        
+        Args:
+            match_id: The ID of the match to update.
+            winner_discord_uid: The Discord UID of the winner, or -1 for a draw.
+        
+        Returns:
+            True if the update was successful, False otherwise.
+        """
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE matches_1v1 
+                SET winner_discord_uid = ?
+                WHERE id = ?
+                """,
+                (winner_discord_uid, match_id)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
     def update_preferences_1v1(
         self,
         discord_uid: int,

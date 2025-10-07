@@ -64,7 +64,7 @@ CREATE TABLE mmrs_1v1 (
     discord_uid             INTEGER NOT NULL,
     player_name             TEXT NOT NULL,
     race                    TEXT NOT NULL,
-    mmr                     INTEGER NOT NULL,
+    mmr                     FLOAT NOT NULL,
     games_played            INTEGER DEFAULT 0,
     games_won               INTEGER DEFAULT 0,
     games_lost              INTEGER DEFAULT 0,
@@ -76,7 +76,10 @@ CREATE TABLE matches_1v1 (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
     player_1_discord_uid    INTEGER NOT NULL,
     player_2_discord_uid    INTEGER NOT NULL,
-    winner_discord_uid      INTEGER,
+    player_1_mmr            FLOAT NOT NULL,
+    player_2_mmr            FLOAT NOT NULL,
+    winner_discord_uid      INTEGER,            -- NULL for draw, -1 for draw, or Discord UID for winner
+    mmr_change              FLOAT NOT NULL,     -- Amount of MMR awarded. Positive value means player 1 gained MMR, negative value means player 2 gained MMR.
     map_played              TEXT NOT NULL,
     server_used             TEXT NOT NULL,
     played_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -85,8 +88,8 @@ CREATE TABLE matches_1v1 (
 CREATE TABLE preferences_1v1 (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
     discord_uid             INTEGER NOT NULL,
-    last_chosen_races       TEXT,   -- e.g., ["bw_terran", "sc2_zerg"]; i.e., JSON array
-    last_chosen_vetoes      TEXT    -- e.g., ["Arkanoid", "Khione", "Pylon"]; i.e., JSON array
+    last_chosen_races       TEXT,               -- e.g., ["bw_terran", "sc2_zerg"]; i.e., JSON array
+    last_chosen_vetoes      TEXT                -- e.g., ["Arkanoid", "Khione", "Pylon"]; i.e., JSON array
 );
 
 /*
@@ -101,7 +104,7 @@ CREATE TABLE mmrs_2v2 (
     player_2_discord_uid    INTEGER,       -- NULL for solo queue, filled in for party queue
     player_1_race           TEXT NOT NULL,
     player_2_race           TEXT,                   -- NULL for solo queue, filled in for party queue
-    mmr                     INTEGER NOT NULL,       -- goes up/down as a group
+    mmr                     FLOAT NOT NULL,         -- goes up/down as a group
     last_played             TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

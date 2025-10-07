@@ -1,6 +1,14 @@
 import discord
 from discord import app_commands
+import os
 from src.backend.services.leaderboard_service import LeaderboardService
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
+from src.bot.utils.discord_utils import send_ephemeral_response
+
+guard_service = CommandGuardService()
+
+# Get global timeout from environment
+GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
 
 
 # Register Command
@@ -19,10 +27,11 @@ def register_leaderboard_command(tree: app_commands.CommandTree):
 # UI Elements
 async def leaderboard_command(interaction: discord.Interaction):
     """Handle the /leaderboard slash command"""
-    # Ensure player exists in database
-    from src.backend.services.user_info_service import UserInfoService
-    user_info_service = UserInfoService()
-    user_info_service.ensure_player_exists(interaction.user.id, interaction.user.name)
+    try:
+        guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+    except CommandGuardError as exc:
+        await send_ephemeral_response(interaction, content=str(exc))
+        return
     
     leaderboard_service = LeaderboardService()
     view = LeaderboardView(leaderboard_service)
@@ -45,7 +54,7 @@ async def leaderboard_command(interaction: discord.Interaction):
             view.remove_item(item)
             view.add_item(PageNavigationSelect(total_pages, current_page))
     
-    await interaction.response.send_message(embed=view.get_embed(data), view=view, ephemeral=True)
+    await send_ephemeral_response(interaction, embed=view.get_embed(data), view=view)
 
 
 class CountryFilterPage1Select(discord.ui.Select):
@@ -202,7 +211,7 @@ class LeaderboardView(discord.ui.View):
     """Main leaderboard view with pagination and filtering"""
     
     def __init__(self, leaderboard_service: LeaderboardService):
-        super().__init__(timeout=300)
+        super().__init__(timeout=GLOBAL_TIMEOUT)
         self.leaderboard_service = leaderboard_service
         
         # Get countries for filter from service

@@ -1,8 +1,17 @@
+import asyncio
 import discord
 from discord import app_commands
-from components.confirm_embed import ConfirmEmbedView
-from components.error_embed import ErrorEmbedException, create_simple_error_view
+import os
+from src.bot.interface.components.confirm_embed import ConfirmEmbedView
+from src.bot.interface.components.error_embed import ErrorEmbedException, create_simple_error_view
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from src.backend.services.user_info_service import UserInfoService
+from src.bot.utils.discord_utils import send_ephemeral_response
+
+user_info_service = UserInfoService()
+
+# Get global timeout from environment
+GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
 
 
 # API Call / Data Handling
@@ -32,8 +41,8 @@ def submit_activation_code(user_id: int, code: str) -> dict:
         )
     
     # Submit to backend
-    user_service = UserInfoService()
-    result = user_service.submit_activation_code(user_id, code)
+    # Use shared service instance
+    result = user_info_service.submit_activation_code(user_id, code)
     
     if result["status"] == "error":
         raise ErrorEmbedException(
@@ -69,10 +78,9 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            # Ensure player exists in database
-            user_service = UserInfoService()
-            user_service.ensure_player_exists(interaction.user.id, interaction.user.name)
-            
+            user_guard = CommandGuardService(user_info_service)
+            player = user_guard.ensure_player_record(interaction.user.id, interaction.user.name)
+            user_guard.require_tos_accepted(player)
             result = submit_activation_code(interaction.user.id, self.code_input.value)
 
             # Show preview with confirm/restart/cancel options
@@ -99,7 +107,7 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
                 confirm_callback=confirm_callback,
                 reset_target=ActivateModal()
             )
-            await interaction.response.send_message(embed=confirm_view.embed, view=confirm_view, ephemeral=True)
+            await send_ephemeral_response(interaction, embed=confirm_view.embed, view=confirm_view)
             
         except ErrorEmbedException as e:
             # Handle custom error exceptions
@@ -109,7 +117,11 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
                 error_fields=e.error_fields,
                 reset_target=ActivateModal()
             )
-            await interaction.response.send_message(embed=error_view.embed, view=error_view, ephemeral=True)
+            await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
+            
+        except CommandGuardError as e:
+            await send_ephemeral_response(interaction, content=str(e))
+            return
             
         except Exception as e:
             # Handle unexpected errors
@@ -123,4 +135,4 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
                 ],
                 reset_target=ActivateModal()
             )
-            await interaction.response.send_message(embed=error_view.embed, view=error_view, ephemeral=True)
+            await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)

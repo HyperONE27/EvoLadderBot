@@ -1,0 +1,2758 @@
+{
+  "players": [
+    {
+      "discord_uid": 100000000,
+      "discord_username": "Player1",
+      "player_name": "Admiral803",
+      "battletag": "Admiral803#6401",
+      "country": "KR",
+      "region": "EUE",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000001,
+      "discord_username": "Player2",
+      "player_name": "SkillMaster134",
+      "battletag": "SkillMaster134#5540",
+      "country": "BY",
+      "region": "NAW",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000002,
+      "discord_username": "Player3",
+      "player_name": "Warrior120",
+      "battletag": "Warrior120#1280",
+      "country": "IL",
+      "region": "NAE",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000003,
+      "discord_username": "Player4",
+      "player_name": "MacroMaster325",
+      "battletag": "MacroMaster325#9228",
+      "country": "BG",
+      "region": "NAC",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000004,
+      "discord_username": "Player5",
+      "player_name": "ProtossPylon315",
+      "battletag": "ProtossPylon315#7138",
+      "country": "IL",
+      "region": "USB",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000005,
+      "discord_username": "Player6",
+      "player_name": "StarCraftPro106",
+      "battletag": "StarCraftPro106#9966",
+      "country": "BY",
+      "region": "FER",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000006,
+      "discord_username": "Player7",
+      "player_name": "Hardcore454",
+      "battletag": "Hardcore454#2910",
+      "country": "BY",
+      "region": "MEA",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000007,
+      "discord_username": "Player8",
+      "player_name": "Hero287",
+      "battletag": "Hero287#8050",
+      "country": "MX",
+      "region": "THM",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000008,
+      "discord_username": "Player9",
+      "player_name": "Strategic47",
+      "battletag": "Strategic47#2428",
+      "country": "EC",
+      "region": "AFR",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000009,
+      "discord_username": "Player10",
+      "player_name": "Advanced594",
+      "battletag": "Advanced594#3343",
+      "country": "CZ",
+      "region": "FER",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000010,
+      "discord_username": "Player11",
+      "player_name": "Hero15",
+      "battletag": "Hero15#8197",
+      "country": "KR",
+      "region": "NAW",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000011,
+      "discord_username": "Player12",
+      "player_name": "Hardcore201",
+      "battletag": "Hardcore201#8290",
+      "country": "BY",
+      "region": "NAC",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000012,
+      "discord_username": "Player13",
+      "player_name": "MicroGod172",
+      "battletag": "MicroGod172#7647",
+      "country": "CA",
+      "region": "NAC",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000013,
+      "discord_username": "Player14",
+      "player_name": "ProGamer201",
+      "battletag": "ProGamer201#6093",
+      "country": "BG",
+      "region": "NAC",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000014,
+      "discord_username": "Player15",
+      "player_name": "BroodWarKing476",
+      "battletag": "BroodWarKing476#7517",
+      "country": "MX",
+      "region": "NAC",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000015,
+      "discord_username": "Player16",
+      "player_name": "Admiral699",
+      "battletag": "Admiral699#8194",
+      "country": "IL",
+      "region": "KRJ",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000016,
+      "discord_username": "Player17",
+      "player_name": "Tactical772",
+      "battletag": "Tactical772#8804",
+      "country": "KR",
+      "region": "KRJ",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000017,
+      "discord_username": "Player18",
+      "player_name": "MicroGod255",
+      "battletag": "MicroGod255#5857",
+      "country": "AR",
+      "region": "NAW",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000018,
+      "discord_username": "Player19",
+      "player_name": "Master49",
+      "battletag": "Master49#6645",
+      "country": "MX",
+      "region": "FER",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000019,
+      "discord_username": "Player20",
+      "player_name": "Competitive719",
+      "battletag": "Competitive719#6154",
+      "country": "AR",
+      "region": "NAC",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000020,
+      "discord_username": "Player21",
+      "player_name": "Rookie695",
+      "battletag": "Rookie695#8538",
+      "country": "BY",
+      "region": "EUE",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000021,
+      "discord_username": "Player22",
+      "player_name": "StarCraftPro602",
+      "battletag": "StarCraftPro602#3875",
+      "country": "IL",
+      "region": "CHN",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000022,
+      "discord_username": "Player23",
+      "player_name": "Master467",
+      "battletag": "Master467#1923",
+      "country": "MX",
+      "region": "NAC",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000023,
+      "discord_username": "Player24",
+      "player_name": "Commander986",
+      "battletag": "Commander986#8525",
+      "country": "AR",
+      "region": "EUE",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000024,
+      "discord_username": "Player25",
+      "player_name": "RankedPro982",
+      "battletag": "RankedPro982#2125",
+      "country": "IL",
+      "region": "NAC",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000025,
+      "discord_username": "Player26",
+      "player_name": "Competitive83",
+      "battletag": "Competitive83#6847",
+      "country": "EC",
+      "region": "MEA",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000026,
+      "discord_username": "Player27",
+      "player_name": "StrategyPro319",
+      "battletag": "StrategyPro319#4662",
+      "country": "MX",
+      "region": "KRJ",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000027,
+      "discord_username": "Player28",
+      "player_name": "SC2Champion844",
+      "battletag": "SC2Champion844#7172",
+      "country": "CA",
+      "region": "MEA",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000028,
+      "discord_username": "Player29",
+      "player_name": "Competitive454",
+      "battletag": "Competitive454#4756",
+      "country": "MX",
+      "region": "OCE",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000029,
+      "discord_username": "Player30",
+      "player_name": "BroodWarKing327",
+      "battletag": "BroodWarKing327#9731",
+      "country": "MX",
+      "region": "SAM",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000030,
+      "discord_username": "Player31",
+      "player_name": "RTSLegend177",
+      "battletag": "RTSLegend177#2434",
+      "country": "DE",
+      "region": "THM",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000031,
+      "discord_username": "Player32",
+      "player_name": "Casual90",
+      "battletag": "Casual90#8117",
+      "country": "CA",
+      "region": "NAC",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000032,
+      "discord_username": "Player33",
+      "player_name": "Tactical154",
+      "battletag": "Tactical154#6660",
+      "country": "CA",
+      "region": "EUW",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000033,
+      "discord_username": "Player34",
+      "player_name": "RTSLegend888",
+      "battletag": "RTSLegend888#1355",
+      "country": "IL",
+      "region": "SAM",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000034,
+      "discord_username": "Player35",
+      "player_name": "Warrior918",
+      "battletag": "Warrior918#2447",
+      "country": "CA",
+      "region": "NAW",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000035,
+      "discord_username": "Player36",
+      "player_name": "RTSLegend528",
+      "battletag": "RTSLegend528#7472",
+      "country": "CZ",
+      "region": "CHN",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000036,
+      "discord_username": "Player37",
+      "player_name": "Warrior147",
+      "battletag": "Warrior147#8874",
+      "country": "BG",
+      "region": "OCE",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000037,
+      "discord_username": "Player38",
+      "player_name": "MicroGod938",
+      "battletag": "MicroGod938#3329",
+      "country": "BY",
+      "region": "CAM",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000038,
+      "discord_username": "Player39",
+      "player_name": "Hardcore562",
+      "battletag": "Hardcore562#1478",
+      "country": "EC",
+      "region": "FER",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000039,
+      "discord_username": "Player40",
+      "player_name": "RushPlayer51",
+      "battletag": "RushPlayer51#2559",
+      "country": "DE",
+      "region": "SEA",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000040,
+      "discord_username": "Player41",
+      "player_name": "Tournament56",
+      "battletag": "Tournament56#9441",
+      "country": "DE",
+      "region": "MEA",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000041,
+      "discord_username": "Player42",
+      "player_name": "MacroMaster908",
+      "battletag": "MacroMaster908#2700",
+      "country": "CZ",
+      "region": "FER",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000042,
+      "discord_username": "Player43",
+      "player_name": "Elite788",
+      "battletag": "Elite788#7164",
+      "country": "IL",
+      "region": "SAM",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000043,
+      "discord_username": "Player44",
+      "player_name": "RTSLegend359",
+      "battletag": "RTSLegend359#6820",
+      "country": "EC",
+      "region": "SEA",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000044,
+      "discord_username": "Player45",
+      "player_name": "SC2Champion428",
+      "battletag": "SC2Champion428#6847",
+      "country": "DE",
+      "region": "NAW",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000045,
+      "discord_username": "Player46",
+      "player_name": "BWMaster156",
+      "battletag": "BWMaster156#4368",
+      "country": "DE",
+      "region": "OCE",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000046,
+      "discord_username": "Player47",
+      "player_name": "Competitive201",
+      "battletag": "Competitive201#7235",
+      "country": "CA",
+      "region": "NAE",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000047,
+      "discord_username": "Player48",
+      "player_name": "LadderKing326",
+      "battletag": "LadderKing326#9478",
+      "country": "CA",
+      "region": "EUW",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000048,
+      "discord_username": "Player49",
+      "player_name": "StarCraftPro294",
+      "battletag": "StarCraftPro294#9125",
+      "country": "CZ",
+      "region": "NAC",
+      "accepted_tos": true,
+      "completed_setup": true
+    },
+    {
+      "discord_uid": 100000049,
+      "discord_username": "Player50",
+      "player_name": "Champion955",
+      "battletag": "Champion955#2273",
+      "country": "CZ",
+      "region": "EUW",
+      "accepted_tos": true,
+      "completed_setup": true
+    }
+  ],
+  "mmrs": [
+    {
+      "discord_uid": 100000000,
+      "player_name": "Admiral803",
+      "race": "bw_protoss",
+      "mmr": 1136.1,
+      "games_played": 16,
+      "games_won": 5,
+      "games_lost": 10,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000000,
+      "player_name": "Admiral803",
+      "race": "bw_zerg",
+      "mmr": 1757.2,
+      "games_played": 43,
+      "games_won": 23,
+      "games_lost": 20,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000000,
+      "player_name": "Admiral803",
+      "race": "sc2_terran",
+      "mmr": 1759.1,
+      "games_played": 31,
+      "games_won": 28,
+      "games_lost": 3,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000000,
+      "player_name": "Admiral803",
+      "race": "sc2_zerg",
+      "mmr": 1989.9,
+      "games_played": 87,
+      "games_won": 29,
+      "games_lost": 55,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000001,
+      "player_name": "SkillMaster134",
+      "race": "bw_zerg",
+      "mmr": 1924.1,
+      "games_played": 20,
+      "games_won": 16,
+      "games_lost": -1,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000001,
+      "player_name": "SkillMaster134",
+      "race": "bw_terran",
+      "mmr": 1857.6,
+      "games_played": 67,
+      "games_won": 19,
+      "games_lost": 43,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000001,
+      "player_name": "SkillMaster134",
+      "race": "sc2_protoss",
+      "mmr": 1717.0,
+      "games_played": 62,
+      "games_won": 18,
+      "games_lost": 40,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000001,
+      "player_name": "SkillMaster134",
+      "race": "sc2_terran",
+      "mmr": 1263.9,
+      "games_played": 44,
+      "games_won": 35,
+      "games_lost": 6,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000002,
+      "player_name": "Warrior120",
+      "race": "bw_zerg",
+      "mmr": 1216.1,
+      "games_played": 27,
+      "games_won": 26,
+      "games_lost": -3,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000002,
+      "player_name": "Warrior120",
+      "race": "bw_protoss",
+      "mmr": 1880.6,
+      "games_played": 55,
+      "games_won": 0,
+      "games_lost": 51,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000002,
+      "player_name": "Warrior120",
+      "race": "sc2_terran",
+      "mmr": 1588.5,
+      "games_played": 73,
+      "games_won": 11,
+      "games_lost": 61,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000002,
+      "player_name": "Warrior120",
+      "race": "sc2_zerg",
+      "mmr": 1258.8,
+      "games_played": 37,
+      "games_won": 29,
+      "games_lost": 8,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000003,
+      "player_name": "MacroMaster325",
+      "race": "bw_terran",
+      "mmr": 1602.4,
+      "games_played": 82,
+      "games_won": 43,
+      "games_lost": 36,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000003,
+      "player_name": "MacroMaster325",
+      "race": "bw_protoss",
+      "mmr": 1150.3,
+      "games_played": 40,
+      "games_won": 23,
+      "games_lost": 17,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000003,
+      "player_name": "MacroMaster325",
+      "race": "sc2_zerg",
+      "mmr": 1494.2,
+      "games_played": 92,
+      "games_won": 19,
+      "games_lost": 72,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000003,
+      "player_name": "MacroMaster325",
+      "race": "sc2_protoss",
+      "mmr": 1059.9,
+      "games_played": 62,
+      "games_won": 49,
+      "games_lost": 9,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000004,
+      "player_name": "ProtossPylon315",
+      "race": "bw_terran",
+      "mmr": 1504.2,
+      "games_played": 28,
+      "games_won": 3,
+      "games_lost": 21,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000004,
+      "player_name": "ProtossPylon315",
+      "race": "bw_zerg",
+      "mmr": 1355.0,
+      "games_played": 12,
+      "games_won": 6,
+      "games_lost": 4,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000004,
+      "player_name": "ProtossPylon315",
+      "race": "sc2_zerg",
+      "mmr": 1683.5,
+      "games_played": 55,
+      "games_won": 32,
+      "games_lost": 20,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000004,
+      "player_name": "ProtossPylon315",
+      "race": "sc2_protoss",
+      "mmr": 1146.5,
+      "games_played": 37,
+      "games_won": 3,
+      "games_lost": 30,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000005,
+      "player_name": "StarCraftPro106",
+      "race": "bw_protoss",
+      "mmr": 1070.4,
+      "games_played": 38,
+      "games_won": 36,
+      "games_lost": 2,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000005,
+      "player_name": "StarCraftPro106",
+      "race": "bw_zerg",
+      "mmr": 1964.0,
+      "games_played": 46,
+      "games_won": 8,
+      "games_lost": 36,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000005,
+      "player_name": "StarCraftPro106",
+      "race": "sc2_terran",
+      "mmr": 1002.8,
+      "games_played": 16,
+      "games_won": 10,
+      "games_lost": 4,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000005,
+      "player_name": "StarCraftPro106",
+      "race": "sc2_zerg",
+      "mmr": 1800.9,
+      "games_played": 87,
+      "games_won": 20,
+      "games_lost": 67,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000006,
+      "player_name": "Hardcore454",
+      "race": "bw_terran",
+      "mmr": 1159.3,
+      "games_played": 47,
+      "games_won": 27,
+      "games_lost": 20,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000006,
+      "player_name": "Hardcore454",
+      "race": "bw_protoss",
+      "mmr": 1346.5,
+      "games_played": 39,
+      "games_won": 15,
+      "games_lost": 19,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000006,
+      "player_name": "Hardcore454",
+      "race": "sc2_protoss",
+      "mmr": 1804.4,
+      "games_played": 25,
+      "games_won": 20,
+      "games_lost": 4,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000006,
+      "player_name": "Hardcore454",
+      "race": "sc2_zerg",
+      "mmr": 1761.8,
+      "games_played": 92,
+      "games_won": 82,
+      "games_lost": 7,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000007,
+      "player_name": "Hero287",
+      "race": "bw_zerg",
+      "mmr": 1176.2,
+      "games_played": 28,
+      "games_won": 26,
+      "games_lost": 2,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000007,
+      "player_name": "Hero287",
+      "race": "bw_protoss",
+      "mmr": 1326.9,
+      "games_played": 92,
+      "games_won": 27,
+      "games_lost": 60,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000007,
+      "player_name": "Hero287",
+      "race": "sc2_zerg",
+      "mmr": 1797.3,
+      "games_played": 63,
+      "games_won": 12,
+      "games_lost": 46,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000007,
+      "player_name": "Hero287",
+      "race": "sc2_terran",
+      "mmr": 1619.3,
+      "games_played": 99,
+      "games_won": 11,
+      "games_lost": 85,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000008,
+      "player_name": "Strategic47",
+      "race": "bw_terran",
+      "mmr": 1206.1,
+      "games_played": 22,
+      "games_won": 5,
+      "games_lost": 17,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000008,
+      "player_name": "Strategic47",
+      "race": "bw_zerg",
+      "mmr": 1570.2,
+      "games_played": 15,
+      "games_won": 1,
+      "games_lost": 10,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000008,
+      "player_name": "Strategic47",
+      "race": "sc2_terran",
+      "mmr": 1174.4,
+      "games_played": 57,
+      "games_won": 3,
+      "games_lost": 49,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000008,
+      "player_name": "Strategic47",
+      "race": "sc2_zerg",
+      "mmr": 1635.5,
+      "games_played": 63,
+      "games_won": 17,
+      "games_lost": 42,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000009,
+      "player_name": "Advanced594",
+      "race": "bw_zerg",
+      "mmr": 1780.6,
+      "games_played": 72,
+      "games_won": 16,
+      "games_lost": 53,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000009,
+      "player_name": "Advanced594",
+      "race": "bw_protoss",
+      "mmr": 1540.1,
+      "games_played": 13,
+      "games_won": 7,
+      "games_lost": 2,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000009,
+      "player_name": "Advanced594",
+      "race": "sc2_protoss",
+      "mmr": 1411.0,
+      "games_played": 19,
+      "games_won": 0,
+      "games_lost": 17,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000009,
+      "player_name": "Advanced594",
+      "race": "sc2_zerg",
+      "mmr": 1516.4,
+      "games_played": 28,
+      "games_won": 22,
+      "games_lost": 6,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000010,
+      "player_name": "Hero15",
+      "race": "bw_protoss",
+      "mmr": 1469.5,
+      "games_played": 52,
+      "games_won": 36,
+      "games_lost": 13,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000010,
+      "player_name": "Hero15",
+      "race": "bw_terran",
+      "mmr": 1620.1,
+      "games_played": 60,
+      "games_won": 22,
+      "games_lost": 38,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000010,
+      "player_name": "Hero15",
+      "race": "sc2_protoss",
+      "mmr": 1881.3,
+      "games_played": 55,
+      "games_won": 19,
+      "games_lost": 34,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000010,
+      "player_name": "Hero15",
+      "race": "sc2_zerg",
+      "mmr": 1321.1,
+      "games_played": 79,
+      "games_won": 68,
+      "games_lost": 11,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000011,
+      "player_name": "Hardcore201",
+      "race": "bw_protoss",
+      "mmr": 1486.6,
+      "games_played": 57,
+      "games_won": 13,
+      "games_lost": 39,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000011,
+      "player_name": "Hardcore201",
+      "race": "bw_zerg",
+      "mmr": 1202.5,
+      "games_played": 81,
+      "games_won": 15,
+      "games_lost": 64,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000011,
+      "player_name": "Hardcore201",
+      "race": "sc2_terran",
+      "mmr": 1509.1,
+      "games_played": 95,
+      "games_won": 94,
+      "games_lost": -4,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000011,
+      "player_name": "Hardcore201",
+      "race": "sc2_zerg",
+      "mmr": 1370.1,
+      "games_played": 73,
+      "games_won": 30,
+      "games_lost": 38,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000012,
+      "player_name": "MicroGod172",
+      "race": "bw_zerg",
+      "mmr": 1885.5,
+      "games_played": 32,
+      "games_won": 30,
+      "games_lost": -2,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000012,
+      "player_name": "MicroGod172",
+      "race": "bw_protoss",
+      "mmr": 1274.0,
+      "games_played": 70,
+      "games_won": 35,
+      "games_lost": 31,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000012,
+      "player_name": "MicroGod172",
+      "race": "sc2_protoss",
+      "mmr": 1772.3,
+      "games_played": 100,
+      "games_won": 98,
+      "games_lost": -1,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000012,
+      "player_name": "MicroGod172",
+      "race": "sc2_terran",
+      "mmr": 1045.7,
+      "games_played": 68,
+      "games_won": 43,
+      "games_lost": 21,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000013,
+      "player_name": "ProGamer201",
+      "race": "bw_protoss",
+      "mmr": 1879.4,
+      "games_played": 43,
+      "games_won": 38,
+      "games_lost": 5,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000013,
+      "player_name": "ProGamer201",
+      "race": "bw_zerg",
+      "mmr": 1758.3,
+      "games_played": 95,
+      "games_won": 61,
+      "games_lost": 33,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000013,
+      "player_name": "ProGamer201",
+      "race": "sc2_protoss",
+      "mmr": 1482.2,
+      "games_played": 40,
+      "games_won": 1,
+      "games_lost": 37,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000013,
+      "player_name": "ProGamer201",
+      "race": "sc2_terran",
+      "mmr": 1090.8,
+      "games_played": 53,
+      "games_won": 39,
+      "games_lost": 14,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000014,
+      "player_name": "BroodWarKing476",
+      "race": "bw_terran",
+      "mmr": 1723.2,
+      "games_played": 45,
+      "games_won": 19,
+      "games_lost": 23,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000014,
+      "player_name": "BroodWarKing476",
+      "race": "bw_protoss",
+      "mmr": 1328.1,
+      "games_played": 79,
+      "games_won": 36,
+      "games_lost": 40,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000014,
+      "player_name": "BroodWarKing476",
+      "race": "sc2_terran",
+      "mmr": 1084.8,
+      "games_played": 19,
+      "games_won": 17,
+      "games_lost": 1,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000014,
+      "player_name": "BroodWarKing476",
+      "race": "sc2_protoss",
+      "mmr": 1321.8,
+      "games_played": 43,
+      "games_won": 18,
+      "games_lost": 21,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000015,
+      "player_name": "Admiral699",
+      "race": "bw_terran",
+      "mmr": 1482.5,
+      "games_played": 91,
+      "games_won": 81,
+      "games_lost": 6,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000015,
+      "player_name": "Admiral699",
+      "race": "bw_protoss",
+      "mmr": 1456.7,
+      "games_played": 56,
+      "games_won": 14,
+      "games_lost": 40,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000015,
+      "player_name": "Admiral699",
+      "race": "sc2_terran",
+      "mmr": 1282.4,
+      "games_played": 14,
+      "games_won": 10,
+      "games_lost": 0,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000015,
+      "player_name": "Admiral699",
+      "race": "sc2_zerg",
+      "mmr": 1635.2,
+      "games_played": 68,
+      "games_won": 56,
+      "games_lost": 10,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000016,
+      "player_name": "Tactical772",
+      "race": "bw_zerg",
+      "mmr": 1306.4,
+      "games_played": 17,
+      "games_won": 6,
+      "games_lost": 9,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000016,
+      "player_name": "Tactical772",
+      "race": "bw_terran",
+      "mmr": 1790.8,
+      "games_played": 90,
+      "games_won": 77,
+      "games_lost": 10,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000016,
+      "player_name": "Tactical772",
+      "race": "sc2_protoss",
+      "mmr": 1880.7,
+      "games_played": 32,
+      "games_won": 2,
+      "games_lost": 28,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000016,
+      "player_name": "Tactical772",
+      "race": "sc2_zerg",
+      "mmr": 1729.1,
+      "games_played": 50,
+      "games_won": 39,
+      "games_lost": 6,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000017,
+      "player_name": "MicroGod255",
+      "race": "bw_terran",
+      "mmr": 1161.8,
+      "games_played": 42,
+      "games_won": 12,
+      "games_lost": 25,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000017,
+      "player_name": "MicroGod255",
+      "race": "bw_zerg",
+      "mmr": 1832.0,
+      "games_played": 20,
+      "games_won": 20,
+      "games_lost": -1,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000017,
+      "player_name": "MicroGod255",
+      "race": "sc2_protoss",
+      "mmr": 1723.6,
+      "games_played": 43,
+      "games_won": 39,
+      "games_lost": 4,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000017,
+      "player_name": "MicroGod255",
+      "race": "sc2_terran",
+      "mmr": 1264.7,
+      "games_played": 81,
+      "games_won": 68,
+      "games_lost": 10,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000018,
+      "player_name": "Master49",
+      "race": "bw_terran",
+      "mmr": 1910.5,
+      "games_played": 80,
+      "games_won": 72,
+      "games_lost": 3,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000018,
+      "player_name": "Master49",
+      "race": "bw_zerg",
+      "mmr": 1967.9,
+      "games_played": 25,
+      "games_won": 4,
+      "games_lost": 17,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000018,
+      "player_name": "Master49",
+      "race": "sc2_terran",
+      "mmr": 1509.6,
+      "games_played": 60,
+      "games_won": 21,
+      "games_lost": 36,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000018,
+      "player_name": "Master49",
+      "race": "sc2_protoss",
+      "mmr": 1535.7,
+      "games_played": 35,
+      "games_won": 35,
+      "games_lost": -3,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000019,
+      "player_name": "Competitive719",
+      "race": "bw_terran",
+      "mmr": 1401.1,
+      "games_played": 79,
+      "games_won": 36,
+      "games_lost": 41,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000019,
+      "player_name": "Competitive719",
+      "race": "bw_zerg",
+      "mmr": 1533.9,
+      "games_played": 17,
+      "games_won": 4,
+      "games_lost": 12,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000019,
+      "player_name": "Competitive719",
+      "race": "sc2_terran",
+      "mmr": 1229.3,
+      "games_played": 51,
+      "games_won": 17,
+      "games_lost": 33,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000019,
+      "player_name": "Competitive719",
+      "race": "sc2_zerg",
+      "mmr": 1800.5,
+      "games_played": 20,
+      "games_won": 1,
+      "games_lost": 15,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000020,
+      "player_name": "Rookie695",
+      "race": "bw_protoss",
+      "mmr": 1109.4,
+      "games_played": 51,
+      "games_won": 5,
+      "games_lost": 46,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000020,
+      "player_name": "Rookie695",
+      "race": "bw_zerg",
+      "mmr": 1559.3,
+      "games_played": 11,
+      "games_won": 1,
+      "games_lost": 8,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000020,
+      "player_name": "Rookie695",
+      "race": "sc2_zerg",
+      "mmr": 1606.3,
+      "games_played": 36,
+      "games_won": 35,
+      "games_lost": -2,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000020,
+      "player_name": "Rookie695",
+      "race": "sc2_protoss",
+      "mmr": 1752.4,
+      "games_played": 35,
+      "games_won": 6,
+      "games_lost": 28,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000021,
+      "player_name": "StarCraftPro602",
+      "race": "bw_protoss",
+      "mmr": 1371.7,
+      "games_played": 52,
+      "games_won": 51,
+      "games_lost": -4,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000021,
+      "player_name": "StarCraftPro602",
+      "race": "bw_terran",
+      "mmr": 1417.2,
+      "games_played": 36,
+      "games_won": 3,
+      "games_lost": 29,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000021,
+      "player_name": "StarCraftPro602",
+      "race": "sc2_protoss",
+      "mmr": 1367.0,
+      "games_played": 72,
+      "games_won": 56,
+      "games_lost": 16,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000021,
+      "player_name": "StarCraftPro602",
+      "race": "sc2_zerg",
+      "mmr": 1370.8,
+      "games_played": 92,
+      "games_won": 22,
+      "games_lost": 66,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000022,
+      "player_name": "Master467",
+      "race": "bw_protoss",
+      "mmr": 1414.1,
+      "games_played": 31,
+      "games_won": 23,
+      "games_lost": 7,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000022,
+      "player_name": "Master467",
+      "race": "bw_zerg",
+      "mmr": 1704.6,
+      "games_played": 26,
+      "games_won": 18,
+      "games_lost": 6,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000022,
+      "player_name": "Master467",
+      "race": "sc2_protoss",
+      "mmr": 1405.2,
+      "games_played": 22,
+      "games_won": 12,
+      "games_lost": 8,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000022,
+      "player_name": "Master467",
+      "race": "sc2_zerg",
+      "mmr": 1365.7,
+      "games_played": 13,
+      "games_won": 2,
+      "games_lost": 6,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000023,
+      "player_name": "Commander986",
+      "race": "bw_protoss",
+      "mmr": 1021.6,
+      "games_played": 25,
+      "games_won": 1,
+      "games_lost": 21,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000023,
+      "player_name": "Commander986",
+      "race": "bw_zerg",
+      "mmr": 1205.0,
+      "games_played": 27,
+      "games_won": 0,
+      "games_lost": 24,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000023,
+      "player_name": "Commander986",
+      "race": "sc2_zerg",
+      "mmr": 1637.3,
+      "games_played": 37,
+      "games_won": 1,
+      "games_lost": 33,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000023,
+      "player_name": "Commander986",
+      "race": "sc2_protoss",
+      "mmr": 1110.2,
+      "games_played": 87,
+      "games_won": 22,
+      "games_lost": 61,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000024,
+      "player_name": "RankedPro982",
+      "race": "bw_zerg",
+      "mmr": 1883.9,
+      "games_played": 46,
+      "games_won": 2,
+      "games_lost": 40,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000024,
+      "player_name": "RankedPro982",
+      "race": "bw_terran",
+      "mmr": 1423.2,
+      "games_played": 60,
+      "games_won": 30,
+      "games_lost": 29,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000024,
+      "player_name": "RankedPro982",
+      "race": "sc2_terran",
+      "mmr": 1677.9,
+      "games_played": 93,
+      "games_won": 69,
+      "games_lost": 22,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000024,
+      "player_name": "RankedPro982",
+      "race": "sc2_zerg",
+      "mmr": 1871.3,
+      "games_played": 10,
+      "games_won": 0,
+      "games_lost": 8,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000025,
+      "player_name": "Competitive83",
+      "race": "bw_protoss",
+      "mmr": 1292.9,
+      "games_played": 47,
+      "games_won": 16,
+      "games_lost": 26,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000025,
+      "player_name": "Competitive83",
+      "race": "bw_terran",
+      "mmr": 1920.9,
+      "games_played": 69,
+      "games_won": 60,
+      "games_lost": 4,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000025,
+      "player_name": "Competitive83",
+      "race": "sc2_zerg",
+      "mmr": 1564.8,
+      "games_played": 48,
+      "games_won": 21,
+      "games_lost": 25,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000025,
+      "player_name": "Competitive83",
+      "race": "sc2_protoss",
+      "mmr": 1259.6,
+      "games_played": 78,
+      "games_won": 34,
+      "games_lost": 43,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000026,
+      "player_name": "StrategyPro319",
+      "race": "bw_zerg",
+      "mmr": 1146.3,
+      "games_played": 54,
+      "games_won": 33,
+      "games_lost": 21,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000026,
+      "player_name": "StrategyPro319",
+      "race": "bw_terran",
+      "mmr": 1459.0,
+      "games_played": 97,
+      "games_won": 9,
+      "games_lost": 87,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000026,
+      "player_name": "StrategyPro319",
+      "race": "sc2_protoss",
+      "mmr": 1958.9,
+      "games_played": 92,
+      "games_won": 75,
+      "games_lost": 15,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000026,
+      "player_name": "StrategyPro319",
+      "race": "sc2_terran",
+      "mmr": 1604.9,
+      "games_played": 14,
+      "games_won": 12,
+      "games_lost": 1,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000027,
+      "player_name": "SC2Champion844",
+      "race": "bw_zerg",
+      "mmr": 1983.4,
+      "games_played": 27,
+      "games_won": 6,
+      "games_lost": 16,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000027,
+      "player_name": "SC2Champion844",
+      "race": "bw_terran",
+      "mmr": 1017.2,
+      "games_played": 34,
+      "games_won": 8,
+      "games_lost": 23,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000027,
+      "player_name": "SC2Champion844",
+      "race": "sc2_protoss",
+      "mmr": 1620.6,
+      "games_played": 82,
+      "games_won": 44,
+      "games_lost": 35,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000027,
+      "player_name": "SC2Champion844",
+      "race": "sc2_terran",
+      "mmr": 1597.7,
+      "games_played": 80,
+      "games_won": 31,
+      "games_lost": 45,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000028,
+      "player_name": "Competitive454",
+      "race": "bw_zerg",
+      "mmr": 1588.2,
+      "games_played": 72,
+      "games_won": 34,
+      "games_lost": 38,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000028,
+      "player_name": "Competitive454",
+      "race": "bw_protoss",
+      "mmr": 1172.6,
+      "games_played": 12,
+      "games_won": 12,
+      "games_lost": -5,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000028,
+      "player_name": "Competitive454",
+      "race": "sc2_terran",
+      "mmr": 1186.0,
+      "games_played": 98,
+      "games_won": 64,
+      "games_lost": 34,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000028,
+      "player_name": "Competitive454",
+      "race": "sc2_zerg",
+      "mmr": 1650.3,
+      "games_played": 19,
+      "games_won": 2,
+      "games_lost": 12,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000029,
+      "player_name": "BroodWarKing327",
+      "race": "bw_zerg",
+      "mmr": 1568.1,
+      "games_played": 49,
+      "games_won": 49,
+      "games_lost": -5,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000029,
+      "player_name": "BroodWarKing327",
+      "race": "bw_terran",
+      "mmr": 1802.9,
+      "games_played": 50,
+      "games_won": 26,
+      "games_lost": 19,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000029,
+      "player_name": "BroodWarKing327",
+      "race": "sc2_terran",
+      "mmr": 1878.1,
+      "games_played": 14,
+      "games_won": 2,
+      "games_lost": 9,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000029,
+      "player_name": "BroodWarKing327",
+      "race": "sc2_zerg",
+      "mmr": 1347.2,
+      "games_played": 46,
+      "games_won": 19,
+      "games_lost": 23,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000030,
+      "player_name": "RTSLegend177",
+      "race": "bw_zerg",
+      "mmr": 1435.1,
+      "games_played": 35,
+      "games_won": 18,
+      "games_lost": 13,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000030,
+      "player_name": "RTSLegend177",
+      "race": "bw_protoss",
+      "mmr": 1314.6,
+      "games_played": 58,
+      "games_won": 37,
+      "games_lost": 16,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000030,
+      "player_name": "RTSLegend177",
+      "race": "sc2_terran",
+      "mmr": 1544.4,
+      "games_played": 28,
+      "games_won": 23,
+      "games_lost": 1,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000030,
+      "player_name": "RTSLegend177",
+      "race": "sc2_protoss",
+      "mmr": 1883.6,
+      "games_played": 17,
+      "games_won": 9,
+      "games_lost": 8,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000031,
+      "player_name": "Casual90",
+      "race": "bw_zerg",
+      "mmr": 1783.2,
+      "games_played": 10,
+      "games_won": 5,
+      "games_lost": 2,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000031,
+      "player_name": "Casual90",
+      "race": "bw_terran",
+      "mmr": 1292.7,
+      "games_played": 25,
+      "games_won": 19,
+      "games_lost": 3,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000031,
+      "player_name": "Casual90",
+      "race": "sc2_protoss",
+      "mmr": 1776.8,
+      "games_played": 65,
+      "games_won": 52,
+      "games_lost": 11,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000031,
+      "player_name": "Casual90",
+      "race": "sc2_zerg",
+      "mmr": 1108.6,
+      "games_played": 29,
+      "games_won": 27,
+      "games_lost": 0,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000032,
+      "player_name": "Tactical154",
+      "race": "bw_protoss",
+      "mmr": 1457.5,
+      "games_played": 29,
+      "games_won": 10,
+      "games_lost": 15,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000032,
+      "player_name": "Tactical154",
+      "race": "bw_terran",
+      "mmr": 1738.7,
+      "games_played": 49,
+      "games_won": 17,
+      "games_lost": 30,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000032,
+      "player_name": "Tactical154",
+      "race": "sc2_terran",
+      "mmr": 1245.7,
+      "games_played": 18,
+      "games_won": 1,
+      "games_lost": 15,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000032,
+      "player_name": "Tactical154",
+      "race": "sc2_zerg",
+      "mmr": 1486.5,
+      "games_played": 94,
+      "games_won": 60,
+      "games_lost": 33,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000033,
+      "player_name": "RTSLegend888",
+      "race": "bw_zerg",
+      "mmr": 1272.1,
+      "games_played": 17,
+      "games_won": 14,
+      "games_lost": 0,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000033,
+      "player_name": "RTSLegend888",
+      "race": "bw_terran",
+      "mmr": 1170.4,
+      "games_played": 89,
+      "games_won": 87,
+      "games_lost": 0,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000033,
+      "player_name": "RTSLegend888",
+      "race": "sc2_zerg",
+      "mmr": 1931.2,
+      "games_played": 13,
+      "games_won": 2,
+      "games_lost": 9,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000033,
+      "player_name": "RTSLegend888",
+      "race": "sc2_protoss",
+      "mmr": 1560.1,
+      "games_played": 63,
+      "games_won": 52,
+      "games_lost": 9,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000034,
+      "player_name": "Warrior918",
+      "race": "bw_protoss",
+      "mmr": 1616.6,
+      "games_played": 13,
+      "games_won": 5,
+      "games_lost": 6,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000034,
+      "player_name": "Warrior918",
+      "race": "bw_zerg",
+      "mmr": 1230.4,
+      "games_played": 74,
+      "games_won": 58,
+      "games_lost": 14,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000034,
+      "player_name": "Warrior918",
+      "race": "sc2_protoss",
+      "mmr": 1173.3,
+      "games_played": 33,
+      "games_won": 31,
+      "games_lost": -2,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000034,
+      "player_name": "Warrior918",
+      "race": "sc2_zerg",
+      "mmr": 1149.1,
+      "games_played": 68,
+      "games_won": 32,
+      "games_lost": 35,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000035,
+      "player_name": "RTSLegend528",
+      "race": "bw_zerg",
+      "mmr": 1724.2,
+      "games_played": 51,
+      "games_won": 45,
+      "games_lost": 5,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000035,
+      "player_name": "RTSLegend528",
+      "race": "bw_terran",
+      "mmr": 1826.5,
+      "games_played": 56,
+      "games_won": 35,
+      "games_lost": 20,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000035,
+      "player_name": "RTSLegend528",
+      "race": "sc2_zerg",
+      "mmr": 1728.8,
+      "games_played": 74,
+      "games_won": 62,
+      "games_lost": 8,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000035,
+      "player_name": "RTSLegend528",
+      "race": "sc2_terran",
+      "mmr": 1248.8,
+      "games_played": 42,
+      "games_won": 5,
+      "games_lost": 37,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000036,
+      "player_name": "Warrior147",
+      "race": "bw_protoss",
+      "mmr": 1234.9,
+      "games_played": 52,
+      "games_won": 12,
+      "games_lost": 38,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000036,
+      "player_name": "Warrior147",
+      "race": "bw_terran",
+      "mmr": 1058.2,
+      "games_played": 68,
+      "games_won": 68,
+      "games_lost": -1,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000036,
+      "player_name": "Warrior147",
+      "race": "sc2_zerg",
+      "mmr": 1690.1,
+      "games_played": 78,
+      "games_won": 14,
+      "games_lost": 59,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000036,
+      "player_name": "Warrior147",
+      "race": "sc2_terran",
+      "mmr": 1490.2,
+      "games_played": 81,
+      "games_won": 17,
+      "games_lost": 64,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000037,
+      "player_name": "MicroGod938",
+      "race": "bw_protoss",
+      "mmr": 1274.7,
+      "games_played": 28,
+      "games_won": 23,
+      "games_lost": 0,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000037,
+      "player_name": "MicroGod938",
+      "race": "bw_terran",
+      "mmr": 1037.2,
+      "games_played": 51,
+      "games_won": 22,
+      "games_lost": 24,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000037,
+      "player_name": "MicroGod938",
+      "race": "sc2_zerg",
+      "mmr": 1208.4,
+      "games_played": 64,
+      "games_won": 9,
+      "games_lost": 52,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000037,
+      "player_name": "MicroGod938",
+      "race": "sc2_protoss",
+      "mmr": 1364.5,
+      "games_played": 47,
+      "games_won": 25,
+      "games_lost": 18,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000038,
+      "player_name": "Hardcore562",
+      "race": "bw_terran",
+      "mmr": 1088.6,
+      "games_played": 16,
+      "games_won": 15,
+      "games_lost": -3,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000038,
+      "player_name": "Hardcore562",
+      "race": "bw_protoss",
+      "mmr": 1375.4,
+      "games_played": 13,
+      "games_won": 13,
+      "games_lost": -4,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000038,
+      "player_name": "Hardcore562",
+      "race": "sc2_terran",
+      "mmr": 1130.9,
+      "games_played": 71,
+      "games_won": 5,
+      "games_lost": 61,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000038,
+      "player_name": "Hardcore562",
+      "race": "sc2_protoss",
+      "mmr": 1478.6,
+      "games_played": 64,
+      "games_won": 44,
+      "games_lost": 16,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000039,
+      "player_name": "RushPlayer51",
+      "race": "bw_zerg",
+      "mmr": 1853.1,
+      "games_played": 60,
+      "games_won": 14,
+      "games_lost": 43,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000039,
+      "player_name": "RushPlayer51",
+      "race": "bw_protoss",
+      "mmr": 1733.4,
+      "games_played": 38,
+      "games_won": 7,
+      "games_lost": 30,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000039,
+      "player_name": "RushPlayer51",
+      "race": "sc2_terran",
+      "mmr": 1204.7,
+      "games_played": 75,
+      "games_won": 17,
+      "games_lost": 53,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000039,
+      "player_name": "RushPlayer51",
+      "race": "sc2_zerg",
+      "mmr": 1280.2,
+      "games_played": 91,
+      "games_won": 6,
+      "games_lost": 84,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000040,
+      "player_name": "Tournament56",
+      "race": "bw_terran",
+      "mmr": 1763.8,
+      "games_played": 66,
+      "games_won": 45,
+      "games_lost": 17,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000040,
+      "player_name": "Tournament56",
+      "race": "bw_zerg",
+      "mmr": 1573.8,
+      "games_played": 69,
+      "games_won": 17,
+      "games_lost": 51,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000040,
+      "player_name": "Tournament56",
+      "race": "sc2_protoss",
+      "mmr": 1635.3,
+      "games_played": 36,
+      "games_won": 15,
+      "games_lost": 16,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000040,
+      "player_name": "Tournament56",
+      "race": "sc2_zerg",
+      "mmr": 1244.1,
+      "games_played": 42,
+      "games_won": 41,
+      "games_lost": -3,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000041,
+      "player_name": "MacroMaster908",
+      "race": "bw_protoss",
+      "mmr": 1347.4,
+      "games_played": 14,
+      "games_won": 10,
+      "games_lost": 2,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000041,
+      "player_name": "MacroMaster908",
+      "race": "bw_terran",
+      "mmr": 1382.7,
+      "games_played": 42,
+      "games_won": 1,
+      "games_lost": 41,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000041,
+      "player_name": "MacroMaster908",
+      "race": "sc2_zerg",
+      "mmr": 1368.0,
+      "games_played": 16,
+      "games_won": 6,
+      "games_lost": 6,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000041,
+      "player_name": "MacroMaster908",
+      "race": "sc2_protoss",
+      "mmr": 1873.7,
+      "games_played": 35,
+      "games_won": 21,
+      "games_lost": 10,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000042,
+      "player_name": "Elite788",
+      "race": "bw_protoss",
+      "mmr": 1434.8,
+      "games_played": 76,
+      "games_won": 20,
+      "games_lost": 54,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000042,
+      "player_name": "Elite788",
+      "race": "bw_zerg",
+      "mmr": 1898.9,
+      "games_played": 95,
+      "games_won": 73,
+      "games_lost": 18,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000042,
+      "player_name": "Elite788",
+      "race": "sc2_zerg",
+      "mmr": 1521.8,
+      "games_played": 21,
+      "games_won": 16,
+      "games_lost": 2,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000042,
+      "player_name": "Elite788",
+      "race": "sc2_terran",
+      "mmr": 1708.6,
+      "games_played": 33,
+      "games_won": 29,
+      "games_lost": 4,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000043,
+      "player_name": "RTSLegend359",
+      "race": "bw_protoss",
+      "mmr": 1273.4,
+      "games_played": 14,
+      "games_won": 14,
+      "games_lost": 0,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000043,
+      "player_name": "RTSLegend359",
+      "race": "bw_zerg",
+      "mmr": 1455.3,
+      "games_played": 15,
+      "games_won": 1,
+      "games_lost": 10,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000043,
+      "player_name": "RTSLegend359",
+      "race": "sc2_terran",
+      "mmr": 1206.2,
+      "games_played": 23,
+      "games_won": 9,
+      "games_lost": 10,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000043,
+      "player_name": "RTSLegend359",
+      "race": "sc2_protoss",
+      "mmr": 1473.3,
+      "games_played": 83,
+      "games_won": 33,
+      "games_lost": 49,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000044,
+      "player_name": "SC2Champion428",
+      "race": "bw_terran",
+      "mmr": 1194.9,
+      "games_played": 88,
+      "games_won": 17,
+      "games_lost": 68,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000044,
+      "player_name": "SC2Champion428",
+      "race": "bw_protoss",
+      "mmr": 1778.8,
+      "games_played": 32,
+      "games_won": 14,
+      "games_lost": 16,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000044,
+      "player_name": "SC2Champion428",
+      "race": "sc2_terran",
+      "mmr": 1686.5,
+      "games_played": 57,
+      "games_won": 3,
+      "games_lost": 49,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000044,
+      "player_name": "SC2Champion428",
+      "race": "sc2_protoss",
+      "mmr": 1331.4,
+      "games_played": 76,
+      "games_won": 69,
+      "games_lost": 4,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000045,
+      "player_name": "BWMaster156",
+      "race": "bw_zerg",
+      "mmr": 1953.9,
+      "games_played": 88,
+      "games_won": 23,
+      "games_lost": 62,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000045,
+      "player_name": "BWMaster156",
+      "race": "bw_protoss",
+      "mmr": 1338.8,
+      "games_played": 11,
+      "games_won": 5,
+      "games_lost": 5,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000045,
+      "player_name": "BWMaster156",
+      "race": "sc2_protoss",
+      "mmr": 1823.4,
+      "games_played": 36,
+      "games_won": 0,
+      "games_lost": 31,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000045,
+      "player_name": "BWMaster156",
+      "race": "sc2_terran",
+      "mmr": 1101.5,
+      "games_played": 41,
+      "games_won": 22,
+      "games_lost": 18,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000046,
+      "player_name": "Competitive201",
+      "race": "bw_terran",
+      "mmr": 1619.4,
+      "games_played": 48,
+      "games_won": 34,
+      "games_lost": 14,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000046,
+      "player_name": "Competitive201",
+      "race": "bw_protoss",
+      "mmr": 1380.7,
+      "games_played": 11,
+      "games_won": 8,
+      "games_lost": 1,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000046,
+      "player_name": "Competitive201",
+      "race": "sc2_protoss",
+      "mmr": 1138.4,
+      "games_played": 48,
+      "games_won": 9,
+      "games_lost": 34,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000046,
+      "player_name": "Competitive201",
+      "race": "sc2_terran",
+      "mmr": 1405.5,
+      "games_played": 19,
+      "games_won": 3,
+      "games_lost": 12,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000047,
+      "player_name": "LadderKing326",
+      "race": "bw_zerg",
+      "mmr": 1016.4,
+      "games_played": 46,
+      "games_won": 16,
+      "games_lost": 28,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000047,
+      "player_name": "LadderKing326",
+      "race": "bw_protoss",
+      "mmr": 1439.1,
+      "games_played": 54,
+      "games_won": 16,
+      "games_lost": 34,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000047,
+      "player_name": "LadderKing326",
+      "race": "sc2_protoss",
+      "mmr": 1215.3,
+      "games_played": 17,
+      "games_won": 4,
+      "games_lost": 11,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000047,
+      "player_name": "LadderKing326",
+      "race": "sc2_terran",
+      "mmr": 1410.1,
+      "games_played": 81,
+      "games_won": 59,
+      "games_lost": 22,
+      "games_drawn": 0
+    },
+    {
+      "discord_uid": 100000048,
+      "player_name": "StarCraftPro294",
+      "race": "bw_terran",
+      "mmr": 1909.5,
+      "games_played": 41,
+      "games_won": 22,
+      "games_lost": 15,
+      "games_drawn": 4
+    },
+    {
+      "discord_uid": 100000048,
+      "player_name": "StarCraftPro294",
+      "race": "bw_protoss",
+      "mmr": 1330.0,
+      "games_played": 90,
+      "games_won": 31,
+      "games_lost": 56,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000048,
+      "player_name": "StarCraftPro294",
+      "race": "sc2_protoss",
+      "mmr": 1662.4,
+      "games_played": 15,
+      "games_won": 13,
+      "games_lost": 1,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000048,
+      "player_name": "StarCraftPro294",
+      "race": "sc2_terran",
+      "mmr": 1993.2,
+      "games_played": 81,
+      "games_won": 4,
+      "games_lost": 76,
+      "games_drawn": 1
+    },
+    {
+      "discord_uid": 100000049,
+      "player_name": "Champion955",
+      "race": "bw_zerg",
+      "mmr": 1499.0,
+      "games_played": 64,
+      "games_won": 29,
+      "games_lost": 33,
+      "games_drawn": 2
+    },
+    {
+      "discord_uid": 100000049,
+      "player_name": "Champion955",
+      "race": "bw_terran",
+      "mmr": 1278.9,
+      "games_played": 53,
+      "games_won": 42,
+      "games_lost": 8,
+      "games_drawn": 3
+    },
+    {
+      "discord_uid": 100000049,
+      "player_name": "Champion955",
+      "race": "sc2_protoss",
+      "mmr": 1084.2,
+      "games_played": 96,
+      "games_won": 66,
+      "games_lost": 25,
+      "games_drawn": 5
+    },
+    {
+      "discord_uid": 100000049,
+      "player_name": "Champion955",
+      "race": "sc2_zerg",
+      "mmr": 1870.3,
+      "games_played": 32,
+      "games_won": 3,
+      "games_lost": 24,
+      "games_drawn": 5
+    }
+  ],
+  "preferences": [
+    {
+      "discord_uid": 100000000,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_zerg\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Arkanoid\"]"
+    },
+    {
+      "discord_uid": 100000001,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_terran\", \"sc2_protoss\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000002,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_protoss\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000003,
+      "last_chosen_races": "[\"bw_terran\", \"bw_protoss\", \"sc2_zerg\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[\"Khione\"]"
+    },
+    {
+      "discord_uid": 100000004,
+      "last_chosen_races": "[\"bw_terran\", \"bw_zerg\", \"sc2_zerg\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000005,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_zerg\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Fighting Spirit\", \"Khione\"]"
+    },
+    {
+      "discord_uid": 100000006,
+      "last_chosen_races": "[\"bw_terran\", \"bw_protoss\", \"sc2_protoss\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Arkanoid\", \"Circuit Breaker\"]"
+    },
+    {
+      "discord_uid": 100000007,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_protoss\", \"sc2_zerg\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000008,
+      "last_chosen_races": "[\"bw_terran\", \"bw_zerg\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000009,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_protoss\", \"sc2_protoss\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000010,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_terran\", \"sc2_protoss\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Arkanoid\", \"Circuit Breaker\", \"Fighting Spirit\"]"
+    },
+    {
+      "discord_uid": 100000011,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_zerg\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Fighting Spirit\", \"Circuit Breaker\", \"Arkanoid\"]"
+    },
+    {
+      "discord_uid": 100000012,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_protoss\", \"sc2_protoss\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000013,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_zerg\", \"sc2_protoss\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[\"Arkanoid\", \"Circuit Breaker\"]"
+    },
+    {
+      "discord_uid": 100000014,
+      "last_chosen_races": "[\"bw_terran\", \"bw_protoss\", \"sc2_terran\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000015,
+      "last_chosen_races": "[\"bw_terran\", \"bw_protoss\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Fighting Spirit\", \"Neo\", \"Pylon\"]"
+    },
+    {
+      "discord_uid": 100000016,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_terran\", \"sc2_protoss\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000017,
+      "last_chosen_races": "[\"bw_terran\", \"bw_zerg\", \"sc2_protoss\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[\"Neo\", \"Fighting Spirit\", \"Pylon\"]"
+    },
+    {
+      "discord_uid": 100000018,
+      "last_chosen_races": "[\"bw_terran\", \"bw_zerg\", \"sc2_terran\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[\"Pylon\"]"
+    },
+    {
+      "discord_uid": 100000019,
+      "last_chosen_races": "[\"bw_terran\", \"bw_zerg\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000020,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_zerg\", \"sc2_zerg\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[\"Pylon\"]"
+    },
+    {
+      "discord_uid": 100000021,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_terran\", \"sc2_protoss\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Fighting Spirit\", \"Khione\", \"Arkanoid\"]"
+    },
+    {
+      "discord_uid": 100000022,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_zerg\", \"sc2_protoss\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000023,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_zerg\", \"sc2_zerg\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[\"Neo\"]"
+    },
+    {
+      "discord_uid": 100000024,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_terran\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Khione\", \"Circuit Breaker\"]"
+    },
+    {
+      "discord_uid": 100000025,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_terran\", \"sc2_zerg\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[\"Neo\"]"
+    },
+    {
+      "discord_uid": 100000026,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_terran\", \"sc2_protoss\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000027,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_terran\", \"sc2_protoss\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[\"Khione\", \"Neo\", \"Circuit Breaker\"]"
+    },
+    {
+      "discord_uid": 100000028,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_protoss\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Pylon\", \"Circuit Breaker\"]"
+    },
+    {
+      "discord_uid": 100000029,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_terran\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Neo\", \"Fighting Spirit\", \"Circuit Breaker\"]"
+    },
+    {
+      "discord_uid": 100000030,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_protoss\", \"sc2_terran\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[\"Fighting Spirit\"]"
+    },
+    {
+      "discord_uid": 100000031,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_terran\", \"sc2_protoss\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000032,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_terran\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Arkanoid\", \"Fighting Spirit\", \"Neo\"]"
+    },
+    {
+      "discord_uid": 100000033,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_terran\", \"sc2_zerg\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[\"Arkanoid\"]"
+    },
+    {
+      "discord_uid": 100000034,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_zerg\", \"sc2_protoss\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Fighting Spirit\", \"Neo\", \"Arkanoid\"]"
+    },
+    {
+      "discord_uid": 100000035,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_terran\", \"sc2_zerg\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[\"Arkanoid\", \"Khione\"]"
+    },
+    {
+      "discord_uid": 100000036,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_terran\", \"sc2_zerg\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000037,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_terran\", \"sc2_zerg\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[\"Circuit Breaker\", \"Neo\", \"Arkanoid\"]"
+    },
+    {
+      "discord_uid": 100000038,
+      "last_chosen_races": "[\"bw_terran\", \"bw_protoss\", \"sc2_terran\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[\"Fighting Spirit\"]"
+    },
+    {
+      "discord_uid": 100000039,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_protoss\", \"sc2_terran\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Pylon\"]"
+    },
+    {
+      "discord_uid": 100000040,
+      "last_chosen_races": "[\"bw_terran\", \"bw_zerg\", \"sc2_protoss\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Arkanoid\", \"Khione\", \"Fighting Spirit\"]"
+    },
+    {
+      "discord_uid": 100000041,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_terran\", \"sc2_zerg\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000042,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_zerg\", \"sc2_zerg\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000043,
+      "last_chosen_races": "[\"bw_protoss\", \"bw_zerg\", \"sc2_terran\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[\"Circuit Breaker\"]"
+    },
+    {
+      "discord_uid": 100000044,
+      "last_chosen_races": "[\"bw_terran\", \"bw_protoss\", \"sc2_terran\", \"sc2_protoss\"]",
+      "last_chosen_vetoes": "[\"Neo\", \"Fighting Spirit\", \"Pylon\"]"
+    },
+    {
+      "discord_uid": 100000045,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_protoss\", \"sc2_protoss\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[\"Khione\", \"Fighting Spirit\", \"Circuit Breaker\"]"
+    },
+    {
+      "discord_uid": 100000046,
+      "last_chosen_races": "[\"bw_terran\", \"bw_protoss\", \"sc2_protoss\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000047,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_protoss\", \"sc2_protoss\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[]"
+    },
+    {
+      "discord_uid": 100000048,
+      "last_chosen_races": "[\"bw_terran\", \"bw_protoss\", \"sc2_protoss\", \"sc2_terran\"]",
+      "last_chosen_vetoes": "[\"Arkanoid\", \"Pylon\"]"
+    },
+    {
+      "discord_uid": 100000049,
+      "last_chosen_races": "[\"bw_zerg\", \"bw_terran\", \"sc2_protoss\", \"sc2_zerg\"]",
+      "last_chosen_vetoes": "[\"Arkanoid\", \"Circuit Breaker\", \"Pylon\"]"
+    }
+  ]
+}

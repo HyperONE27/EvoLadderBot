@@ -1,23 +1,35 @@
 import discord
 from discord import app_commands
 import re
+import os
+from typing import Optional
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.regions_service import RegionsService
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from src.backend.services.user_info_service import UserInfoService, get_user_info, log_user_action
-from src.utils.validation_utils import validate_user_id, validate_battle_tag, validate_alt_ids
-from components.confirm_embed import ConfirmEmbedView
-from components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
+from src.backend.services.validation_service import ValidationService
+from src.bot.utils.discord_utils import send_ephemeral_response
+from src.bot.interface.components.confirm_embed import ConfirmEmbedView
+from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 
 countries_service = CountriesService()
 regions_service = RegionsService()
 user_info_service = UserInfoService()
+validation_service = ValidationService()
+guard_service = CommandGuardService()
+
+# Get global timeout from environment
+GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
 
 
 # API Call / Data Handling
 async def setup_command(interaction: discord.Interaction):
     """Handle the /setup slash command"""
-    # Ensure player exists in database
-    user_info_service.ensure_player_exists(interaction.user.id, interaction.user.name)
+    try:
+        guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+    except CommandGuardError as exc:
+        await send_ephemeral_response(interaction, content=str(exc))
+        return
     
     # Send the modal directly as the initial response
     modal = SetupModal()
@@ -39,8 +51,8 @@ def register_setup_command(tree: app_commands.CommandTree):
 
 # UI Elements
 class SetupModal(discord.ui.Modal, title="Player Setup"):
-    def __init__(self, error_message: str = None):
-        super().__init__(timeout=300)
+    def __init__(self, error_message: Optional[str] = None) -> None:
+        super().__init__(timeout=GLOBAL_TIMEOUT)
         self.error_message = error_message
         
     user_id = discord.ui.TextInput(
@@ -77,32 +89,32 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
 
     async def on_submit(self, interaction: discord.Interaction):
         # Validate user ID
-        is_valid, error = validate_user_id(self.user_id.value)
+        is_valid, error = validation_service.validate_user_id(self.user_id.value)
         if not is_valid:
             error_embed = discord.Embed(
                 title="❌ Invalid User ID",
                 description=f"**Error:** {error}\n\nPlease try again with a valid User ID.",
                 color=discord.Color.red()
             )
-            await interaction.response.send_message(
+            await send_ephemeral_response(
+                interaction,
                 embed=error_embed,
-                view=ErrorView(error),
-                ephemeral=True
+                view=ErrorView(error)
             )
             return
 
         # Validate BattleTag
-        is_valid, error = validate_battle_tag(self.battle_tag.value)
+        is_valid, error = validation_service.validate_battle_tag(self.battle_tag.value)
         if not is_valid:
             error_embed = discord.Embed(
                 title="❌ Invalid BattleTag",
                 description=f"**Error:** {error}\n\nPlease try again with a valid BattleTag.",
                 color=discord.Color.red()
             )
-            await interaction.response.send_message(
+            await send_ephemeral_response(
+                interaction,
                 embed=error_embed,
-                view=ErrorView(error),
-                ephemeral=True
+                view=ErrorView(error)
             )
             return
 
@@ -111,34 +123,34 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         
         # Validate alt_id_1 if provided
         if self.alt_id_1.value.strip():
-            is_valid, error = validate_user_id(self.alt_id_1.value.strip())
+            is_valid, error = validation_service.validate_user_id(self.alt_id_1.value.strip())
             if not is_valid:
                 error_embed = discord.Embed(
                     title="❌ Invalid Alternative ID 1",
                     description=f"**Error:** {error}\n\nPlease try again with a valid Alternative ID.",
                     color=discord.Color.red()
                 )
-                await interaction.response.send_message(
+                await send_ephemeral_response(
+                    interaction,
                     embed=error_embed,
-                    view=ErrorView(error),
-                    ephemeral=True
+                    view=ErrorView(error)
                 )
                 return
             alt_ids_list.append(self.alt_id_1.value.strip())
         
         # Validate alt_id_2 if provided
         if self.alt_id_2.value.strip():
-            is_valid, error = validate_user_id(self.alt_id_2.value.strip())
+            is_valid, error = validation_service.validate_user_id(self.alt_id_2.value.strip())
             if not is_valid:
                 error_embed = discord.Embed(
                     title="❌ Invalid Alternative ID 2",
                     description=f"**Error:** {error}\n\nPlease try again with a valid Alternative ID.",
                     color=discord.Color.red()
                 )
-                await interaction.response.send_message(
+                await send_ephemeral_response(
+                    interaction,
                     embed=error_embed,
-                    view=ErrorView(error),
-                    ephemeral=True
+                    view=ErrorView(error)
                 )
                 return
             alt_ids_list.append(self.alt_id_2.value.strip())
@@ -151,10 +163,10 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
                 description="**Error:** All IDs must be unique.\n\nPlease ensure each ID is different from the others.",
                 color=discord.Color.red()
             )
-            await interaction.response.send_message(
+            await send_ephemeral_response(
+                interaction,
                 embed=error_embed,
-                view=ErrorView("Duplicate IDs detected"),
-                ephemeral=True
+                view=ErrorView("Duplicate IDs detected")
             )
             return
 
@@ -176,15 +188,15 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
             color=discord.Color.blue()
         )
         
-        await interaction.response.send_message(
+        await send_ephemeral_response(
+            interaction,
             embed=initial_embed,
-            view=view,
-            ephemeral=True
+            view=view
         )
 
 class ErrorView(discord.ui.View):
-    def __init__(self, error_message: str):
-        super().__init__(timeout=60)
+    def __init__(self, error_message: str) -> None:
+        super().__init__(timeout=GLOBAL_TIMEOUT)
         self.error_message = error_message
         
         # Add restart and cancel buttons only
@@ -304,7 +316,7 @@ class RegionSelect(discord.ui.Select):
 
 class UnifiedSetupView(discord.ui.View):
     def __init__(self, user_id: str, alt_ids: list, battle_tag: str, selected_country=None, selected_region=None, country_page1_selection=None, country_page2_selection=None):
-        super().__init__(timeout=300)
+        super().__init__(timeout=GLOBAL_TIMEOUT)
         self.user_id = user_id
         self.alt_ids = alt_ids
         self.battle_tag = battle_tag
@@ -401,11 +413,34 @@ class UnifiedSetupView(discord.ui.View):
             error_embed = discord.Embed(
                 title="⚙️ Setup - Country & Region Selection",
                 description="❌ Please select both country and region before confirming.",
-                color=discord.Color.blue()
+                color=discord.Color.red()
             )
-            await interaction.response.send_message(
+            
+            # Create custom error view that restarts to country/region selection
+            class SetupErrorView(discord.ui.View):
+                def __init__(self, original_view):
+                    super().__init__(timeout=GLOBAL_TIMEOUT)
+                    self.original_view = original_view
+                
+                @discord.ui.button(label="🔄 Try Again", style=discord.ButtonStyle.secondary)
+                async def restart(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    # Go back to the country/region selection view
+                    embed = self.original_view.get_embed()
+                    await interaction.response.edit_message(embed=embed, view=self.original_view)
+                
+                @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.danger)
+                async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    await send_ephemeral_response(
+                        interaction,
+                        content="Setup cancelled. You can use `/setup` again when ready."
+                    )
+            
+            error_view = SetupErrorView(self)
+            
+            await send_ephemeral_response(
+                interaction,
                 embed=error_embed,
-                ephemeral=True
+                view=error_view
             )
             return
         

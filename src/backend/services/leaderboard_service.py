@@ -197,10 +197,14 @@ class LeaderboardService:
         formatted_players = []
         for i, player in enumerate(players, 1):
             rank = (self.current_page - 1) * page_size + i
+            # Round MMR to integer for display
+            mmr_value = player.get('mmr', 0)
+            mmr_display = int(round(mmr_value)) if isinstance(mmr_value, (int, float)) else 0
+            
             formatted_players.append({
                 "rank": rank,
                 "player_id": player.get('player_id', 'Unknown'),
-                "mmr": player.get('mmr', 0),
+                "mmr": mmr_display,
                 "race": self.race_service.format_race_name(player.get('race', 'Unknown')),
                 "country": player.get('country', 'Unknown')
             })
