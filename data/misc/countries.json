@@ -1246,6 +1246,11 @@
   },
   {
     "code": "XX",
+    "name": "Nonrepresenting",
+    "common": false
+  },
+  {
+    "code": "ZZ",
     "name": "Other",
     "common": true
   }

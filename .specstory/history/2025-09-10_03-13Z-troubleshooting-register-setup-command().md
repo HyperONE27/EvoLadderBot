@@ -40,6 +40,21 @@ Now let me check if there are any import issues or missing `__init__.py` files t
 
 Tool use: **grep**
 
+<details>
+<summary>Grep for "register_setup_command" in "src" • 3 matches</summary>
+
+Output mode: content
+
+
+| Content | Line |
+|------|------|
+| `from src.bot.interface.interface_setup import register_setup_command` | L6 |
+| `register_setup_command(bot)` | L17 |
+| `def register_setup_command(bot):` | L197 |
+
+
+</details>
+
 ---
 
 Could not find file 'src/bot/__init__.py' in the workspace.
@@ -138,6 +153,20 @@ Tool use: **codebase_search**
 
 Tool use: **grep**
 
+<details>
+<summary>Grep for "Error|Exception|Traceback|Failed|failed" in "src/bot" • 2 matches</summary>
+
+Output mode: content
+
+
+| Content | Line |
+|------|------|
+| `except Exception as e:` | L20 |
+| `print("Sync failed:", e)` | L21 |
+
+
+</details>
+
 ---
 
 I can see the issue now! Looking at the code, I notice there's a **command name conflict**. You have two different `setup` commands being registered:
@@ -151,9 +180,37 @@ This is likely causing a conflict when Discord tries to sync the commands. Let m
 
 Tool use: **grep**
 
+<details>
+<summary>Grep for "@bot\.tree\.command\(name="setup"" in "src" • 2 matches</summary>
+
+Output mode: content
+
+
+| Content | Line |
+|------|------|
+| `@bot.tree.command(name="setup", description="Set up your player profile for matchmaking")` | L199 |
+| `@bot.tree.command(name="setup", description="Configure your ladder profile")` | L5 |
+
+
+</details>
+
 ---
 
 Tool use: **grep**
+
+<details>
+<summary>Grep for "name="setup"" in "src" • 2 matches</summary>
+
+Output mode: content
+
+
+| Content | Line |
+|------|------|
+| `@bot.tree.command(name="setup", description="Set up your player profile for matchmaking")` | L199 |
+| `@bot.tree.command(name="setup", description="Configure your ladder profile")` | L5 |
+
+
+</details>
 
 ---
 
@@ -362,6 +419,19 @@ Let me see the actual `register_setup_command` function:
 ---
 
 Tool use: **grep**
+
+<details>
+<summary>Grep for "def register_setup_command" in "src/bot/interface/interface_setup.py" • 1 match</summary>
+
+Output mode: content
+
+
+| Content | Line |
+|------|------|
+| `def register_setup_command(tree: app_commands.CommandTree):` | L306 |
+
+
+</details>
 
 ---
 

@@ -443,8 +443,40 @@ class MatchFoundView(discord.ui.View):
     
     def get_embed(self) -> discord.Embed:
         """Get the match found embed"""
+        # Get player information from database
+        from src.backend.db.db_reader_writer import DatabaseReader
+        db_reader = DatabaseReader()
+        
+        # Import discord utils for flag and emote functions
+        from src.bot.utils.discord_utils import get_flag_emote, get_race_emote
+        
+        # Get player 1 info
+        p1_info = db_reader.get_player_by_discord_uid(self.match_result.player1_discord_id)
+        p1_name = p1_info.get('player_name') if p1_info else None
+        p1_country = p1_info.get('country') if p1_info else None
+        p1_display_name = p1_name if p1_name else str(self.match_result.player1_discord_id)
+        p1_flag = get_flag_emote(p1_country) if p1_country else get_flag_emote("XX")
+        
+        # Get player 2 info
+        p2_info = db_reader.get_player_by_discord_uid(self.match_result.player2_discord_id)
+        p2_name = p2_info.get('player_name') if p2_info else None
+        p2_country = p2_info.get('country') if p2_info else None
+        p2_display_name = p2_name if p2_name else str(self.match_result.player2_discord_id)
+        p2_flag = get_flag_emote(p2_country) if p2_country else get_flag_emote("XX")
+        
+        # Get race information from match result
+        p1_race = self.match_result.player1_race
+        p2_race = self.match_result.player2_race
+        
+        # Get race emotes
+        p1_race_emote = get_race_emote(p1_race)
+        p2_race_emote = get_race_emote(p2_race)
+        
+        # Create title with new format including races
+        title = f"Match #{self.match_result.match_id}: {p1_flag} {p1_race_emote} {p1_display_name} vs {p2_flag} {p2_race_emote} {p2_display_name}"
+        
         embed = discord.Embed(
-            title="🎮 Match Found!",
+            title=title,
             description="A match has been found for you!",
             color=discord.Color.green()
         )

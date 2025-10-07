@@ -1,0 +1,34 @@
+[
+    {
+        "name": "bw_terran",
+        "markdown": "<:bw_terran:1425037568638058629>"
+    },
+    {
+        "name": "bw_zerg",
+        "markdown": "<:bw_zerg:1425037525889712139>"
+    },
+    {
+        "name": "bw_protoss",
+        "markdown": "<:bw_protoss:1425037606529536040>"
+    },
+    {
+        "name": "sc2_terran",
+        "markdown": "<:sc2_terran:1425037422646919228>"
+    },
+    {
+        "name": "sc2_zerg",
+        "markdown": "<:sc2_zerg:1425037367479107715>"
+    },
+    {
+        "name": "sc2_protoss",
+        "markdown": "<:sc2_protoss:1425037487075622923>"
+    },
+    {
+        "name": "flag_xx",
+        "markdown": "<:flag_xx:1425037165414322186>"
+    },
+    {
+        "name": "flag_zz",
+        "markdown": "<:flag_zz:1425037183403823114>"
+    }
+]

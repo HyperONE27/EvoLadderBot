@@ -405,12 +405,19 @@ class Matchmaker:
                 p1_race = p1.get_race_for_match(False)  # SC2 race
                 p2_race = p2.get_race_for_match(True)  # BW race
             
+            # Get current MMR values for both players
+            p1_mmr = p1.get_effective_mmr(is_bw_match) or 1500.0
+            p2_mmr = p2.get_effective_mmr(not is_bw_match) or 1500.0
+            
             # Create match in database
             match_id = self.db_writer.create_match_1v1(
                 p1.discord_user_id,
                 p2.discord_user_id,
                 map_choice,
-                server_choice
+                server_choice,
+                p1_mmr,
+                p2_mmr,
+                0.0  # MMR change will be calculated and updated after match result
             )
             
             # Create match result
@@ -581,9 +588,18 @@ class Matchmaker:
                     won=p2_won, lost=p2_lost, drawn=p2_drawn
                 )
                 
+                # Calculate and store MMR change using MMR service
+                p1_mmr_change = mmr_service.calculate_mmr_change(
+                    float(p1_current_mmr), 
+                    float(p2_current_mmr), 
+                    result
+                )
+                self.db_writer.update_match_mmr_change(match_id, p1_mmr_change)
+                
                 print(f"📊 Updated MMR for match {match_id}:")
                 print(f"   Player 1 ({player1_uid}): {p1_current_mmr} → {mmr_outcome.player_one_mmr:.1f} ({p1_race})")
                 print(f"   Player 2 ({player2_uid}): {p2_current_mmr} → {mmr_outcome.player_two_mmr:.1f} ({p2_race})")
+                print(f"   MMR Change: {p1_mmr_change:+.1f} (positive = player 1 gained)")
             else:
                 print(f"❌ Could not get MMR data for players in match {match_id}")
         

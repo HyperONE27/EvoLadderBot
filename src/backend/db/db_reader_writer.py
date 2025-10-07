@@ -599,10 +599,23 @@ class DatabaseWriter:
         player_2_discord_uid: int,
         map_played: str,
         server_used: str,
+        player_1_mmr: float,
+        player_2_mmr: float,
+        mmr_change: float,
         winner_discord_uid: Optional[int] = None
     ) -> int:
         """
         Create a new 1v1 match record.
+        
+        Args:
+            player_1_discord_uid: Discord UID of player 1
+            player_2_discord_uid: Discord UID of player 2
+            map_played: Name of the map played
+            server_used: Server used for the match
+            player_1_mmr: MMR of player 1 at match time
+            player_2_mmr: MMR of player 2 at match time
+            mmr_change: MMR change amount (positive = player 1 gained, negative = player 2 gained)
+            winner_discord_uid: Discord UID of winner, or None for draw
         
         Returns:
             The ID of the newly created match.
@@ -613,13 +626,15 @@ class DatabaseWriter:
                 """
                 INSERT INTO matches_1v1 (
                     player_1_discord_uid, player_2_discord_uid,
-                    winner_discord_uid, map_played, server_used
+                    player_1_mmr, player_2_mmr, winner_discord_uid,
+                    mmr_change, map_played, server_used
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     player_1_discord_uid, player_2_discord_uid,
-                    winner_discord_uid, map_played, server_used
+                    player_1_mmr, player_2_mmr, winner_discord_uid,
+                    mmr_change, map_played, server_used
                 )
             )
             conn.commit()
@@ -651,6 +666,34 @@ class DatabaseWriter:
                 WHERE id = ?
                 """,
                 (winner_discord_uid, match_id)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+    
+    def update_match_mmr_change(
+        self,
+        match_id: int,
+        mmr_change: float
+    ) -> bool:
+        """
+        Update the MMR change for a 1v1 match.
+        
+        Args:
+            match_id: The ID of the match to update.
+            mmr_change: The MMR change amount (positive = player 1 gained, negative = player 2 gained).
+        
+        Returns:
+            True if the update was successful, False otherwise.
+        """
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE matches_1v1 
+                SET mmr_change = ?
+                WHERE id = ?
+                """,
+                (mmr_change, match_id)
             )
             conn.commit()
             return cursor.rowcount > 0

@@ -57,6 +57,24 @@ Tool use: **codebase_search**
 
 Tool use: **glob_file_search**
 
+<details>
+<summary>Searched codebase "*.json" • **8** results in **1** directory</summary>
+
+Directory: **c:\Users\funcr\Documents\GitHub\EvoLadderBot** (8 files)
+
+| File |
+|------|
+| `data\misc\regions.json` |
+| `data\misc\ladder_config.json` |
+| `data\misc\game_config.json` |
+| `data\misc\leaderboard.json` |
+| `data\misc\countries.json` |
+| `data\locales\zhCN.json` |
+| `data\locales\koKR.json` |
+| `data\locales\enUS.json` |
+
+</details>
+
 ---
 
 Let me check if there are any API-related files or JSON schema definitions in your backend API:

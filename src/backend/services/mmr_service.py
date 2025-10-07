@@ -50,6 +50,20 @@ class MMRService:
 
         return self._DEFAULT_MMR
 
+    def calculate_mmr_change(self, player_one_mmr: float, player_two_mmr: float, result: int) -> float:
+        """Calculate the MMR change for player one.
+        
+        Args:
+            player_one_mmr: Current MMR for player one.
+            player_two_mmr: Current MMR for player two.
+            result: Match outcome (1 = player one win, 2 = player two win, 0 = draw).
+            
+        Returns:
+            MMR change for player one (positive = gained, negative = lost).
+        """
+        outcome = self.calculate_new_mmr(player_one_mmr, player_two_mmr, result)
+        return outcome.player_one_mmr - player_one_mmr
+
     def _calculate_expected_mmr(self, player_one_mmr: float, player_two_mmr: float) -> Tuple[float, float]:
         """Return the expected MMR scores for both players."""
 

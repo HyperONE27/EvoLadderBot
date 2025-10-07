@@ -41,10 +41,11 @@ class CountriesService(BaseConfigService):
             common_countries = [c for c in countries if c.get("common", False)]
 
             common_countries = sorted(
-                [c for c in common_countries if c.get("code") != "XX"],
+                [c for c in common_countries if c.get("code") not in ["XX", "ZZ"]],
                 key=lambda item: item.get("name", ""),
             )
-            other = next((c for c in countries if c.get("code") == "XX"), None)
+            # Add "Other" (ZZ) at the end
+            other = next((c for c in countries if c.get("code") == "ZZ"), None)
             if other:
                 common_countries.append(other)
             self._common_countries_cache = common_countries
@@ -74,7 +75,8 @@ class CountriesService(BaseConfigService):
 
     def search_countries(self, query: str, limit: int = 25) -> List[Dict[str, Any]]:
         results = self.search_by_name(query, limit=limit)
-        return [entry for entry in results if entry.get("code") != "XX"]
+        # Include all countries in search results, including XX and ZZ
+        return results
 
     def get_country_by_code(self, country_code: str) -> Optional[Dict[str, Any]]:
         return self.get_by_code(country_code)

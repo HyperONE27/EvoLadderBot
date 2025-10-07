@@ -777,6 +777,20 @@ Tool use: **todo_write**
 
 Tool use: **read_lints**
 
+<details>
+          <summary>Read lints for 2 files</summary>
+      
+Lint paths:
+
+- `src/bot/interface/commands/leaderboard_command.py`
+- `src/backend/services/leaderboard_service.py`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+
 ---
 
 Perfect! Let me run a quick test to make sure the refactored code works by checking if there are any import issues:
@@ -1476,6 +1490,20 @@ Tool use: **todo_write**
 
 Tool use: **read_lints**
 
+<details>
+          <summary>Read lints for 2 files</summary>
+      
+Lint paths:
+
+- `src/backend/services/leaderboard_service.py`
+- `src/bot/interface/commands/leaderboard_command.py`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+
 ---
 
 Perfect! Let me test the refactored code to make sure it works:
@@ -1771,6 +1799,59 @@ Here are several better structures that would make retrieval much more straightf
 
 Tool use: **write**
 
+
+<details><summary>Edit file: data/misc/ladder_config_new.json</summary>
+
+**Chunk 1**
+Lines added: 40, lines removed: 1
+
+```diff
+@@ -1,1 +1,40 @@
+- 
++ {
++     "maps": [
++         {
++             "code": "Arkanoid",
++             "name": "[SC:Evo] Arkanoid (알카노이드)"
++         },
++         {
++             "code": "Death Valley",
++             "name": "[SC:Evo] Death Valley (데스밸리)"
++         },
++         {
++             "code": "Keres Passage",
++             "name": "Keres Passage SEL"
++         },
++         {
++             "code": "Khione",
++             "name": "Khione SEL"
++         },
++         {
++             "code": "Pylon",
++             "name": "Pylon SEL"
++         },
++         {
++             "code": "Radeon",
++             "name": "[SC:Evo] Radeon (라데온)"
++         },
++         {
++             "code": "Subsequence",
++             "name": "Subsequence SEL"
++         },
++         {
++             "code": "Sylphid",
++             "name": "[SC:Evo] Sylphid (실피드)"
++         },
++         {
++             "code": "Vermeer",
++             "name": "[SC:Evo] Vermeer (버미어)"
++         }
++     ]
++ }
+```
+
+</details>
+
 ---
 
 ## Option 2: Map-based Structure
@@ -1780,6 +1861,32 @@ Tool use: **write**
 
 Tool use: **write**
 
+
+<details><summary>Edit file: data/misc/ladder_config_map.json</summary>
+
+**Chunk 1**
+Lines added: 13, lines removed: 1
+
+```diff
+@@ -1,1 +1,13 @@
+- 
++ {
++     "maps": {
++         "Arkanoid": "[SC:Evo] Arkanoid (알카노이드)",
++         "Death Valley": "[SC:Evo] Death Valley (데스밸리)",
++         "Keres Passage": "Keres Passage SEL",
++         "Khione": "Khione SEL",
++         "Pylon": "Pylon SEL",
++         "Radeon": "[SC:Evo] Radeon (라데온)",
++         "Subsequence": "Subsequence SEL",
++         "Sylphid": "[SC:Evo] Sylphid (실피드)",
++         "Vermeer": "[SC:Evo] Vermeer (버미어)"
++     }
++ }
+```
+
+</details>
+
 ---
 
 ## Option 3: Array of Objects (Current but without wrapper)
@@ -1788,6 +1895,32 @@ Tool use: **write**
 ---
 
 Tool use: **write**
+
+
+<details><summary>Edit file: data/misc/ladder_config_array.json</summary>
+
+**Chunk 1**
+Lines added: 13, lines removed: 1
+
+```diff
+@@ -1,1 +1,13 @@
+- 
++ {
++     "maps": [
++         ["Arkanoid", "[SC:Evo] Arkanoid (알카노이드)"],
++         ["Death Valley", "[SC:Evo] Death Valley (데스밸리)"],
++         ["Keres Passage", "Keres Passage SEL"],
++         ["Khione", "Khione SEL"],
++         ["Pylon", "Pylon SEL"],
++         ["Radeon", "[SC:Evo] Radeon (라데온)"],
++         ["Subsequence", "Subsequence SEL"],
++         ["Sylphid", "[SC:Evo] Sylphid (실피드)"],
++         ["Vermeer", "[SC:Evo] Vermeer (버미어)"]
++     ]
++ }
+```
+
+</details>
 
 ---
 
@@ -2374,9 +2507,40 @@ Now let me search for more specific race references:
 
 Tool use: **grep**
 
+<details>
+<summary>Grep for "bw_terran|bw_zerg|bw_protoss|sc2_terran|sc2_zerg|sc2_protoss" • 4 matches</summary>
+
+Output mode: files_with_matches
+
+
+| File |
+|------|
+| `.\data\misc\game_config.json` |
+| `.\src\bot\interface\commands\leaderboard_command.py` |
+| `.\data\misc\leaderboard.json` |
+| `.\src\utils\strings_utils.py` |
+
+
+</details>
+
 ---
 
 Tool use: **grep**
+
+<details>
+<summary>Grep for "BW Terran|BW Zerg|BW Protoss|SC2 Terran|SC2 Zerg|SC2 Protoss" • 3 matches</summary>
+
+Output mode: files_with_matches
+
+
+| File |
+|------|
+| `.\data\misc\game_config.json` |
+| `.\src\bot\interface\commands\leaderboard_command.py` |
+| `.\src\utils\strings_utils.py` |
+
+
+</details>
 
 ---
 
@@ -2419,6 +2583,98 @@ First, let me create a race configuration service:
 ---
 
 Tool use: **write**
+
+
+<details><summary>Edit file: src/backend/services/race_config_service.py</summary>
+
+**Chunk 1**
+Lines added: 79, lines removed: 1
+
+```diff
+@@ -1,1 +1,79 @@
+- 
++ """
++ Race configuration service.
++ 
++ This module defines the RaceConfigService class, which contains methods for:
++ - Loading race configuration from game_config.json
++ - Providing race data for UI components
++ - Formatting race names consistently
++ 
++ Intended usage:
++     from backend.services.race_config_service import RaceConfigService
++ 
++     race_service = RaceConfigService()
++     races = race_service.get_races()
++ """
++ 
++ import json
++ from typing import List, Dict, Optional, Tuple, Any
++ 
++ 
++ class RaceConfigService:
++     """Service for managing race configuration data."""
++     
++     def __init__(self, config_path: str = "data/misc/game_config.json"):
++         self.config_path = config_path
++         self._races_cache = None
++     
++     def get_races(self) -> List[Dict[str, str]]:
++         """Get all available races."""
++         if self._races_cache is None:
++             self._load_races()
++         return self._races_cache
++     
++     def _load_races(self):
++         """Load races from configuration file."""
++         try:
++             with open(self.config_path, "r", encoding="utf-8") as f:
++                 config = json.load(f)
++                 self._races_cache = config.get("races", [])
++         except (FileNotFoundError, json.JSONDecodeError, KeyError):
++             self._races_cache = []
++     
++     def get_race_by_code(self, race_code: str) -> Optional[Dict[str, str]]:
++         """Get race data by code."""
++         races = self.get_races()
++         for race in races:
++             if race.get("code") == race_code:
++                 return race
++         return None
++     
++     def get_race_name(self, race_code: str) -> str:
++         """Get display name for race code."""
++         race = self.get_race_by_code(race_code)
++         return race.get("name", race_code) if race else race_code
++     
++     def get_race_short_name(self, race_code: str) -> str:
++         """Get short name for race code."""
++         race = self.get_race_by_code(race_code)
++         return race.get("short_name", race_code) if race else race_code
++     
++     def get_race_codes(self) -> List[str]:
++         """Get list of all race codes."""
++         return [race.get("code") for race in self.get_races() if race.get("code")]
++     
++     def get_race_names(self) -> List[str]:
++         """Get list of all race names."""
++         return [race.get("name") for race in self.get_races() if race.get("name")]
++     
++     def get_race_options_for_dropdown(self) -> List[Tuple[str, str, str]]:
++         """Get race options formatted for Discord dropdown (label, value, description)."""
++         races = self.get_races()
++         return [(race.get("name", ""), race.get("code", ""), "") for race in races]
++     
++     def get_race_order(self) -> List[str]:
++         """Get race codes in the order they should appear in UI."""
++         return [race.get("code") for race in self.get_races() if race.get("code")]
++     
++     def format_race_name(self, race_code: str) -> str:
++         """Format race name using the configuration data."""
++         return self.get_race_name(race_code)
+```
+
+</details>
 
 ---
 
@@ -2771,6 +3027,22 @@ Tool use: **todo_write**
 
 Tool use: **read_lints**
 
+<details>
+          <summary>Read lints for 4 files</summary>
+      
+Lint paths:
+
+- `src/backend/services/race_config_service.py`
+- `src/bot/interface/commands/leaderboard_command.py`
+- `src/utils/strings_utils.py`
+- `src/bot/interface/components/interface_views.py`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+
 ---
 
 Let me test the new race service to make sure it works:
@@ -2877,6 +3149,169 @@ The file is empty, so I'll create the complete queue command with the UI compone
 
 Tool use: **write**
 
+
+<details><summary>Edit file: src/bot/interface/commands/queue_command.py</summary>
+
+**Chunk 1**
+Lines added: 150, lines removed: 1
+
+```diff
+@@ -1,1 +1,150 @@
+- 
++ import discord
++ from discord import app_commands
++ from src.backend.services.race_config_service import RaceConfigService
++ from src.backend.services.ladder_config_service import LadderConfigService
++ 
++ race_service = RaceConfigService()
++ ladder_service = LadderConfigService()
++ 
++ 
++ # Register Command
++ def register_queue_command(tree: app_commands.CommandTree):
++     """Register the queue command"""
++     @tree.command(
++         name="queue",
++         description="Join the matchmaking queue"
++     )
++     async def queue(interaction: discord.Interaction):
++         await queue_command(interaction)
++     
++     return queue
++ 
++ 
++ # UI Elements
++ async def queue_command(interaction: discord.Interaction):
++     """Handle the /queue slash command"""
++     view = QueueView()
++     
++     embed = discord.Embed(
++         title="🎮 Matchmaking Queue",
++         description="Configure your queue preferences",
++         color=discord.Color.blue()
++     )
++     
++     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
++ 
++ 
++ class RaceSelect(discord.ui.Select):
++     """Multiselect dropdown for race selection"""
++     
++     def __init__(self):
++         # Get race options from service
++         race_options = race_service.get_race_options_for_dropdown()
++         
++         options = []
++         for label, value, description in race_options:
++             options.append(
++                 discord.SelectOption(
++                     label=label,
++                     value=value,
++                     description=description
++                 )
++             )
++         
++         super().__init__(
++             placeholder="Select your races (multiselect)...",
++             min_values=0,
++             max_values=len(options),
++             options=options,
++             row=0
++         )
++     
++     async def callback(self, interaction: discord.Interaction):
++         self.view.selected_races = self.values
++         await self.view.update_embed(interaction)
++ 
++ 
++ class MapVetoSelect(discord.ui.Select):
++     """Multiselect dropdown for map vetoes"""
++     
++     def __init__(self):
++         # Get map options from ladder service
++         maps = ladder_service.get_maps()
++         
++         options = []
++         for map_data in maps:
++             options.append(
++                 discord.SelectOption(
++                     label=map_data["name"],
++                     value=map_data["short_name"],
++                     description=f"Veto {map_data['name']}"
++                 )
++             )
++         
++         super().__init__(
++             placeholder="Select maps to veto (multiselect)...",
++             min_values=0,
++             max_values=len(options),
++             options=options,
++             row=1
++         )
++     
++     async def callback(self, interaction: discord.Interaction):
++         self.view.vetoed_maps = self.values
++         await self.view.update_embed(interaction)
++ 
++ 
++ class QueueView(discord.ui.View):
++     """Main queue view with race and map veto selections"""
++     
++     def __init__(self):
++         super().__init__(timeout=300)
++         self.selected_races = []
++         self.vetoed_maps = []
++         
++         # Add selection dropdowns
++         self.add_item(RaceSelect())
++         self.add_item(MapVetoSelect())
++     
++     async def update_embed(self, interaction: discord.Interaction):
++         """Update the embed with current selections"""
++         embed = discord.Embed(
++             title="🎮 Matchmaking Queue",
++             description="Configure your queue preferences",
++             color=discord.Color.blue()
++         )
++         
++         # Add race selection info
++         if self.selected_races:
++             race_names = [race_service.get_race_name(race) for race in self.selected_races]
++             embed.add_field(
++                 name="Selected Races",
++                 value=", ".join(race_names),
++                 inline=False
++             )
++         else:
++             embed.add_field(
++                 name="Selected Races",
++                 value="None selected",
++                 inline=False
++             )
++         
++         # Add map veto info
++         if self.vetoed_maps:
++             map_names = []
++             for map_code in self.vetoed_maps:
++                 map_name = ladder_service.get_map_name(map_code)
++                 map_names.append(map_name)
++             embed.add_field(
++                 name="Vetoed Maps",
++                 value=", ".join(map_names),
++                 inline=False
++             )
++         else:
++             embed.add_field(
++                 name="Vetoed Maps",
++                 value="No vetoes",
++                 inline=False
++             )
++         
++         await interaction.response.edit_message(embed=embed, view=self)
+```
+
+</details>
+
 ---
 
 I need to create the LadderConfigService that I referenced. Let me create that:
@@ -2886,6 +3321,79 @@ I need to create the LadderConfigService that I referenced. Let me create that:
 
 Tool use: **write**
 
+
+<details><summary>Edit file: src/backend/services/ladder_config_service.py</summary>
+
+**Chunk 1**
+Lines added: 60, lines removed: 1
+
+```diff
+@@ -1,1 +1,60 @@
+- 
++ """
++ Ladder configuration service.
++ 
++ This module defines the LadderConfigService class, which contains methods for:
++ - Loading ladder configuration from ladder_config.json
++ - Providing map data for UI components
++ 
++ Intended usage:
++     from backend.services.ladder_config_service import LadderConfigService
++ 
++     ladder_service = LadderConfigService()
++     maps = ladder_service.get_maps()
++ """
++ 
++ import json
++ from typing import List, Dict, Optional
++ 
++ 
++ class LadderConfigService:
++     """Service for managing ladder configuration data."""
++     
++     def __init__(self, config_path: str = "data/misc/ladder_config.json"):
++         self.config_path = config_path
++         self._maps_cache = None
++     
++     def get_maps(self) -> List[Dict[str, str]]:
++         """Get all available ladder maps."""
++         if self._maps_cache is None:
++             self._load_maps()
++         return self._maps_cache
++     
++     def _load_maps(self):
++         """Load maps from configuration file."""
++         try:
++             with open(self.config_path, "r", encoding="utf-8") as f:
++                 config = json.load(f)
++                 self._maps_cache = config.get("maps", [])
++         except (FileNotFoundError, json.JSONDecodeError, KeyError):
++             self._maps_cache = []
++     
++     def get_map_by_short_name(self, short_name: str) -> Optional[Dict[str, str]]:
++         """Get map data by short name."""
++         maps = self.get_maps()
++         for map_data in maps:
++             if map_data.get("short_name") == short_name:
++                 return map_data
++         return None
++     
++     def get_map_name(self, short_name: str) -> str:
++         """Get display name for map short name."""
++         map_data = self.get_map_by_short_name(short_name)
++         return map_data.get("name", short_name) if map_data else short_name
++     
++     def get_map_short_names(self) -> List[str]:
++         """Get list of all map short names."""
++         return [map_data.get("short_name") for map_data in self.get_maps() if map_data.get("short_name")]
++     
++     def get_map_names(self) -> List[str]:
++         """Get list of all map names."""
++         return [map_data.get("name") for map_data in self.get_maps() if map_data.get("name")]
+```
+
+</details>
+
 ---
 
 Now let me check for any linting errors and test the implementation:
@@ -2894,6 +3402,20 @@ Now let me check for any linting errors and test the implementation:
 ---
 
 Tool use: **read_lints**
+
+<details>
+          <summary>Read lints for 2 files</summary>
+      
+Lint paths:
+
+- `src/bot/interface/commands/queue_command.py`
+- `src/backend/services/ladder_config_service.py`
+
+Lint results
+
+
+**No lint errors found**
+</details>
 
 ---
 
@@ -3020,6 +3542,115 @@ First, let me create a CountryConfigService:
 ---
 
 Tool use: **write**
+
+
+<details><summary>Edit file: src/backend/services/country_config_service.py</summary>
+
+**Chunk 1**
+Lines added: 96, lines removed: 1
+
+```diff
+@@ -1,1 +1,96 @@
+- 
++ """
++ Country configuration service.
++ 
++ This module defines the CountryConfigService class, which contains methods for:
++ - Loading country data from countries.json
++ - Managing country filtering and pagination
++ - Providing country data for UI components
++ 
++ Intended usage:
++     from backend.services.country_config_service import CountryConfigService
++ 
++     country_service = CountryConfigService()
++     countries = country_service.get_common_countries()
++ """
++ 
++ import json
++ from typing import List, Dict, Optional, Tuple
++ 
++ 
++ class CountryConfigService:
++     """Service for managing country configuration data."""
++     
++     def __init__(self, config_path: str = "data/misc/countries.json"):
++         self.config_path = config_path
++         self._countries_cache = None
++         self._common_countries_cache = None
++     
++     def get_countries(self) -> List[Dict[str, any]]:
++         """Get all countries."""
++         if self._countries_cache is None:
++             self._load_countries()
++         return self._countries_cache
++     
++     def get_common_countries(self) -> List[Dict[str, any]]:
++         """Get common countries (those marked as common=True)."""
++         if self._common_countries_cache is None:
++             self._load_common_countries()
++         return self._common_countries_cache
++     
++     def _load_countries(self):
++         """Load countries from configuration file."""
++         try:
++             with open(self.config_path, "r", encoding="utf-8") as f:
++                 self._countries_cache = json.load(f)
++         except (FileNotFoundError, json.JSONDecodeError):
++             self._countries_cache = []
++     
++     def _load_common_countries(self):
++         """Load common countries from configuration file."""
++         countries = self.get_countries()
++         self._common_countries_cache = [c for c in countries if c.get("common", False)]
++     
++     def get_country_by_code(self, country_code: str) -> Optional[Dict[str, any]]:
++         """Get country data by code."""
++         countries = self.get_countries()
++         for country in countries:
++             if country.get("code") == country_code:
++                 return country
++         return None
++     
++     def get_country_name(self, country_code: str) -> str:
++         """Get display name for country code."""
++         country = self.get_country_by_code(country_code)
++         return country.get("name", country_code) if country else country_code
++     
++     def get_country_codes(self) -> List[str]:
++         """Get list of all country codes."""
++         return [country.get("code") for country in self.get_countries() if country.get("code")]
++     
++     def get_common_country_codes(self) -> List[str]:
++         """Get list of common country codes."""
++         return [country.get("code") for country in self.get_common_countries() if country.get("code")]
++     
++     def get_country_page_data(self, page: int, page_size: int = 25) -> Tuple[List[Dict], int]:
++         """Get paginated country data for UI dropdowns."""
++         common_countries = self.get_common_countries()
++         total_pages = max(1, (len(common_countries) + page_size - 1) // page_size)
++         
++         start_idx = (page - 1) * page_size
++         end_idx = start_idx + page_size
++         page_countries = common_countries[start_idx:end_idx]
++         
++         return page_countries, total_pages
++     
++     def get_country_names_for_codes(self, country_codes: List[str]) -> List[str]:
++         """Get country names for a list of country codes."""
++         return [self.get_country_name(code) for code in country_codes]
++     
++     def get_ordered_country_names(self, country_codes: List[str]) -> List[str]:
++         """Get country names in the same order as the dropdown (alphabetical with Other at end)."""
++         common_countries = self.get_common_countries()
++         all_country_codes = [c['code'] for c in common_countries]
++         
++         # Filter selected countries and maintain order
++         ordered_countries = [code for code in all_country_codes if code in country_codes]
++         return self.get_country_names_for_codes(ordered_countries)
+```
+
+</details>
 
 ---
 
@@ -3518,6 +4149,21 @@ Tool use: **todo_write**
 ---
 
 Tool use: **read_lints**
+
+<details>
+          <summary>Read lints for 3 files</summary>
+      
+Lint paths:
+
+- `src/backend/services/country_config_service.py`
+- `src/backend/services/leaderboard_service.py`
+- `src/bot/interface/commands/leaderboard_command.py`
+
+Lint results
+
+
+**No lint errors found**
+</details>
 
 ---
 

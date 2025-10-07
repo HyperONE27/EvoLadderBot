@@ -489,6 +489,225 @@ Lines added: 10, lines removed: 3
 
 Tool use: **write**
 
+
+<details><summary>Edit file: src/backend/db/models.py</summary>
+
+**Chunk 1**
+Lines added: 206, lines removed: 1
+
+```diff
+@@ -1,1 +1,206 @@
+- 
++ """Database models for EvoLadderBot."""
++ from datetime import datetime
++ from typing import List, Optional
++ from sqlalchemy import (
++     BigInteger, Boolean, Column, DateTime, Float, ForeignKey, 
++     Integer, String, Table, Text, JSON, Enum as SQLEnum, 
++     UniqueConstraint, CheckConstraint
++ )
++ from sqlalchemy.orm import declarative_base, relationship
++ from sqlalchemy.dialects.postgresql import ARRAY
++ import enum
++ 
++ Base = declarative_base()
++ 
++ 
++ class Race(enum.Enum):
++     """Enum for available races."""
++     BW_TERRAN = "bw_terran"
++     BW_ZERG = "bw_zerg" 
++     BW_PROTOSS = "bw_protoss"
++     SC2_TERRAN = "sc2_terran"
++     SC2_ZERG = "sc2_zerg"
++     SC2_PROTOSS = "sc2_protoss"
++ 
++ 
++ class MatchResult(enum.Enum):
++     """Enum for match results."""
++     PLAYER1_WIN = "player1_win"
++     PLAYER2_WIN = "player2_win"
++     DRAW = "draw"
++     CANCELLED = "cancelled"
++ 
++ 
++ class User(Base):
++     """User model storing player information and statistics."""
++     __tablename__ = "users"
++ 
++     # Primary key
++     id = Column(Integer, primary_key=True, autoincrement=True)
++     
++     # Discord integration
++     discord_id = Column(BigInteger, unique=True, nullable=False, index=True)
++     
++     # User identification
++     main_id = Column(String(12), nullable=True)  # 3-12 alphanumeric chars
++     alt_ids = Column(ARRAY(String(12)), default=[])  # Array of alternate IDs
++     battle_tag = Column(String(25), nullable=True)  # Format: Name#1234
++     
++     # Demographics
++     country_code = Column(String(2), nullable=True)  # ISO country code
++     region_code = Column(String(3), nullable=True)  # Region code from regions.json
++     
++     # Account status
++     terms_accepted = Column(Boolean, default=False, nullable=False)
++     terms_accepted_at = Column(DateTime, nullable=True)
++     setup_completed = Column(Boolean, default=False, nullable=False)
++     setup_completed_at = Column(DateTime, nullable=True)
++     
++     # Game preferences
++     map_vetoes = Column(ARRAY(String), default=[])  # Current map vetoes
++     last_queue_races = Column(ARRAY(String), default=[])  # Last races queued with
++     
++     # MMR for each race (starting at 1500)
++     mmr_bw_terran = Column(Float, default=1500.0, nullable=False)
++     mmr_bw_zerg = Column(Float, default=1500.0, nullable=False)
++     mmr_bw_protoss = Column(Float, default=1500.0, nullable=False)
++     mmr_sc2_terran = Column(Float, default=1500.0, nullable=False)
++     mmr_sc2_zerg = Column(Float, default=1500.0, nullable=False)
++     mmr_sc2_protoss = Column(Float, default=1500.0, nullable=False)
++     
++     # Statistics
++     wins_1v1 = Column(Integer, default=0, nullable=False)
++     losses_1v1 = Column(Integer, default=0, nullable=False)
++     draws_1v1 = Column(Integer, default=0, nullable=False)
++     
++     # Account management
++     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
++     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
++     last_active_at = Column(DateTime, nullable=True)
++     
++     # Moderation
++     is_banned = Column(Boolean, default=False, nullable=False)
++     ban_reason = Column(Text, nullable=True)
++     ban_expires_at = Column(DateTime, nullable=True)
++     
++     # Relationships
++     matches_as_player1 = relationship("Match", foreign_keys="Match.player1_id", back_populates="player1")
++     matches_as_player2 = relationship("Match", foreign_keys="Match.player2_id", back_populates="player2")
++     
++     def get_mmr(self, race: Race) -> float:
++         """Get MMR for a specific race."""
++         mmr_map = {
++             Race.BW_TERRAN: self.mmr_bw_terran,
++             Race.BW_ZERG: self.mmr_bw_zerg,
++             Race.BW_PROTOSS: self.mmr_bw_protoss,
++             Race.SC2_TERRAN: self.mmr_sc2_terran,
++             Race.SC2_ZERG: self.mmr_sc2_zerg,
++             Race.SC2_PROTOSS: self.mmr_sc2_protoss,
++         }
++         return mmr_map.get(race, 1500.0)
++     
++     def set_mmr(self, race: Race, value: float):
++         """Set MMR for a specific race."""
++         if race == Race.BW_TERRAN:
++             self.mmr_bw_terran = value
++         elif race == Race.BW_ZERG:
++             self.mmr_bw_zerg = value
++         elif race == Race.BW_PROTOSS:
++             self.mmr_bw_protoss = value
++         elif race == Race.SC2_TERRAN:
++             self.mmr_sc2_terran = value
++         elif race == Race.SC2_ZERG:
++             self.mmr_sc2_zerg = value
++         elif race == Race.SC2_PROTOSS:
++             self.mmr_sc2_protoss = value
++ 
++ 
++ class Match(Base):
++     """Match model storing game information."""
++     __tablename__ = "matches"
++     
++     # Primary key
++     id = Column(Integer, primary_key=True, autoincrement=True)
++     
++     # Players
++     player1_id = Column(Integer, ForeignKey("users.id"), nullable=False)
++     player2_id = Column(Integer, ForeignKey("users.id"), nullable=False)
++     
++     # Races played
++     player1_race = Column(SQLEnum(Race), nullable=False)
++     player2_race = Column(SQLEnum(Race), nullable=False)
++     
++     # Match details
++     map_name = Column(String(100), nullable=False)
++     server_region = Column(String(3), nullable=False)  # Region code
++     channel_name = Column(String(20), nullable=True)  # e.g., "scevo123"
++     
++     # Timing
++     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
++     started_at = Column(DateTime, nullable=True)
++     ended_at = Column(DateTime, nullable=True)
++     duration_seconds = Column(Integer, nullable=True)
++     
++     # Result
++     result = Column(SQLEnum(MatchResult), nullable=True)
++     
++     # MMR changes
++     player1_mmr_before = Column(Float, nullable=False)
++     player2_mmr_before = Column(Float, nullable=False)
++     player1_mmr_after = Column(Float, nullable=True)
++     player2_mmr_after = Column(Float, nullable=True)
++     player1_mmr_change = Column(Float, nullable=True)
++     player2_mmr_change = Column(Float, nullable=True)
++     
++     # Replay data (for future use)
++     replay_url = Column(Text, nullable=True)
++     replay_data = Column(JSON, nullable=True)  # Can store parsed replay info
++     
++     # Relationships
++     player1 = relationship("User", foreign_keys=[player1_id], back_populates="matches_as_player1")
++     player2 = relationship("User", foreign_keys=[player2_id], back_populates="matches_as_player2")
++     
++     # Constraints
++     __table_args__ = (
++         CheckConstraint("player1_id != player2_id", name="different_players"),
++     )
++ 
++ 
++ class MapPool(Base):
++     """Current map pool for the ladder."""
++     __tablename__ = "map_pool"
++     
++     id = Column(Integer, primary_key=True, autoincrement=True)
++     map_name = Column(String(100), unique=True, nullable=False)
++     is_active = Column(Boolean, default=True, nullable=False)
++     added_at = Column(DateTime, default=datetime.utcnow, nullable=False)
++     removed_at = Column(DateTime, nullable=True)
++     order_index = Column(Integer, nullable=False)  # For consistent ordering
++ 
++ 
++ class QueueEntry(Base):
++     """Tracks players currently in queue."""
++     __tablename__ = "queue_entries"
++     
++     id = Column(Integer, primary_key=True, autoincrement=True)
++     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
++     discord_id = Column(BigInteger, nullable=False)  # For quick lookup
++     
++     # Queue preferences
++     races = Column(ARRAY(String), nullable=False)  # Races they're queuing with
++     map_vetoes = Column(ARRAY(String), default=[])  # Maps they've vetoed
++     
++     # Timing
++     joined_at = Column(DateTime, default=datetime.utcnow, nullable=False)
++     expires_at = Column(DateTime, nullable=False)  # Auto-remove after timeout
++     
++     # Status
++     is_active = Column(Boolean, default=True, nullable=False)
++     
++     # Relationships
++     user = relationship("User", backref="queue_entries")
++     
++     # Constraints
++     __table_args__ = (
++         UniqueConstraint("user_id", "is_active", name="one_active_queue_per_user"),
++     )
+```
+
+</details>
+
 ---
 
 <think><details><summary>Thought Process</summary>Now let me create the database connection and session management.</details></think>
@@ -496,6 +715,112 @@ Tool use: **write**
 ---
 
 Tool use: **write**
+
+
+<details><summary>Edit file: src/backend/db/database.py</summary>
+
+**Chunk 1**
+Lines added: 93, lines removed: 1
+
+```diff
+@@ -1,1 +1,93 @@
+- 
++ """Database connection and session management."""
++ import os
++ from typing import AsyncGenerator
++ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
++ from sqlalchemy.orm import sessionmaker
++ from sqlalchemy import create_engine
++ from contextlib import asynccontextmanager
++ from .models import Base
++ 
++ # Get database URL from environment
++ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/evoladderbot")
++ 
++ # Convert to async URL if needed
++ if DATABASE_URL.startswith("postgresql://"):
++     ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
++ else:
++     ASYNC_DATABASE_URL = DATABASE_URL
++ 
++ # Create async engine
++ async_engine = create_async_engine(
++     ASYNC_DATABASE_URL,
++     echo=os.getenv("DATABASE_ECHO", "false").lower() == "true",
++     pool_size=20,
++     max_overflow=40,
++     pool_pre_ping=True,
++ )
++ 
++ # Create async session factory
++ AsyncSessionLocal = async_sessionmaker(
++     async_engine,
++     class_=AsyncSession,
++     expire_on_commit=False,
++     autoflush=False,
++     autocommit=False,
++ )
++ 
++ # For synchronous operations (like initial setup)
++ sync_engine = create_engine(
++     DATABASE_URL,
++     echo=os.getenv("DATABASE_ECHO", "false").lower() == "true",
++ )
++ 
++ SyncSessionLocal = sessionmaker(
++     bind=sync_engine,
++     autoflush=False,
++     autocommit=False,
++ )
++ 
++ 
++ async def init_db():
++     """Initialize the database schema."""
++     async with async_engine.begin() as conn:
++         await conn.run_sync(Base.metadata.create_all)
++ 
++ 
++ async def get_session() -> AsyncGenerator[AsyncSession, None]:
++     """Get an async database session."""
++     async with AsyncSessionLocal() as session:
++         try:
++             yield session
++             await session.commit()
++         except Exception:
++             await session.rollback()
++             raise
++         finally:
++             await session.close()
++ 
++ 
++ @asynccontextmanager
++ async def get_db_session():
++     """Context manager for database sessions."""
++     async with AsyncSessionLocal() as session:
++         try:
++             yield session
++             await session.commit()
++         except Exception:
++             await session.rollback()
++             raise
++         finally:
++             await session.close()
++ 
++ 
++ def get_sync_session():
++     """Get a synchronous database session."""
++     session = SyncSessionLocal()
++     try:
++         yield session
++         session.commit()
++     except Exception:
++         session.rollback()
++         raise
++     finally:
++         session.close()
+```
+
+</details>
 
 ---
 
@@ -505,6 +830,88 @@ Tool use: **write**
 
 Tool use: **write**
 
+
+<details><summary>Edit file: src/backend/db/create_table.py</summary>
+
+**Chunk 1**
+Lines added: 69, lines removed: 1
+
+```diff
+@@ -1,1 +1,69 @@
+- 
++ """Script to create database tables."""
++ import asyncio
++ import os
++ from dotenv import load_dotenv
++ from sqlalchemy import text
++ from .database import async_engine, init_db
++ from .models import Base, MapPool
++ 
++ # Default map pool for initial setup
++ DEFAULT_MAPS = [
++     "Eclipse",
++     "Polypoid",
++     "Goldenaura", 
++     "Heartbreak Ridge",
++     "Neo Sylphid",
++     "Radiance",
++     "Vermeer",
++     "Butter",
++     "Dominator",
++ ]
++ 
++ 
++ async def create_tables():
++     """Create all database tables."""
++     print("Creating database tables...")
++     await init_db()
++     print("✅ Tables created successfully!")
++ 
++ 
++ async def populate_initial_data():
++     """Populate initial data like map pool."""
++     from .database import get_db_session
++     
++     async with get_db_session() as session:
++         # Check if map pool already exists
++         result = await session.execute(text("SELECT COUNT(*) FROM map_pool"))
++         count = result.scalar()
++         
++         if count == 0:
++             print("Populating initial map pool...")
++             for idx, map_name in enumerate(DEFAULT_MAPS):
++                 map_entry = MapPool(
++                     map_name=map_name,
++                     is_active=True,
++                     order_index=idx
++                 )
++                 session.add(map_entry)
++             
++             await session.commit()
++             print(f"✅ Added {len(DEFAULT_MAPS)} maps to the pool!")
++         else:
++             print(f"ℹ️ Map pool already contains {count} maps.")
++ 
++ 
++ async def main():
++     """Main function to set up the database."""
++     load_dotenv()
++     
++     # Create tables
++     await create_tables()
++     
++     # Populate initial data
++     await populate_initial_data()
++     
++     print("\n🎉 Database setup complete!")
++ 
++ 
++ if __name__ == "__main__":
++     asyncio.run(main())
+```
+
+</details>
+
 ---
 
 <think><details><summary>Thought Process</summary>Now let me create the __init__.py file for the db module.</details></think>
@@ -512,6 +919,55 @@ Tool use: **write**
 ---
 
 Tool use: **write**
+
+
+<details><summary>Edit file: src/backend/db/__init__.py</summary>
+
+**Chunk 1**
+Lines added: 36, lines removed: 1
+
+```diff
+@@ -1,1 +1,36 @@
+- 
++ """Database module for EvoLadderBot."""
++ from .database import (
++     get_session, 
++     get_db_session,
++     get_sync_session,
++     init_db,
++     async_engine,
++     AsyncSessionLocal,
++ )
++ from .models import (
++     Base,
++     User,
++     Match,
++     MapPool,
++     QueueEntry,
++     Race,
++     MatchResult,
++ )
++ 
++ __all__ = [
++     # Database functions
++     "get_session",
++     "get_db_session", 
++     "get_sync_session",
++     "init_db",
++     "async_engine",
++     "AsyncSessionLocal",
++     # Models
++     "Base",
++     "User",
++     "Match",
++     "MapPool",
++     "QueueEntry",
++     "Race",
++     "MatchResult",
++ ]
+```
+
+</details>
 
 ---
 
@@ -537,6 +993,113 @@ Tool use: **todo_write**
 
 Tool use: **write**
 
+
+<details><summary>Edit file: src/backend/services/ratings.py</summary>
+
+**Chunk 1**
+Lines added: 94, lines removed: 1
+
+```diff
+@@ -1,1 +1,94 @@
+- 
++ """Rating calculation service using Elo system."""
++ from typing import Tuple
++ import math
++ from ..db.models import Race, MatchResult
++ 
++ 
++ class RatingCalculator:
++     """Calculate rating changes using the Elo rating system."""
++     
++     # K-factor determines how much ratings can change
++     K_FACTOR_NEW = 40      # For players with < 30 games
++     K_FACTOR_MID = 32      # For players with 30-100 games  
++     K_FACTOR_STABLE = 24   # For players with > 100 games
++     
++     # Initial rating for new players
++     INITIAL_RATING = 1500.0
++     
++     @staticmethod
++     def get_k_factor(games_played: int) -> float:
++         """Get K-factor based on number of games played."""
++         if games_played < 30:
++             return RatingCalculator.K_FACTOR_NEW
++         elif games_played < 100:
++             return RatingCalculator.K_FACTOR_MID
++         else:
++             return RatingCalculator.K_FACTOR_STABLE
++     
++     @staticmethod
++     def calculate_expected_score(rating_a: float, rating_b: float) -> float:
++         """Calculate expected score for player A against player B."""
++         return 1.0 / (1.0 + math.pow(10, (rating_b - rating_a) / 400.0))
++     
++     @staticmethod
++     def calculate_rating_change(
++         rating_a: float,
++         rating_b: float,
++         actual_score: float,
++         k_factor: float
++     ) -> float:
++         """Calculate rating change for a player."""
++         expected_score = RatingCalculator.calculate_expected_score(rating_a, rating_b)
++         return k_factor * (actual_score - expected_score)
++     
++     @staticmethod
++     def calculate_match_ratings(
++         player1_rating: float,
++         player2_rating: float,
++         player1_games: int,
++         player2_games: int,
++         result: MatchResult
++     ) -> Tuple[float, float, float, float]:
++         """
++         Calculate new ratings after a match.
++         
++         Returns:
++             Tuple of (player1_new_rating, player2_new_rating, 
++                      player1_change, player2_change)
++         """
++         # Get K-factors
++         k1 = RatingCalculator.get_k_factor(player1_games)
++         k2 = RatingCalculator.get_k_factor(player2_games)
++         
++         # Determine actual scores based on result
++         if result == MatchResult.PLAYER1_WIN:
++             score1, score2 = 1.0, 0.0
++         elif result == MatchResult.PLAYER2_WIN:
++             score1, score2 = 0.0, 1.0
++         elif result == MatchResult.DRAW:
++             score1, score2 = 0.5, 0.5
++         else:  # Cancelled
++             return player1_rating, player2_rating, 0.0, 0.0
++         
++         # Calculate rating changes
++         change1 = RatingCalculator.calculate_rating_change(
++             player1_rating, player2_rating, score1, k1
++         )
++         change2 = RatingCalculator.calculate_rating_change(
++             player2_rating, player1_rating, score2, k2
++         )
++         
++         # Calculate new ratings
++         new_rating1 = player1_rating + change1
++         new_rating2 = player2_rating + change2
++         
++         # Ensure ratings don't go below 0
++         new_rating1 = max(0.0, new_rating1)
++         new_rating2 = max(0.0, new_rating2)
++         
++         return new_rating1, new_rating2, change1, change2
++     
++     @staticmethod
++     def get_win_probability(rating_a: float, rating_b: float) -> float:
++         """Get probability of player A winning against player B."""
++         return RatingCalculator.calculate_expected_score(rating_a, rating_b)
+```
+
+</details>
+
 ---
 
 <think><details><summary>Thought Process</summary>Now let me create the user management service.</details></think>
@@ -545,6 +1108,199 @@ Tool use: **write**
 
 Tool use: **write**
 
+
+<details><summary>Edit file: src/backend/services/user_service.py</summary>
+
+**Chunk 1**
+Lines added: 180, lines removed: 1
+
+```diff
+@@ -1,1 +1,180 @@
+- 
++ """User management service."""
++ from datetime import datetime
++ from typing import Optional, Dict, List
++ from sqlalchemy import select, update
++ from sqlalchemy.ext.asyncio import AsyncSession
++ from ..db.models import User, Race
++ 
++ 
++ class UserService:
++     """Service for managing user data and operations."""
++     
++     @staticmethod
++     async def get_user_by_discord_id(session: AsyncSession, discord_id: int) -> Optional[User]:
++         """Get a user by Discord ID."""
++         result = await session.execute(
++             select(User).where(User.discord_id == discord_id)
++         )
++         return result.scalar_one_or_none()
++     
++     @staticmethod
++     async def create_user(session: AsyncSession, discord_id: int) -> User:
++         """Create a new user with default values."""
++         user = User(
++             discord_id=discord_id,
++             terms_accepted=False,
++             setup_completed=False,
++         )
++         session.add(user)
++         await session.flush()
++         return user
++     
++     @staticmethod
++     async def accept_terms_of_service(session: AsyncSession, discord_id: int) -> User:
++         """Mark that a user has accepted the Terms of Service."""
++         user = await UserService.get_user_by_discord_id(session, discord_id)
++         
++         if not user:
++             user = await UserService.create_user(session, discord_id)
++         
++         user.terms_accepted = True
++         user.terms_accepted_at = datetime.utcnow()
++         await session.flush()
++         return user
++     
++     @staticmethod
++     async def has_accepted_terms(session: AsyncSession, discord_id: int) -> bool:
++         """Check if a user has accepted the Terms of Service."""
++         user = await UserService.get_user_by_discord_id(session, discord_id)
++         return user is not None and user.terms_accepted
++     
++     @staticmethod
++     async def has_completed_setup(session: AsyncSession, discord_id: int) -> bool:
++         """Check if a user has completed setup."""
++         user = await UserService.get_user_by_discord_id(session, discord_id)
++         return user is not None and user.setup_completed
++     
++     @staticmethod
++     async def update_user_setup(
++         session: AsyncSession,
++         discord_id: int,
++         main_id: str,
++         alt_ids: List[str],
++         battle_tag: str,
++         country_code: str,
++         region_code: str
++     ) -> User:
++         """Update user information from setup."""
++         user = await UserService.get_user_by_discord_id(session, discord_id)
++         
++         if not user:
++             raise ValueError(f"User with Discord ID {discord_id} not found")
++         
++         user.main_id = main_id
++         user.alt_ids = alt_ids
++         user.battle_tag = battle_tag
++         user.country_code = country_code
++         user.region_code = region_code
++         user.setup_completed = True
++         user.setup_completed_at = datetime.utcnow()
++         
++         await session.flush()
++         return user
++     
++     @staticmethod
++     async def update_country(
++         session: AsyncSession,
++         discord_id: int,
++         country_code: str
++     ) -> User:
++         """Update just the user's country."""
++         user = await UserService.get_user_by_discord_id(session, discord_id)
++         
++         if not user:
++             raise ValueError(f"User with Discord ID {discord_id} not found")
++         
++         user.country_code = country_code
++         await session.flush()
++         return user
++     
++     @staticmethod
++     async def get_user_mmr(session: AsyncSession, discord_id: int) -> Dict[str, float]:
++         """Get all MMR values for a user."""
++         user = await UserService.get_user_by_discord_id(session, discord_id)
++         
++         if not user:
++             raise ValueError(f"User with Discord ID {discord_id} not found")
++         
++         return {
++             "bw_terran": user.mmr_bw_terran,
++             "bw_zerg": user.mmr_bw_zerg,
++             "bw_protoss": user.mmr_bw_protoss,
++             "sc2_terran": user.mmr_sc2_terran,
++             "sc2_zerg": user.mmr_sc2_zerg,
++             "sc2_protoss": user.mmr_sc2_protoss,
++         }
++     
++     @staticmethod
++     async def update_user_stats(
++         session: AsyncSession,
++         user_id: int,
++         win: bool = False,
++         loss: bool = False,
++         draw: bool = False
++     ) -> User:
++         """Update user win/loss/draw statistics."""
++         user = await session.get(User, user_id)
++         
++         if not user:
++             raise ValueError(f"User with ID {user_id} not found")
++         
++         if win:
++             user.wins_1v1 += 1
++         elif loss:
++             user.losses_1v1 += 1
++         elif draw:
++             user.draws_1v1 += 1
++         
++         user.last_active_at = datetime.utcnow()
++         await session.flush()
++         return user
++     
++     @staticmethod
++     async def update_user_preferences(
++         session: AsyncSession,
++         discord_id: int,
++         map_vetoes: Optional[List[str]] = None,
++         last_queue_races: Optional[List[str]] = None
++     ) -> User:
++         """Update user preferences like map vetoes and last queued races."""
++         user = await UserService.get_user_by_discord_id(session, discord_id)
++         
++         if not user:
++             raise ValueError(f"User with Discord ID {discord_id} not found")
++         
++         if map_vetoes is not None:
++             user.map_vetoes = map_vetoes
++         
++         if last_queue_races is not None:
++             user.last_queue_races = last_queue_races
++         
++         await session.flush()
++         return user
++     
++     @staticmethod
++     async def reset_all_mmr(session: AsyncSession):
++         """Reset all user MMRs to initial value (admin function)."""
++         await session.execute(
++             update(User).values(
++                 mmr_bw_terran=1500.0,
++                 mmr_bw_zerg=1500.0,
++                 mmr_bw_protoss=1500.0,
++                 mmr_sc2_terran=1500.0,
++                 mmr_sc2_zerg=1500.0,
++                 mmr_sc2_protoss=1500.0,
++                 wins_1v1=0,
++                 losses_1v1=0,
++                 draws_1v1=0,
++             )
++         )
++         await session.flush()
+```
+
+</details>
+
 ---
 
 <think><details><summary>Thought Process</summary>Now let me create the region mapping service that handles cross-table server selection.</details></think>
@@ -552,6 +1308,169 @@ Tool use: **write**
 ---
 
 Tool use: **write**
+
+
+<details><summary>Edit file: src/backend/services/region_mapping.py</summary>
+
+**Chunk 1**
+Lines added: 150, lines removed: 1
+
+```diff
+@@ -1,1 +1,150 @@
+- 
++ """Region mapping service for server selection."""
++ import json
++ import pandas as pd
++ from pathlib import Path
++ from typing import Optional, Tuple, Dict, List
++ 
++ 
++ class RegionMappingService:
++     """Service for determining optimal game servers based on player regions."""
++     
++     def __init__(self):
++         """Initialize the region mapping service."""
++         self._load_cross_table()
++         self._load_regions()
++     
++     def _load_cross_table(self):
++         """Load the cross-table data for server selection."""
++         # Try to load from Excel file first, fallback to creating default
++         try:
++             data_path = Path(__file__).parent.parent.parent.parent / "data" / "misc"
++             xlsx_path = data_path / "cross_table.xlsx"
++             
++             if xlsx_path.exists():
++                 self.cross_table = pd.read_excel(xlsx_path, index_col=0)
++             else:
++                 # Create a default cross-table if file doesn't exist
++                 self.cross_table = self._create_default_cross_table()
++         except Exception:
++             self.cross_table = self._create_default_cross_table()
++     
++     def _load_regions(self):
++         """Load region data."""
++         data_path = Path(__file__).parent.parent.parent.parent / "data" / "misc"
++         with open(data_path / "regions.json", "r", encoding="utf-8") as f:
++             regions_list = json.load(f)
++         
++         # Create lookup dictionaries
++         self.regions_by_code = {r["code"]: r for r in regions_list}
++         self.regions_by_number = {r["number"]: r for r in regions_list}
++     
++     def _create_default_cross_table(self) -> pd.DataFrame:
++         """Create a default cross-table for server selection."""
++         # Default servers based on geographic proximity
++         # This is a simplified version - actual cross-table should be more nuanced
++         regions = ["NAW", "NAC", "NAE", "CAM", "SAM", "EUW", "EUE", "AFR", 
++                   "MEA", "SEA", "KRJ", "CHN", "THM", "OCE", "USB", "FER"]
++         
++         # Initialize with all NAC (Central North America) as default
++         data = {}
++         for region in regions:
++             data[region] = ["NAC"] * len(regions)
++         
++         df = pd.DataFrame(data, index=regions)
++         
++         # Set up some logical server selections
++         # North America regions prefer NAC
++         for na_region in ["NAW", "NAC", "NAE"]:
++             df.loc[na_region, na_region] = na_region
++         
++         # Europe regions prefer EUW
++         for eu_region in ["EUW", "EUE"]:
++             df.loc[eu_region, eu_region] = eu_region
++             df.loc["EUW", "EUE"] = "EUW"
++             df.loc["EUE", "EUW"] = "EUW"
++         
++         # Asia regions prefer KRJ
++         for asia_region in ["KRJ", "CHN", "THM", "SEA"]:
++             df.loc[asia_region, asia_region] = asia_region
++             df.loc["KRJ", ["CHN", "THM", "SEA"]] = "KRJ"
++             df.loc[["CHN", "THM", "SEA"], "KRJ"] = "KRJ"
++         
++         # Oceania prefers OCE
++         df.loc["OCE", "OCE"] = "OCE"
++         df.loc["OCE", ["SEA", "THM"]] = "SEA"
++         df.loc[["SEA", "THM"], "OCE"] = "SEA"
++         
++         # South America prefers SAM
++         df.loc["SAM", "SAM"] = "SAM"
++         df.loc["SAM", ["NAE", "CAM"]] = "NAE"
++         
++         return df
++     
++     def get_best_server(self, region1: str, region2: str) -> str:
++         """
++         Get the best server for two players based on their regions.
++         
++         Args:
++             region1: Region code of player 1
++             region2: Region code of player 2
++             
++         Returns:
++             Region code of the best server
++         """
++         if region1 not in self.cross_table.index or region2 not in self.cross_table.columns:
++             # Fallback to NAC if regions not found
++             return "NAC"
++         
++         return self.cross_table.loc[region1, region2]
++     
++     def get_server_name(self, server_code: str) -> str:
++         """Get the full name of a server from its code."""
++         region = self.regions_by_code.get(server_code, {})
++         return region.get("name", f"Unknown ({server_code})")
++     
++     def get_all_servers(self) -> List[Dict[str, str]]:
++         """Get all available servers."""
++         return [
++             {"code": code, "name": region["name"]}
++             for code, region in self.regions_by_code.items()
++         ]
++     
++     def estimate_ping_quality(self, region1: str, region2: str, server: str) -> str:
++         """
++         Estimate the ping quality for a match.
++         
++         Returns one of: "Excellent", "Good", "Fair", "Poor"
++         """
++         # Simple heuristic based on geographic distance
++         # In reality, this would use actual latency data
++         
++         # If both players are in the same region as the server
++         if region1 == server and region2 == server:
++             return "Excellent"
++         
++         # If one player is in the server region
++         if region1 == server or region2 == server:
++             return "Good"
++         
++         # Check if regions are geographically close
++         close_regions = {
++             "NAW": ["NAC", "NAE"],
++             "NAC": ["NAW", "NAE"], 
++             "NAE": ["NAC", "NAW", "CAM"],
++             "EUW": ["EUE"],
++             "EUE": ["EUW"],
++             "KRJ": ["CHN", "THM"],
++             "CHN": ["KRJ", "THM", "SEA"],
++             "THM": ["CHN", "KRJ", "SEA"],
++             "SEA": ["THM", "CHN", "OCE"],
++             "OCE": ["SEA"],
++         }
++         
++         region1_close = close_regions.get(region1, [])
++         region2_close = close_regions.get(region2, [])
++         
++         if (server in region1_close or region1 in close_regions.get(server, [])) and \
++            (server in region2_close or region2 in close_regions.get(server, [])):
++             return "Fair"
++         
++         return "Poor"
+```
+
+</details>
 
 ---
 
@@ -564,6 +1483,494 @@ Now let me update the matchmaking service with the actual implementation.</detai
 ---
 
 Tool use: **write**
+
+
+<details><summary>Edit file: src/backend/services/matchmaking.py</summary>
+
+**Chunk 1**
+Lines added: 366, lines removed: 107
+
+```diff
+@@ -1,110 +1,369 @@
++ """Matchmaking service for ladder queue management."""
+  import asyncio
+- from typing import List, Optional
+- 
+- class Player:
+-     def __init__(self, player_id: int, name: str):
+-         self.player_id = player_id
+-         self.name = name
+- 
+-     def __repr__(self):
+-         return f"Player({self.player_id}, {self.name})"
+- 
+- 
+- class Matchmaker:
+-     def __init__(self, players: Optional[List[Player]] = None):
+-         self.players: List[Player] = players or []
+-         self.running = False
+- 
+-     def add_player(self, player: Player):
+-         """Add a player to the matchmaking pool."""
+-         print(f"👤 {player.name} joined the pool.")
+-         self.players.append(player)
+- 
+-     def remove_player(self, player: Player):
+-         """Remove a player from the matchmaking pool."""
+-         self.players = [p for p in self.players if p.player_id != player.player_id]
+- 
+-     async def is_valid_match(self, p1: Player, p2: Player) -> bool:
+-         """Check if two players are a valid match (mock: always True)."""
+-         print(f"   🔍 Checking if {p1.name} vs {p2.name} is valid...")
+-         await asyncio.sleep(0.2)  # simulate some processing
+-         return True
+- 
+-     async def attempt_match(self):
+-         """Try to find and process all valid matches."""
+-         if len(self.players) < 2:
+-             print("⚠️  Not enough players to match.")
+-             return
+- 
+-         matched = []
+-         used = set()
+- 
+-         print("🎯 Attempting to match players...")
+- 
+-         for i, p1 in enumerate(self.players):
+-             if p1.player_id in used:
++ import random
++ import string
++ from datetime import datetime, timedelta
++ from typing import List, Optional, Tuple, Dict, Set
++ from sqlalchemy import select, and_, or_, delete
++ from sqlalchemy.ext.asyncio import AsyncSession
++ from ..db.models import User, QueueEntry, MapPool, Match, Race, MatchResult
++ from .ratings import RatingCalculator
++ from .region_mapping import RegionMappingService
++ 
++ 
++ class MatchmakingService:
++     """Service for managing the matchmaking queue and creating matches."""
++     
++     # Queue timeout in seconds (5 minutes)
++     QUEUE_TIMEOUT = 300
++     
++     # MMR difference thresholds
++     STRICT_MMR_THRESHOLD = 200   # Initial strict matching
++     LOOSE_MMR_THRESHOLD = 500    # After 2 minutes
++     MAX_MMR_THRESHOLD = 1000     # After 4 minutes
++     
++     # Time thresholds for relaxing MMR requirements
++     STRICT_TIME = 0              # 0-2 minutes
++     LOOSE_TIME = 120            # 2-4 minutes  
++     MAX_TIME = 240              # 4+ minutes
++     
++     def __init__(self):
++         """Initialize the matchmaking service."""
++         self.region_service = RegionMappingService()
++     
++     @staticmethod
++     async def add_to_queue(
++         session: AsyncSession,
++         user: User,
++         races: List[str],
++         map_vetoes: List[str]
++     ) -> QueueEntry:
++         """Add a player to the matchmaking queue."""
++         # Remove any existing queue entries for this user
++         await session.execute(
++             delete(QueueEntry).where(
++                 and_(
++                     QueueEntry.user_id == user.id,
++                     QueueEntry.is_active == True
++                 )
++             )
++         )
++         
++         # Create new queue entry
++         queue_entry = QueueEntry(
++             user_id=user.id,
++             discord_id=user.discord_id,
++             races=races,
++             map_vetoes=map_vetoes,
++             expires_at=datetime.utcnow() + timedelta(seconds=MatchmakingService.QUEUE_TIMEOUT),
++             is_active=True
++         )
++         
++         session.add(queue_entry)
++         await session.flush()
++         return queue_entry
++     
++     @staticmethod
++     async def remove_from_queue(session: AsyncSession, discord_id: int) -> bool:
++         """Remove a player from the queue."""
++         result = await session.execute(
++             select(QueueEntry).where(
++                 and_(
++                     QueueEntry.discord_id == discord_id,
++                     QueueEntry.is_active == True
++                 )
++             )
++         )
++         queue_entry = result.scalar_one_or_none()
++         
++         if queue_entry:
++             queue_entry.is_active = False
++             await session.flush()
++             return True
++         return False
++     
++     @staticmethod
++     async def get_queue_position(session: AsyncSession, discord_id: int) -> Optional[Tuple[int, int]]:
++         """Get a player's position in queue. Returns (position, total_in_queue)."""
++         # Get all active queue entries ordered by join time
++         result = await session.execute(
++             select(QueueEntry).where(QueueEntry.is_active == True).order_by(QueueEntry.joined_at)
++         )
++         entries = result.scalars().all()
++         
++         position = None
++         for i, entry in enumerate(entries):
++             if entry.discord_id == discord_id:
++                 position = i + 1
++                 break
++         
++         if position is None:
++             return None
++             
++         return position, len(entries)
++     
++     @staticmethod
++     async def find_matches(session: AsyncSession) -> List[Tuple[QueueEntry, QueueEntry, Dict]]:
++         """Find all possible matches in the current queue."""
++         # Clean up expired entries
++         await session.execute(
++             delete(QueueEntry).where(
++                 or_(
++                     QueueEntry.expires_at < datetime.utcnow(),
++                     QueueEntry.is_active == False
++                 )
++             )
++         )
++         
++         # Get all active queue entries with their users
++         result = await session.execute(
++             select(QueueEntry).where(QueueEntry.is_active == True)
++             .options(selectinload(QueueEntry.user))
++             .order_by(QueueEntry.joined_at)
++         )
++         entries = list(result.scalars().all())
++         
++         matches = []
++         used_entries = set()
++         
++         # Try to match players
++         for i, entry1 in enumerate(entries):
++             if entry1.id in used_entries:
+                  continue
+-             for p2 in self.players[i + 1:]:
+-                 if p2.player_id in used:
++                 
++             for entry2 in entries[i+1:]:
++                 if entry2.id in used_entries:
++                     continue
++                 
++                 # Check if match is valid
++                 match_info = await MatchmakingService._evaluate_match(
++                     session, entry1, entry2
++                 )
++                 
++                 if match_info:
++                     matches.append((entry1, entry2, match_info))
++                     used_entries.add(entry1.id)
++                     used_entries.add(entry2.id)
++                     break
++         
++         return matches
++     
++     @staticmethod
++     async def _evaluate_match(
++         session: AsyncSession,
++         entry1: QueueEntry,
++         entry2: QueueEntry
++     ) -> Optional[Dict]:
++         """Evaluate if two queue entries can be matched."""
++         user1 = entry1.user
++         user2 = entry2.user
++         
++         # Check if one player has BW races and the other has SC2 races
++         entry1_bw = any(race.startswith("bw_") for race in entry1.races)
++         entry1_sc2 = any(race.startswith("sc2_") for race in entry1.races)
++         entry2_bw = any(race.startswith("bw_") for race in entry2.races)
++         entry2_sc2 = any(race.startswith("sc2_") for race in entry2.races)
++         
++         # Valid match requires one BW and one SC2 player
++         if not ((entry1_bw and entry2_sc2) or (entry1_sc2 and entry2_bw)):
++             return None
++         
++         # Calculate time in queue
++         now = datetime.utcnow()
++         time1 = (now - entry1.joined_at).total_seconds()
++         time2 = (now - entry2.joined_at).total_seconds()
++         max_wait = max(time1, time2)
++         
++         # Determine MMR threshold based on wait time
++         if max_wait < MatchmakingService.LOOSE_TIME:
++             mmr_threshold = MatchmakingService.STRICT_MMR_THRESHOLD
++         elif max_wait < MatchmakingService.MAX_TIME:
++             mmr_threshold = MatchmakingService.LOOSE_MMR_THRESHOLD
++         else:
++             mmr_threshold = MatchmakingService.MAX_MMR_THRESHOLD
++         
++         # Find best race matchup based on MMR
++         best_matchup = None
++         best_mmr_diff = float('inf')
++         
++         for race1 in entry1.races:
++             race1_enum = Race(race1)
++             mmr1 = user1.get_mmr(race1_enum)
++             
++             for race2 in entry2.races:
++                 race2_enum = Race(race2)
++                 mmr2 = user2.get_mmr(race2_enum)
++                 
++                 # Check if valid BW vs SC2
++                 if not ((race1.startswith("bw_") and race2.startswith("sc2_")) or 
++                        (race1.startswith("sc2_") and race2.startswith("bw_"))):
+                      continue
+-                 if await self.is_valid_match(p1, p2):
+-                     print(f"✅ Match found: {p1.name} vs {p2.name}")
+-                     matched.append((p1, p2))
+-                     used.add(p1.player_id)
+-                     used.add(p2.player_id)
+-                     break  # move on to next unmatched player
+- 
+-         for p1, p2 in matched:
+-             self.remove_player(p1)
+-             self.remove_player(p2)
+- 
+-         if not matched:
+-             print("❌ No valid matches this round.")
+- 
+-     async def run(self):
+-         """Continuously try to match players every 5 seconds."""
+-         self.running = True
+-         while self.running:
+-             print("\n⏳ Waiting 5 seconds before next matchmaking attempt...")
+-             await asyncio.sleep(5)
+-             print("⏰ 5 seconds passed, looking for matches...")
+-             await self.attempt_match()
+- 
+-     def stop(self):
+-         """Stop matchmaking loop."""
+-         self.running = False
+- 
+- 
+- # -----------------------------
+- # Simulation
+- # -----------------------------
+- async def simulate_player_joins(mm: Matchmaker):
+-     """Simulate players joining over time."""
+-     player_id = 1
+-     while mm.running:
+-         await asyncio.sleep(1)  # new player joins every 3 seconds
+-         new_player = Player(player_id, f"Player{player_id}")
+-         mm.add_player(new_player)
+-         player_id += 1
+- 
+- 
+- async def main():
+-     mm = Matchmaker()
+- 
+-     # Start matchmaking loop
+-     task_matchmaker = asyncio.create_task(mm.run())
+- 
+-     # Start player join simulation
+-     task_joins = asyncio.create_task(simulate_player_joins(mm))
+- 
+-     # Let simulation run for 30 seconds
+-     await asyncio.sleep(3000)
+- 
+-     # Stop everything
+-     mm.stop()
+-     await task_matchmaker
+-     task_joins.cancel()
+- 
+- 
+- if __name__ == "__main__":
+-     asyncio.run(main())
++                 
++                 mmr_diff = abs(mmr1 - mmr2)
++                 
++                 if mmr_diff <= mmr_threshold and mmr_diff < best_mmr_diff:
++                     best_mmr_diff = mmr_diff
++                     best_matchup = (race1_enum, race2_enum, mmr1, mmr2)
++         
++         if not best_matchup:
++             return None
++         
++         race1, race2, mmr1, mmr2 = best_matchup
++         
++         # Select map (excluding vetoes)
++         all_vetoes = set(entry1.map_vetoes + entry2.map_vetoes)
++         map_name = await MatchmakingService._select_map(session, all_vetoes)
++         
++         if not map_name:
++             return None
++         
++         # Get best server
++         server = MatchmakingService._get_best_server(user1, user2)
++         
++         # Generate channel name
++         channel = MatchmakingService._generate_channel_name()
++         
++         return {
++             "player1_race": race1,
++             "player2_race": race2,
++             "player1_mmr": mmr1,
++             "player2_mmr": mmr2,
++             "map_name": map_name,
++             "server_region": server,
++             "channel_name": channel,
++             "mmr_difference": best_mmr_diff,
++             "wait_time": max_wait,
++         }
++     
++     @staticmethod
++     async def _select_map(session: AsyncSession, vetoes: Set[str]) -> Optional[str]:
++         """Select a random map excluding vetoes."""
++         result = await session.execute(
++             select(MapPool).where(
++                 and_(
++                     MapPool.is_active == True,
++                     ~MapPool.map_name.in_(vetoes) if vetoes else True
++                 )
++             )
++         )
++         available_maps = result.scalars().all()
++         
++         if not available_maps:
++             # If all maps are vetoed, ignore vetoes
++             result = await session.execute(
++                 select(MapPool).where(MapPool.is_active == True)
++             )
++             available_maps = result.scalars().all()
++         
++         if not available_maps:
++             return None
++         
++         return random.choice(available_maps).map_name
++     
++     @staticmethod
++     def _get_best_server(user1: User, user2: User) -> str:
++         """Get the best server for two users based on their regions."""
++         # If either user has no region, default to NAC
++         if not user1.region_code or not user2.region_code:
++             return "NAC"
++         
++         service = RegionMappingService()
++         return service.get_best_server(user1.region_code, user2.region_code)
++     
++     @staticmethod
++     def _generate_channel_name() -> str:
++         """Generate a unique channel name like 'scevo123'."""
++         digits = ''.join(random.choices(string.digits, k=3))
++         return f"scevo{digits}"
++     
++     @staticmethod
++     async def create_match(
++         session: AsyncSession,
++         entry1: QueueEntry,
++         entry2: QueueEntry,
++         match_info: Dict
++     ) -> Match:
++         """Create a match from two queue entries."""
++         match = Match(
++             player1_id=entry1.user_id,
++             player2_id=entry2.user_id,
++             player1_race=match_info["player1_race"],
++             player2_race=match_info["player2_race"],
++             map_name=match_info["map_name"],
++             server_region=match_info["server_region"],
++             channel_name=match_info["channel_name"],
++             player1_mmr_before=match_info["player1_mmr"],
++             player2_mmr_before=match_info["player2_mmr"],
++         )
++         
++         session.add(match)
++         
++         # Remove both players from queue
++         entry1.is_active = False
++         entry2.is_active = False
++         
++         await session.flush()
++         return match
++     
++     @staticmethod
++     async def report_match_result(
++         session: AsyncSession,
++         match_id: int,
++         result: MatchResult,
++         duration_seconds: Optional[int] = None
++     ) -> Match:
++         """Report the result of a match and update ratings."""
++         match = await session.get(Match, match_id)
++         if not match:
++             raise ValueError(f"Match {match_id} not found")
++         
++         if match.result is not None:
++             raise ValueError(f"Match {match_id} already has a result")
++         
++         # Get both users
++         user1 = await session.get(User, match.player1_id)
++         user2 = await session.get(User, match.player2_id)
++         
++         # Calculate games played for K-factor
++         games1 = user1.wins_1v1 + user1.losses_1v1 + user1.draws_1v1
++         games2 = user2.wins_1v1 + user2.losses_1v1 + user2.draws_1v1
++         
++         # Calculate new ratings
++         new_rating1, new_rating2, change1, change2 = RatingCalculator.calculate_match_ratings(
++             match.player1_mmr_before,
++             match.player2_mmr_before,
++             games1,
++             games2,
++             result
++         )
++         
++         # Update match
++         match.result = result
++         match.ended_at = datetime.utcnow()
++         match.duration_seconds = duration_seconds
++         match.player1_mmr_after = new_rating1
++         match.player2_mmr_after = new_rating2
++         match.player1_mmr_change = change1
++         match.player2_mmr_change = change2
++         
++         # Update user ratings
++         user1.set_mmr(match.player1_race, new_rating1)
++         user2.set_mmr(match.player2_race, new_rating2)
++         
++         # Update stats
++         if result == MatchResult.PLAYER1_WIN:
++             user1.wins_1v1 += 1
++             user2.losses_1v1 += 1
++         elif result == MatchResult.PLAYER2_WIN:
++             user1.losses_1v1 += 1
++             user2.wins_1v1 += 1
++         elif result == MatchResult.DRAW:
++             user1.draws_1v1 += 1
++             user2.draws_1v1 += 1
++         
++         # Update last active
++         user1.last_active_at = datetime.utcnow()
++         user2.last_active_at = datetime.utcnow()
++         
++         await session.flush()
++         return match
+```
+
+</details>
 
 ---
 
@@ -605,6 +2012,143 @@ Now let me create the map management service for admin functions.</details></thi
 ---
 
 Tool use: **write**
+
+
+<details><summary>Edit file: src/backend/services/map_service.py</summary>
+
+**Chunk 1**
+Lines added: 124, lines removed: 1
+
+```diff
+@@ -1,1 +1,124 @@
+- 
++ """Map pool management service."""
++ from datetime import datetime
++ from typing import List, Optional
++ from sqlalchemy import select, update
++ from sqlalchemy.ext.asyncio import AsyncSession
++ from ..db.models import MapPool
++ 
++ 
++ class MapService:
++     """Service for managing the map pool."""
++     
++     @staticmethod
++     async def get_active_maps(session: AsyncSession) -> List[MapPool]:
++         """Get all active maps in the pool."""
++         result = await session.execute(
++             select(MapPool)
++             .where(MapPool.is_active == True)
++             .order_by(MapPool.order_index)
++         )
++         return list(result.scalars().all())
++     
++     @staticmethod
++     async def get_map_names(session: AsyncSession) -> List[str]:
++         """Get names of all active maps."""
++         maps = await MapService.get_active_maps(session)
++         return [m.map_name for m in maps]
++     
++     @staticmethod
++     async def update_map_pool(session: AsyncSession, new_maps: List[str]) -> List[MapPool]:
++         """Update the entire map pool (admin function)."""
++         # Mark all current maps as inactive
++         await session.execute(
++             update(MapPool)
++             .where(MapPool.is_active == True)
++             .values(
++                 is_active=False,
++                 removed_at=datetime.utcnow()
++             )
++         )
++         
++         # Add new maps
++         new_map_entries = []
++         for idx, map_name in enumerate(new_maps):
++             # Check if map already exists
++             result = await session.execute(
++                 select(MapPool).where(MapPool.map_name == map_name)
++             )
++             existing_map = result.scalar_one_or_none()
++             
++             if existing_map:
++                 # Reactivate existing map
++                 existing_map.is_active = True
++                 existing_map.removed_at = None
++                 existing_map.order_index = idx
++                 new_map_entries.append(existing_map)
++             else:
++                 # Create new map
++                 new_map = MapPool(
++                     map_name=map_name,
++                     is_active=True,
++                     order_index=idx
++                 )
++                 session.add(new_map)
++                 new_map_entries.append(new_map)
++         
++         await session.flush()
++         return new_map_entries
++     
++     @staticmethod
++     async def add_map(session: AsyncSession, map_name: str) -> MapPool:
++         """Add a single map to the pool."""
++         # Check if map already exists
++         result = await session.execute(
++             select(MapPool).where(MapPool.map_name == map_name)
++         )
++         existing_map = result.scalar_one_or_none()
++         
++         if existing_map:
++             if existing_map.is_active:
++                 raise ValueError(f"Map '{map_name}' is already in the active pool")
++             
++             # Reactivate existing map
++             existing_map.is_active = True
++             existing_map.removed_at = None
++             await session.flush()
++             return existing_map
++         
++         # Get max order index
++         result = await session.execute(
++             select(MapPool.order_index)
++             .where(MapPool.is_active == True)
++             .order_by(MapPool.order_index.desc())
++             .limit(1)
++         )
++         max_index = result.scalar_one_or_none() or -1
++         
++         # Create new map
++         new_map = MapPool(
++             map_name=map_name,
++             is_active=True,
++             order_index=max_index + 1
++         )
++         session.add(new_map)
++         await session.flush()
++         return new_map
++     
++     @staticmethod
++     async def remove_map(session: AsyncSession, map_name: str) -> bool:
++         """Remove a map from the active pool."""
++         result = await session.execute(
++             select(MapPool).where(
++                 MapPool.map_name == map_name,
++                 MapPool.is_active == True
++             )
++         )
++         map_entry = result.scalar_one_or_none()
++         
++         if not map_entry:
++             return False
++         
++         map_entry.is_active = False
++         map_entry.removed_at = datetime.utcnow()
++         await session.flush()
++         return True
+```
+
+</details>
 
 ---
 
@@ -938,6 +2482,425 @@ Now I need to create the queue command and the admin commands. Let me start with
 
 Tool use: **write**
 
+
+<details><summary>Edit file: src/bot/interface/interface_queue_command.py</summary>
+
+**Chunk 1**
+Lines added: 406, lines removed: 1
+
+```diff
+@@ -1,1 +1,406 @@
+- 
++ """Queue command for matchmaking."""
++ import discord
++ from discord import app_commands
++ import asyncio
++ from datetime import datetime
++ from typing import List, Optional
++ from src.utils.user_utils import get_user_info, create_user_embed_field, log_user_action
++ from src.backend.db import get_db_session
++ from src.backend.services import UserService, MatchmakingService, MapService
++ from src.backend.db.models import Race, MatchResult
++ 
++ 
++ class RaceSelect(discord.ui.Select):
++     """Select menu for choosing races to queue with."""
++     
++     def __init__(self, saved_races: List[str] = None):
++         # Define all available races
++         races = [
++             discord.SelectOption(label="BW Terran", value="bw_terran", emoji="🟦"),
++             discord.SelectOption(label="BW Zerg", value="bw_zerg", emoji="🟪"),
++             discord.SelectOption(label="BW Protoss", value="bw_protoss", emoji="🟨"),
++             discord.SelectOption(label="SC2 Terran", value="sc2_terran", emoji="🔵"),
++             discord.SelectOption(label="SC2 Zerg", value="sc2_zerg", emoji="🟣"),
++             discord.SelectOption(label="SC2 Protoss", value="sc2_protoss", emoji="🟡"),
++         ]
++         
++         # Set default selections based on saved preferences
++         if saved_races:
++             for option in races:
++                 if option.value in saved_races:
++                     option.default = True
++         
++         super().__init__(
++             placeholder="Select races to queue with (max 6)",
++             min_values=1,
++             max_values=6,
++             options=races,
++             custom_id="race_select"
++         )
++     
++     async def callback(self, interaction: discord.Interaction):
++         # Check if valid BW vs SC2 selection
++         has_bw = any(race.startswith("bw_") for race in self.values)
++         has_sc2 = any(race.startswith("sc2_") for race in self.values)
++         
++         if has_bw and has_sc2:
++             embed = discord.Embed(
++                 title="❌ Invalid Race Selection",
++                 description="You cannot queue with both BW and SC2 races at the same time.",
++                 color=discord.Color.red()
++             )
++             embed.add_field(
++                 name="Valid selections",
++                 value="• BW races only (for SC2 opponents)\n• SC2 races only (for BW opponents)",
++                 inline=False
++             )
++             await interaction.response.send_message(embed=embed, ephemeral=True)
++             return
++         
++         await interaction.response.defer()
++ 
++ 
++ class MapVetoSelect(discord.ui.Select):
++     """Select menu for choosing map vetoes."""
++     
++     def __init__(self, available_maps: List[str], saved_vetoes: List[str] = None, max_vetoes: int = 4):
++         self.max_vetoes = max_vetoes
++         
++         # Create options for each map
++         options = []
++         for map_name in available_maps[:25]:  # Discord limit is 25 options
++             option = discord.SelectOption(
++                 label=map_name,
++                 value=map_name
++             )
++             if saved_vetoes and map_name in saved_vetoes:
++                 option.default = True
++             options.append(option)
++         
++         super().__init__(
++             placeholder=f"Select maps to veto (max {max_vetoes})",
++             min_values=0,
++             max_values=min(max_vetoes, len(options)),
++             options=options,
++             custom_id="map_veto_select"
++         )
++     
++     async def callback(self, interaction: discord.Interaction):
++         await interaction.response.defer()
++ 
++ 
++ class QueueView(discord.ui.View):
++     """View for queue setup (race and map selection)."""
++     
++     def __init__(self, user_id: int, mmr_data: dict, available_maps: List[str], 
++                  saved_races: List[str] = None, saved_vetoes: List[str] = None):
++         super().__init__(timeout=300)
++         self.user_id = user_id
++         self.mmr_data = mmr_data
++         self.available_maps = available_maps
++         self.selected_races = saved_races or []
++         self.selected_vetoes = saved_vetoes or []
++         
++         # Calculate max vetoes based on map pool size
++         self.max_vetoes = max(1, len(available_maps) // 2 - 1)
++         
++         # Add selects
++         self.race_select = RaceSelect(saved_races)
++         self.map_veto_select = MapVetoSelect(available_maps, saved_vetoes, self.max_vetoes)
++         
++         self.add_item(self.race_select)
++         self.add_item(self.map_veto_select)
++     
++     @discord.ui.button(label="Queue", style=discord.ButtonStyle.success, row=2)
++     async def queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
++         """Start queueing for a match."""
++         # Get selected values
++         self.selected_races = self.race_select.values
++         self.selected_vetoes = self.map_veto_select.values
++         
++         # Validate race selection again
++         has_bw = any(race.startswith("bw_") for race in self.selected_races)
++         has_sc2 = any(race.startswith("sc2_") for race in self.selected_races)
++         
++         if has_bw and has_sc2:
++             embed = discord.Embed(
++                 title="❌ Invalid Race Selection",
++                 description="You cannot queue with both BW and SC2 races.",
++                 color=discord.Color.red()
++             )
++             await interaction.response.send_message(embed=embed, ephemeral=True)
++             return
++         
++         # Save preferences and add to queue
++         async with get_db_session() as db_session:
++             # Update user preferences
++             await UserService.update_user_preferences(
++                 db_session,
++                 discord_id=self.user_id,
++                 map_vetoes=self.selected_vetoes,
++                 last_queue_races=self.selected_races
++             )
++             
++             # Get user and add to queue
++             user = await UserService.get_user_by_discord_id(db_session, self.user_id)
++             queue_entry = await MatchmakingService.add_to_queue(
++                 db_session,
++                 user,
++                 self.selected_races,
++                 self.selected_vetoes
++             )
++         
++         # Create queue status embed
++         embed = discord.Embed(
++             title="🔍 Searching for Match...",
++             description="You have been added to the queue!",
++             color=discord.Color.blue(),
++             timestamp=datetime.utcnow()
++         )
++         
++         # Show selected races and MMR
++         race_info = []
++         for race in self.selected_races:
++             race_display = race.replace("_", " ").title()
++             mmr = self.mmr_data.get(race, 1500)
++             race_info.append(f"{race_display}: {int(mmr)} MMR")
++         
++         embed.add_field(
++             name="Queued Races",
++             value="\n".join(race_info),
++             inline=True
++         )
++         
++         if self.selected_vetoes:
++             embed.add_field(
++                 name="Map Vetoes",
++                 value="\n".join(self.selected_vetoes),
++                 inline=True
++             )
++         
++         embed.add_field(
++             name="Queue Time",
++             value="0:00",
++             inline=False
++         )
++         
++         # Create queue management view
++         queue_view = QueueManagementView(self.user_id)
++         
++         await interaction.response.edit_message(
++             embed=embed,
++             view=queue_view
++         )
++         
++         # Start updating queue status
++         asyncio.create_task(self._update_queue_status(interaction, queue_view))
++     
++     async def _update_queue_status(self, interaction: discord.Interaction, queue_view):
++         """Update queue status periodically."""
++         start_time = datetime.utcnow()
++         message = await interaction.original_response()
++         
++         while queue_view.is_queued:
++             await asyncio.sleep(5)  # Update every 5 seconds
++             
++             try:
++                 async with get_db_session() as db_session:
++                     # Check if still in queue
++                     position = await MatchmakingService.get_queue_position(
++                         db_session, 
++                         self.user_id
++                     )
++                     
++                     if not position:
++                         # No longer in queue - check for match
++                         # This would be handled by a separate match notification system
++                         break
++                     
++                     # Update embed with current status
++                     elapsed = datetime.utcnow() - start_time
++                     minutes = int(elapsed.total_seconds() // 60)
++                     seconds = int(elapsed.total_seconds() % 60)
++                     
++                     embed = message.embeds[0]
++                     embed.set_field_at(
++                         -1,  # Last field (Queue Time)
++                         name="Queue Time",
++                         value=f"{minutes}:{seconds:02d}",
++                         inline=False
++                     )
++                     
++                     # Add position info
++                     position_num, total = position
++                     embed.description = f"Position in queue: **{position_num}/{total}**"
++                     
++                     await message.edit(embed=embed)
++                     
++             except Exception as e:
++                 print(f"Error updating queue status: {e}")
++                 break
++ 
++ 
++ class QueueManagementView(discord.ui.View):
++     """View for managing queue status (cancel button)."""
++     
++     def __init__(self, user_id: int):
++         super().__init__(timeout=None)
++         self.user_id = user_id
++         self.is_queued = True
++     
++     @discord.ui.button(label="Cancel Queue", style=discord.ButtonStyle.danger)
++     async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
++         """Cancel the queue."""
++         async with get_db_session() as db_session:
++             removed = await MatchmakingService.remove_from_queue(
++                 db_session,
++                 self.user_id
++             )
++         
++         if removed:
++             embed = discord.Embed(
++                 title="❌ Queue Cancelled",
++                 description="You have been removed from the queue.",
++                 color=discord.Color.red()
++             )
++         else:
++             embed = discord.Embed(
++                 title="ℹ️ Not in Queue",
++                 description="You were not in the queue.",
++                 color=discord.Color.blue()
++             )
++         
++         self.is_queued = False
++         await interaction.response.edit_message(embed=embed, view=None)
++ 
++ 
++ async def queue_command(interaction: discord.Interaction):
++     """Handle the /queue command."""
++     user_info = get_user_info(interaction)
++     
++     # Check prerequisites
++     async with get_db_session() as db_session:
++         # Check terms acceptance
++         has_accepted = await UserService.has_accepted_terms(
++             db_session,
++             interaction.user.id
++         )
++         
++         if not has_accepted:
++             embed = discord.Embed(
++                 title="❌ Terms of Service Required",
++                 description="You must accept the Terms of Service before queueing.",
++                 color=discord.Color.red()
++             )
++             embed.add_field(
++                 name="How to proceed",
++                 value="Please use the `/termsofservice` command to review and accept the terms.",
++                 inline=False
++             )
++             await interaction.response.send_message(embed=embed, ephemeral=True)
++             return
++         
++         # Check setup completion
++         has_setup = await UserService.has_completed_setup(
++             db_session,
++             interaction.user.id
++         )
++         
++         if not has_setup:
++             embed = discord.Embed(
++                 title="❌ Setup Required",
++                 description="You must complete your profile setup before queueing.",
++                 color=discord.Color.red()
++             )
++             embed.add_field(
++                 name="How to proceed",
++                 value="Please use the `/setup` command to set up your profile first.",
++                 inline=False
++             )
++             await interaction.response.send_message(embed=embed, ephemeral=True)
++             return
++         
++         # Check if already in queue
++         position = await MatchmakingService.get_queue_position(
++             db_session,
++             interaction.user.id
++         )
++         
++         if position:
++             pos_num, total = position
++             embed = discord.Embed(
++                 title="⚠️ Already in Queue",
++                 description=f"You are already in the queue at position **{pos_num}/{total}**.",
++                 color=discord.Color.yellow()
++             )
++             await interaction.response.send_message(embed=embed, ephemeral=True)
++             return
++         
++         # Get user data
++         user = await UserService.get_user_by_discord_id(db_session, interaction.user.id)
++         mmr_data = await UserService.get_user_mmr(db_session, interaction.user.id)
++         
++         # Get available maps
++         available_maps = await MapService.get_map_names(db_session)
++     
++     # Create queue setup embed
++     embed = discord.Embed(
++         title="⚔️ Ranked Queue Setup",
++         description="Select your races and map vetoes for matchmaking.",
++         color=discord.Color.green()
++     )
++     
++     # Show current MMR for each race
++     mmr_lines = []
++     for race_key, mmr in mmr_data.items():
++         race_display = race_key.replace("_", " ").title()
++         mmr_lines.append(f"{race_display}: **{int(mmr)}** MMR")
++     
++     embed.add_field(
++         name="Your Ratings",
++         value="\n".join(mmr_lines),
++         inline=False
++     )
++     
++     embed.add_field(
++         name="Instructions",
++         value=(
++             "• Select races you want to queue with\n"
++             "• You can only queue as BW **or** SC2 races\n"
++             f"• You may veto up to {max(1, len(available_maps) // 2 - 1)} maps\n"
++             "• Your preferences will be saved"
++         ),
++         inline=False
++     )
++     
++     # Add user info
++     embed.add_field(**create_user_embed_field(user_info))
++     
++     # Create view with saved preferences
++     view = QueueView(
++         user_id=interaction.user.id,
++         mmr_data=mmr_data,
++         available_maps=available_maps,
++         saved_races=user.last_queue_races,
++         saved_vetoes=user.map_vetoes
++     )
++     
++     await interaction.response.send_message(
++         embed=embed,
++         view=view,
++         ephemeral=True
++     )
++     
++     log_user_action(user_info, "opened queue interface")
++ 
++ 
++ def register_queue_command(tree: app_commands.CommandTree):
++     """Register the queue command."""
++     @tree.command(
++         name="queue",
++         description="Queue for a ranked ladder match"
++     )
++     async def queue(interaction: discord.Interaction):
++         await queue_command(interaction)
++     
++     return queue
+```
+
+</details>
+
 ---
 
 <think><details><summary>Thought Process</summary>
@@ -949,6 +2912,283 @@ Now let me create the admin commands.</details></think>
 ---
 
 Tool use: **write**
+
+
+<details><summary>Edit file: src/bot/interface/interface_admin_commands.py</summary>
+
+**Chunk 1**
+Lines added: 264, lines removed: 1
+
+```diff
+@@ -1,1 +1,264 @@
+- 
++ """Admin commands for ladder management."""
++ import discord
++ from discord import app_commands
++ from typing import List
++ from src.utils.user_utils import get_user_info, create_user_embed_field, log_user_action
++ from src.backend.db import get_db_session
++ from src.backend.services import UserService, MapService
++ 
++ 
++ # Admin user IDs - replace with actual admin Discord IDs
++ ADMIN_USER_IDS = [
++     123456789012345678,  # Replace with actual admin IDs
++ ]
++ 
++ 
++ def is_admin(interaction: discord.Interaction) -> bool:
++     """Check if the user is an admin."""
++     return interaction.user.id in ADMIN_USER_IDS
++ 
++ 
++ class MapUpdateModal(discord.ui.Modal, title="Update Map Pool"):
++     """Modal for updating the map pool."""
++     
++     def __init__(self, current_maps: List[str]):
++         super().__init__(timeout=600)
++         self.current_maps = current_maps
++         
++         # Create text input with current maps
++         self.maps_input = discord.ui.TextInput(
++             label="Map Names (comma-separated)",
++             placeholder="Eclipse, Polypoid, Goldenaura, ...",
++             default=", ".join(current_maps),
++             style=discord.TextStyle.paragraph,
++             required=True,
++             max_length=1000
++         )
++         self.add_item(self.maps_input)
++     
++     async def on_submit(self, interaction: discord.Interaction):
++         # Parse map names
++         raw_maps = self.maps_input.value.split(",")
++         new_maps = [m.strip() for m in raw_maps if m.strip()]
++         
++         if len(new_maps) < 3:
++             await interaction.response.send_message(
++                 "❌ At least 3 maps are required in the pool.",
++                 ephemeral=True
++             )
++             return
++         
++         if len(new_maps) > 15:
++             await interaction.response.send_message(
++                 "❌ Maximum 15 maps allowed in the pool.",
++                 ephemeral=True
++             )
++             return
++         
++         # Create confirmation embed
++         embed = discord.Embed(
++             title="📋 Confirm Map Pool Update",
++             description="Please review the new map pool:",
++             color=discord.Color.blue()
++         )
++         
++         # Show old vs new
++         old_maps_str = "\n".join(f"• {m}" for m in self.current_maps)
++         new_maps_str = "\n".join(f"• {m}" for m in new_maps)
++         
++         embed.add_field(
++             name="Current Maps",
++             value=old_maps_str or "None",
++             inline=True
++         )
++         
++         embed.add_field(
++             name="New Maps", 
++             value=new_maps_str,
++             inline=True
++         )
++         
++         # Create confirmation view
++         view = MapUpdateConfirmView(new_maps)
++         
++         await interaction.response.send_message(
++             embed=embed,
++             view=view,
++             ephemeral=True
++         )
++ 
++ 
++ class MapUpdateConfirmView(discord.ui.View):
++     """View for confirming map pool update."""
++     
++     def __init__(self, new_maps: List[str]):
++         super().__init__(timeout=120)
++         self.new_maps = new_maps
++     
++     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
++     async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
++         """Confirm the map update."""
++         async with get_db_session() as db_session:
++             await MapService.update_map_pool(db_session, self.new_maps)
++         
++         embed = discord.Embed(
++             title="✅ Map Pool Updated",
++             description=f"Successfully updated the map pool with {len(self.new_maps)} maps.",
++             color=discord.Color.green()
++         )
++         
++         map_list = "\n".join(f"{i+1}. {m}" for i, m in enumerate(self.new_maps))
++         embed.add_field(
++             name="New Map Pool",
++             value=map_list,
++             inline=False
++         )
++         
++         user_info = get_user_info(interaction)
++         log_user_action(user_info, "updated map pool", f"to {len(self.new_maps)} maps")
++         
++         await interaction.response.edit_message(embed=embed, view=None)
++     
++     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
++     async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
++         """Cancel the map update."""
++         embed = discord.Embed(
++             title="❌ Update Cancelled",
++             description="Map pool update has been cancelled.",
++             color=discord.Color.red()
++         )
++         
++         await interaction.response.edit_message(embed=embed, view=None)
++ 
++ 
++ async def resetladder_command(interaction: discord.Interaction):
++     """Handle the /resetladder admin command."""
++     if not is_admin(interaction):
++         await interaction.response.send_message(
++             "❌ You do not have permission to use this command.",
++             ephemeral=True
++         )
++         return
++     
++     # Create confirmation embed
++     embed = discord.Embed(
++         title="⚠️ Reset Ladder Confirmation",
++         description=(
++             "**This will reset ALL player MMRs and statistics!**\n\n"
++             "The following will be reset:\n"
++             "• All MMRs to 1500\n"
++             "• All win/loss/draw counts to 0\n"
++             "• Match history will be preserved\n\n"
++             "This action cannot be undone!"
++         ),
++         color=discord.Color.yellow()
++     )
++     
++     view = ResetLadderConfirmView()
++     
++     await interaction.response.send_message(
++         embed=embed,
++         view=view,
++         ephemeral=True
++     )
++ 
++ 
++ class ResetLadderConfirmView(discord.ui.View):
++     """View for confirming ladder reset."""
++     
++     def __init__(self):
++         super().__init__(timeout=120)
++     
++     @discord.ui.button(label="Reset Ladder", style=discord.ButtonStyle.danger)
++     async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
++         """Confirm the ladder reset."""
++         # Require typing "RESET" to confirm
++         modal = ResetConfirmModal()
++         await interaction.response.send_modal(modal)
++     
++     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
++     async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
++         """Cancel the reset."""
++         embed = discord.Embed(
++             title="❌ Reset Cancelled",
++             description="Ladder reset has been cancelled.",
++             color=discord.Color.green()
++         )
++         
++         await interaction.response.edit_message(embed=embed, view=None)
++ 
++ 
++ class ResetConfirmModal(discord.ui.Modal, title="Confirm Ladder Reset"):
++     """Modal for final reset confirmation."""
++     
++     def __init__(self):
++         super().__init__(timeout=120)
++         
++         self.confirm_input = discord.ui.TextInput(
++             label='Type "RESET" to confirm',
++             placeholder="RESET",
++             required=True,
++             max_length=5
++         )
++         self.add_item(self.confirm_input)
++     
++     async def on_submit(self, interaction: discord.Interaction):
++         if self.confirm_input.value != "RESET":
++             await interaction.response.send_message(
++                 "❌ Incorrect confirmation text. Reset cancelled.",
++                 ephemeral=True
++             )
++             return
++         
++         # Perform the reset
++         async with get_db_session() as db_session:
++             await UserService.reset_all_mmr(db_session)
++         
++         embed = discord.Embed(
++             title="✅ Ladder Reset Complete",
++             description="All player MMRs and statistics have been reset.",
++             color=discord.Color.green()
++         )
++         
++         user_info = get_user_info(interaction)
++         log_user_action(user_info, "reset the ladder", "all MMRs reset to 1500")
++         
++         await interaction.response.send_message(embed=embed, ephemeral=True)
++ 
++ 
++ async def updatemaps_command(interaction: discord.Interaction):
++     """Handle the /updatemaps admin command."""
++     if not is_admin(interaction):
++         await interaction.response.send_message(
++             "❌ You do not have permission to use this command.",
++             ephemeral=True
++         )
++         return
++     
++     # Get current maps
++     async with get_db_session() as db_session:
++         current_maps = await MapService.get_map_names(db_session)
++     
++     # Show modal for updating maps
++     modal = MapUpdateModal(current_maps)
++     await interaction.response.send_modal(modal)
++ 
++ 
++ def register_admin_commands(tree: app_commands.CommandTree):
++     """Register admin commands."""
++     
++     @tree.command(
++         name="resetladder",
++         description="[ADMIN] Reset all player MMRs and statistics"
++     )
++     async def resetladder(interaction: discord.Interaction):
++         await resetladder_command(interaction)
++     
++     @tree.command(
++         name="updatemaps",
++         description="[ADMIN] Update the map pool"
++     )
++     async def updatemaps(interaction: discord.Interaction):
++         await updatemaps_command(interaction)
++     
++     return resetladder, updatemaps
+```
+
+</details>
 
 ---
 
@@ -1033,7 +3273,7 @@ Now let me create a .env.example file to show what environment variables are nee
 
 ---
 
-Tool use: **write**
+Cannot edit files blocked by globalIgnore
 
 ---
 
@@ -1042,6 +3282,31 @@ Tool use: **write**
 ---
 
 Tool use: **write**
+
+
+<details><summary>Edit file: env.example</summary>
+
+**Chunk 1**
+Lines added: 12, lines removed: 1
+
+```diff
+@@ -1,1 +1,12 @@
+- 
++ # Discord Bot Configuration
++ EVOLADDERBOT_TOKEN=your_discord_bot_token_here
++ 
++ # Database Configuration
++ DATABASE_URL=postgresql://username:password@localhost:5432/evoladderbot
++ 
++ # Optional: Enable database query logging (for debugging)
++ DATABASE_ECHO=false
++ 
++ # Admin Configuration
++ # Add Discord user IDs for admins (comma-separated)
++ # ADMIN_USER_IDS=123456789012345678,987654321098765432
+```
+
+</details>
 
 ---
 
@@ -1055,6 +3320,87 @@ Now let me create a startup script to run the bot and create database tables if 
 
 Tool use: **write**
 
+
+<details><summary>Edit file: start_bot.py</summary>
+
+**Chunk 1**
+Lines added: 68, lines removed: 1
+
+```diff
+@@ -1,1 +1,68 @@
+- 
++ """Main entry point to start the EvoLadderBot."""
++ import asyncio
++ import os
++ import sys
++ from dotenv import load_dotenv
++ 
++ # Add the project root to Python path
++ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++ 
++ 
++ async def main():
++     """Main startup function."""
++     # Load environment variables
++     load_dotenv()
++     
++     # Check for required environment variables
++     if not os.getenv("EVOLADDERBOT_TOKEN"):
++         print("❌ Error: EVOLADDERBOT_TOKEN not found in environment!")
++         print("Please create a .env file with your Discord bot token.")
++         print("See env.example for the required format.")
++         return
++     
++     if not os.getenv("DATABASE_URL"):
++         print("❌ Error: DATABASE_URL not found in environment!")
++         print("Please create a .env file with your database connection string.")
++         print("See env.example for the required format.")
++         return
++     
++     print("🚀 Starting EvoLadderBot...")
++     
++     # Initialize database
++     print("📊 Initializing database...")
++     try:
++         from src.backend.db import init_db
++         await init_db()
++         print("✅ Database initialized!")
++     except Exception as e:
++         print(f"❌ Database initialization failed: {e}")
++         return
++     
++     # Check if we need to populate initial data
++     try:
++         from src.backend.db.create_table import populate_initial_data
++         await populate_initial_data()
++     except Exception as e:
++         print(f"⚠️ Could not populate initial data: {e}")
++     
++     # Start the bot
++     print("🤖 Starting Discord bot...")
++     from src.bot.interface.interface_main import bot
++     
++     token = os.getenv("EVOLADDERBOT_TOKEN")
++     
++     try:
++         await bot.start(token)
++     except KeyboardInterrupt:
++         print("\n👋 Shutting down bot...")
++     except Exception as e:
++         print(f"❌ Bot error: {e}")
++     finally:
++         await bot.close()
++ 
++ 
++ if __name__ == "__main__":
++     try:
++         asyncio.run(main())
++     except KeyboardInterrupt:
++         print("\n👋 Goodbye!")
+```
+
+</details>
+
 ---
 
 <think><details><summary>Thought Process</summary>
@@ -1067,9 +3413,207 @@ Let me also create a matchmaking background task that runs periodically to find 
 
 Tool use: **write**
 
+
+<details><summary>Edit file: src/bot/tasks/__init__.py</summary>
+
+**Chunk 1**
+Lines added: 1, lines removed: 1
+
+```diff
+@@ -1,1 +1,1 @@
+- 
++ """Background tasks for the bot."""
+```
+
+</details>
+
 ---
 
 Tool use: **write**
+
+
+<details><summary>Edit file: src/bot/tasks/matchmaking_task.py</summary>
+
+**Chunk 1**
+Lines added: 171, lines removed: 1
+
+```diff
+@@ -1,1 +1,171 @@
+- 
++ """Background task for processing matchmaking queue."""
++ import asyncio
++ import discord
++ from discord.ext import tasks, commands
++ from datetime import datetime
++ from typing import TYPE_CHECKING
++ from src.backend.db import get_db_session
++ from src.backend.services import MatchmakingService, RegionMappingService
++ from src.backend.db.models import Race
++ 
++ if TYPE_CHECKING:
++     from discord.ext.commands import Bot
++ 
++ 
++ class MatchmakingTask(commands.Cog):
++     """Background task that processes the matchmaking queue."""
++     
++     def __init__(self, bot: 'Bot'):
++         self.bot = bot
++         self.region_service = RegionMappingService()
++         self.process_queue.start()
++     
++     def cog_unload(self):
++         """Clean up when cog is unloaded."""
++         self.process_queue.cancel()
++     
++     @tasks.loop(seconds=10)
++     async def process_queue(self):
++         """Process matchmaking queue every 10 seconds."""
++         try:
++             async with get_db_session() as db_session:
++                 # Find all possible matches
++                 matches = await MatchmakingService.find_matches(db_session)
++                 
++                 # Process each match
++                 for entry1, entry2, match_info in matches:
++                     try:
++                         # Create the match
++                         match = await MatchmakingService.create_match(
++                             db_session,
++                             entry1,
++                             entry2,
++                             match_info
++                         )
++                         
++                         # Notify both players
++                         await self._notify_match_found(
++                             entry1,
++                             entry2,
++                             match,
++                             match_info
++                         )
++                         
++                     except Exception as e:
++                         print(f"Error creating match: {e}")
++                         
++         except Exception as e:
++             print(f"Error in matchmaking task: {e}")
++     
++     @process_queue.before_loop
++     async def before_process_queue(self):
++         """Wait until bot is ready before starting task."""
++         await self.bot.wait_until_ready()
++     
++     async def _notify_match_found(self, entry1, entry2, match, match_info):
++         """Notify both players that a match has been found."""
++         # Get both users
++         user1 = self.bot.get_user(entry1.discord_id)
++         user2 = self.bot.get_user(entry2.discord_id)
++         
++         if not user1 or not user2:
++             print(f"Could not find Discord users for match {match.id}")
++             return
++         
++         # Get server name
++         server_name = self.region_service.get_server_name(match.server_region)
++         
++         # Get race names
++         race1_name = match_info["player1_race"].value.replace("_", " ").title()
++         race2_name = match_info["player2_race"].value.replace("_", " ").title()
++         
++         # Create match found embed
++         def create_match_embed(for_player1: bool) -> discord.Embed:
++             if for_player1:
++                 your_race = race1_name
++                 your_mmr = int(match_info["player1_mmr"])
++                 opp_name = entry2.user.main_id
++                 opp_race = race2_name
++                 opp_mmr = int(match_info["player2_mmr"])
++             else:
++                 your_race = race2_name
++                 your_mmr = int(match_info["player2_mmr"])
++                 opp_name = entry1.user.main_id
++                 opp_race = race1_name
++                 opp_mmr = int(match_info["player1_mmr"])
++             
++             embed = discord.Embed(
++                 title="⚔️ Match Found!",
++                 description="A ranked match has been found for you.",
++                 color=discord.Color.green(),
++                 timestamp=datetime.utcnow()
++             )
++             
++             # Match details
++             embed.add_field(
++                 name="Your Race",
++                 value=f"{your_race} ({your_mmr} MMR)",
++                 inline=True
++             )
++             
++             embed.add_field(
++                 name="Opponent",
++                 value=f"{opp_name}\n{opp_race} ({opp_mmr} MMR)",
++                 inline=True
++             )
++             
++             embed.add_field(
++                 name="Map",
++                 value=match.map_name,
++                 inline=True
++             )
++             
++             embed.add_field(
++                 name="Server",
++                 value=server_name,
++                 inline=True
++             )
++             
++             embed.add_field(
++                 name="Channel",
++                 value=f"`{match.channel_name}`",
++                 inline=True
++             )
++             
++             embed.add_field(
++                 name="Match ID",
++                 value=f"#{match.id}",
++                 inline=True
++             )
++             
++             # Instructions
++             embed.add_field(
++                 name="📋 Instructions",
++                 value=(
++                     f"1. Join channel `{match.channel_name}` in-game\n"
++                     f"2. Create/join a lobby on **{server_name}** server\n"
++                     f"3. Play on map **{match.map_name}**\n"
++                     "4. Report the result after the match"
++                 ),
++                 inline=False
++             )
++             
++             embed.set_footer(text="Good luck, have fun!")
++             
++             return embed
++         
++         # Send notifications to both players
++         try:
++             await user1.send(embed=create_match_embed(for_player1=True))
++         except discord.Forbidden:
++             print(f"Could not DM user {user1.id} - DMs may be disabled")
++         
++         try:
++             await user2.send(embed=create_match_embed(for_player1=False))
++         except discord.Forbidden:
++             print(f"Could not DM user {user2.id} - DMs may be disabled")
++ 
++ 
++ def setup(bot: 'Bot'):
++     """Set up the matchmaking cog."""
++     bot.add_cog(MatchmakingTask(bot))
+```
+
+</details>
 
 ---
 
@@ -1178,6 +3722,20 @@ The string to replace was not found in the file.
 ---
 
 Tool use: **read_lints**
+
+<details>
+          <summary>Read lints for 2 files</summary>
+      
+Lint paths:
+
+- `src/backend`
+- `src/bot`
+
+Lint results
+
+
+**No lint errors found**
+</details>
 
 ---
 
@@ -1349,13 +3907,53 @@ I'll update the requirements to include missing dependencies, and improve comman
 
 Tool use: **grep**
 
+<details>
+<summary>Grep for "pandas" in "requirements.txt" • 0 matches</summary>
+
+Output mode: count
+
+
+
+</details>
+
 ---
 
 Tool use: **grep**
 
+<details>
+<summary>Grep for "register_commands\(" in "src" • 1 match</summary>
+
+Output mode: files_with_matches
+
+
+| File |
+|------|
+| `src\bot\interface\interface_commands.py` |
+
+
+</details>
+
 ---
 
 Tool use: **grep**
+
+<details>
+<summary>Grep for "register_setup_command\(|register_setcountry_command\(|register_termsofservice_command\(|register_queue_command\(|register_admin_commands\(" in "src" • 6 matches</summary>
+
+Output mode: files_with_matches
+
+
+| File |
+|------|
+| `src\bot\interface\interface_admin_commands.py` |
+| `src\bot\interface\interface_queue_command.py` |
+| `src\bot\interface\interface_setcountry_command.py` |
+| `src\bot\interface\interface_setup_command.py` |
+| `src\bot\interface\interface_termsofservice_command.py` |
+| `src\bot\interface\interface_main.py` |
+
+
+</details>
 
 ---
 
@@ -1477,6 +4075,19 @@ Let me update the bot startup to ensure commands are reliably registered and syn
 
 Tool use: **grep**
 
+<details>
+<summary>Grep for "load_extension\(" in "src/bot/interface/interface_main.py" • 1 match</summary>
+
+Output mode: content
+
+
+| Content | Line |
+|------|------|
+| `await bot.load_extension("src.bot.tasks.matchmaking_task")` | L30 |
+
+
+</details>
+
 ---
 
 <think><details><summary>Thought Process</summary>**Considering command registration**
@@ -1516,6 +4127,15 @@ I'll update the bot startup to register/sync commands reliably and add the missi
 ---
 
 Tool use: **grep**
+
+<details>
+<summary>Grep for "DEV_GUILD_IDS" in "src/bot/interface/interface_main.py" • 0 matches</summary>
+
+Output mode: count
+
+
+
+</details>
 
 ---
 
@@ -1645,9 +4265,31 @@ I'll fix command registration and syncing in the main bot file, add per-guild fa
 
 Tool use: **grep**
 
+<details>
+<summary>Grep for "commands_registered\s*=\s*True|False" in "src/bot/interface/interface_main.py" • 0 matches</summary>
+
+Output mode: count
+
+
+
+</details>
+
 ---
 
 Tool use: **grep**
+
+<details>
+<summary>Grep for "register_termsofservice_command\(" in "src/bot/interface/interface_termsofservice_command.py" • 1 match</summary>
+
+Output mode: content
+
+
+| Content | Line |
+|------|------|
+| `def register_termsofservice_command(tree: app_commands.CommandTree):` | L139 |
+
+
+</details>
 
 ---
 
@@ -1685,9 +4327,35 @@ I'll update command registration and sync in `interface_main.py` with a one-time
 
 Tool use: **grep**
 
+<details>
+<summary>Grep for "await bot.load_extension\(" in "src/bot/interface/interface_main.py" • 1 match</summary>
+
+Output mode: content
+
+
+| Content | Line |
+|------|------|
+| `await bot.load_extension("src.bot.tasks.matchmaking_task")` | L30 |
+
+
+</details>
+
 ---
 
 Tool use: **grep**
+
+<details>
+<summary>Grep for "setup\(" in "src/bot/tasks/matchmaking_task.py" • 1 match</summary>
+
+Output mode: content
+
+
+| Content | Line |
+|------|------|
+| `def setup(bot: 'Bot'):` | L169 |
+
+
+</details>
 
 ---
 
