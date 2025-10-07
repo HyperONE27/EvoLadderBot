@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict
+import discord
 
 from src.backend.services.user_info_service import UserInfoService
 
@@ -50,3 +51,38 @@ class CommandGuardService:
         self.require_setup_completed(player)
         if not player.get("activation_code"):
             raise AccountNotActivatedError("Account not activated.")
+
+    def require_queue_access(self, player: Dict[str, Any]) -> None:
+        """Require TOS acceptance, setup completion, and activation for queue access."""
+        self.require_tos_accepted(player)
+        self.require_setup_completed(player)
+        if not player.get("activation_code"):
+            raise AccountNotActivatedError("Account not activated.")
+
+    def create_error_embed(self, error: CommandGuardError) -> discord.Embed:
+        """Create a red error embed with X emote for command guard errors."""
+        if isinstance(error, TermsNotAcceptedError):
+            return discord.Embed(
+                title="❌ Terms of Service Required",
+                description="You must accept the Terms of Service before using this command.\n\nUse `/termsofservice` to review and accept the terms.",
+                color=discord.Color.red()
+            )
+        elif isinstance(error, SetupIncompleteError):
+            return discord.Embed(
+                title="❌ Profile Setup Required",
+                description="You must complete your profile setup before using this command.\n\nUse `/setup` to complete your profile.",
+                color=discord.Color.red()
+            )
+        elif isinstance(error, AccountNotActivatedError):
+            return discord.Embed(
+                title="❌ Account Not Activated",
+                description="Your account must be activated before using this command.\n\nPlease contact an administrator for activation.",
+                color=discord.Color.red()
+            )
+        else:
+            # Generic error embed
+            return discord.Embed(
+                title="❌ Command Error",
+                description=str(error),
+                color=discord.Color.red()
+            )

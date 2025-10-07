@@ -28,9 +28,11 @@ def register_leaderboard_command(tree: app_commands.CommandTree):
 async def leaderboard_command(interaction: discord.Interaction):
     """Handle the /leaderboard slash command"""
     try:
-        guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        guard_service.require_tos_accepted(player)
     except CommandGuardError as exc:
-        await send_ephemeral_response(interaction, content=str(exc))
+        error_embed = guard_service.create_error_embed(exc)
+        await send_ephemeral_response(interaction, embed=error_embed)
         return
     
     leaderboard_service = LeaderboardService()

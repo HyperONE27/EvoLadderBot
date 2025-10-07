@@ -26,9 +26,11 @@ GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
 async def setup_command(interaction: discord.Interaction):
     """Handle the /setup slash command"""
     try:
-        guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        guard_service.require_tos_accepted(player)
     except CommandGuardError as exc:
-        await send_ephemeral_response(interaction, content=str(exc))
+        error_embed = guard_service.create_error_embed(exc)
+        await send_ephemeral_response(interaction, embed=error_embed)
         return
     
     # Send the modal directly as the initial response

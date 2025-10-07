@@ -11,6 +11,7 @@ from src.backend.services.matchmaking_service import matchmaker, Player, QueuePr
 from src.backend.services.user_info_service import get_user_info
 from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader
 from src.bot.utils.discord_utils import send_ephemeral_response
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from typing import Optional
 import logging
 
@@ -18,6 +19,7 @@ race_service = RacesService()
 maps_service = MapsService()
 db_writer = DatabaseWriter()
 db_reader = DatabaseReader()
+guard_service = CommandGuardService()
 
 # Get global timeout from environment
 GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
@@ -41,6 +43,14 @@ def register_queue_command(tree: app_commands.CommandTree):
 # UI Elements
 async def queue_command(interaction: discord.Interaction):
     """Handle the /queue slash command"""
+    try:
+        player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        guard_service.require_queue_access(player)
+    except CommandGuardError as exc:
+        error_embed = guard_service.create_error_embed(exc)
+        await send_ephemeral_response(interaction, embed=error_embed)
+        return
+    
     # Get user's saved preferences from database
     user_preferences = db_reader.get_preferences_1v1(interaction.user.id)
     

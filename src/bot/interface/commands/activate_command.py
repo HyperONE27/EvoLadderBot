@@ -9,6 +9,7 @@ from src.backend.services.user_info_service import UserInfoService
 from src.bot.utils.discord_utils import send_ephemeral_response
 
 user_info_service = UserInfoService()
+guard_service = CommandGuardService()
 
 # Get global timeout from environment
 GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
@@ -65,6 +66,14 @@ def register_activate_command(tree: app_commands.CommandTree):
     )
     async def activate(interaction: discord.Interaction):
         print(f"[TERMINAL] /activate started by {interaction.user.id}")
+        try:
+            player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+            guard_service.require_tos_accepted(player)
+        except CommandGuardError as exc:
+            error_embed = guard_service.create_error_embed(exc)
+            await send_ephemeral_response(interaction, embed=error_embed)
+            return
+        
         await interaction.response.send_modal(ActivateModal())
 
 
@@ -78,9 +87,6 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            user_guard = CommandGuardService(user_info_service)
-            player = user_guard.ensure_player_record(interaction.user.id, interaction.user.name)
-            user_guard.require_tos_accepted(player)
             result = submit_activation_code(interaction.user.id, self.code_input.value)
 
             # Show preview with confirm/restart/cancel options
@@ -120,7 +126,8 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
             await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
             
         except CommandGuardError as e:
-            await send_ephemeral_response(interaction, content=str(e))
+            error_embed = guard_service.create_error_embed(e)
+            await send_ephemeral_response(interaction, embed=error_embed)
             return
             
         except Exception as e:

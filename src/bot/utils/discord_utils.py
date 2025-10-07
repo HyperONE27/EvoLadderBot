@@ -63,13 +63,20 @@ def send_ephemeral_response(
         The response object
     """
     ephemeral_kwargs = get_ephemeral_kwargs(interaction)
-    return interaction.response.send_message(
-        content=content,
-        embed=embed,
-        view=view,
-        ephemeral=ephemeral_kwargs["ephemeral"],
+    
+    # Build the message parameters, only including view if it's not None
+    message_params = {
+        "content": content,
+        "embed": embed,
+        "ephemeral": ephemeral_kwargs["ephemeral"],
         **kwargs
-    )
+    }
+    
+    # Only add view parameter if it's not None
+    if view is not None:
+        message_params["view"] = view
+    
+    return interaction.response.send_message(**message_params)
 
 
 def edit_ephemeral_response(

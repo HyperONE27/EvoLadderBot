@@ -19,7 +19,8 @@ async def termsofservice_command(interaction: discord.Interaction):
     try:
         guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
     except CommandGuardError as exc:
-        await send_ephemeral_response(interaction, content=str(exc))
+        error_embed = guard_service.create_error_embed(exc)
+        await send_ephemeral_response(interaction, embed=error_embed)
         return
 
     user_info = get_user_info(interaction)
