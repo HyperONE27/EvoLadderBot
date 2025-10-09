@@ -77,6 +77,46 @@ class RegionsService(BaseConfigService):
             self._game_regions_cache = list(self.get_data()["game_regions"])
         return list(self._game_regions_cache)
 
+    def get_game_server_by_code(self, server_code: str) -> Optional[Dict[str, Any]]:
+        for server in self.get_game_servers():
+            if server.get("code") == server_code:
+                return server
+        return None
+
+    def get_game_region_by_code(self, region_code: str) -> Optional[Dict[str, Any]]:
+        for region in self.get_game_regions():
+            if region.get("code") == region_code:
+                return region
+        return None
+
+    def format_server_with_region(self, server_code: str) -> str:
+        """Return server display string such as 'Western United States (Americas)'"""
+        if not server_code:
+            return ""
+
+        server = self.get_game_server_by_code(server_code)
+        if server is None:
+            return server_code
+
+        server_name = server.get("name", server_code)
+        region_code = server.get("region_code")
+        if not region_code:
+            return server_name
+
+        region = self.get_game_region_by_code(region_code)
+        region_name = region.get("name", region_code) if region else region_code
+
+        return f"{server_name} ({region_name})"
+
+    def get_random_game_server(self) -> str:
+        """Get a random game server code from the available servers."""
+        import random
+        servers = self.get_game_servers()
+        if not servers:
+            return "USW"  # Fallback to a default server
+        server = random.choice(servers)
+        return server.get("code", "USW")
+
     def get_region_page_data(self, page: int, page_size: int) -> Tuple[List[Dict[str, Any]], int]:
         residential_regions = self.get_residential_regions()
         total_pages = max(1, (len(residential_regions) + page_size - 1) // page_size)

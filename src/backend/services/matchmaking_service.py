@@ -15,6 +15,8 @@ import time
 from typing import List, Optional, Dict, Any, Callable, Tuple
 from dataclasses import dataclass
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
+from src.backend.services.regions_service import RegionsService
+from src.backend.services.maps_service import MapsService
 
 @dataclass
 class QueuePreferences:
@@ -37,6 +39,12 @@ class MatchResult:
     map_choice: str
     server_choice: str
     in_game_channel: str
+    match_result: Optional[str] = None
+    match_result_confirmation_status: Optional[str] = None
+    replay_uploaded: Optional[str] = None
+    replay_upload_time: Optional[int] = None
+    p1_mmr_change: Optional[float] = None
+    p2_mmr_change: Optional[float] = None
 
 class Player:
     def __init__(self, discord_user_id: int, user_id: str, preferences: QueuePreferences, 
@@ -82,6 +90,8 @@ class Matchmaker:
         self.match_callback: Optional[Callable[[MatchResult], None]] = None
         self.db_reader = DatabaseReader()
         self.db_writer = DatabaseWriter()
+        self.regions_service = RegionsService()
+        self.maps_service = MapsService()
 
     def add_player(self, player: Player) -> None:
         """Add a player to the matchmaking pool with MMR lookup."""
@@ -315,25 +325,19 @@ class Matchmaker:
         
         return matches
 
-    def get_available_maps(self, p1: Player, p2: Player) -> List[str]:
-        """Get maps that haven't been vetoed by either player."""
-        all_maps = ["Arkanoid", "Death Valley", "Keres Passage", "Khione", "Pylon", 
-                   "Radeon", "Subsequence", "Sylphid", "Vermeer"]
+    def generate_in_game_channel(self) -> str:
+        """Generate a random 3-digit in-game channel name."""
+        return "scevo" + str(random.randint(100, 999))
+
+    def _get_available_maps(self, p1: Player, p2: Player) -> List[str]:
+        """Get maps that haven't been vetoed by either player using maps service."""
+        all_maps = self.maps_service.get_available_maps()
         
         # Get vetoed maps from both players
         vetoed_maps = set(p1.preferences.vetoed_maps + p2.preferences.vetoed_maps)
         
         # Return maps that aren't vetoed
         return [map_name for map_name in all_maps if map_name not in vetoed_maps]
-
-    def generate_in_game_channel(self) -> str:
-        """Generate a random 3-digit in-game channel name."""
-        return "scevo" + str(random.randint(100, 999))
-
-    def get_random_server(self) -> str:
-        """Get a random server choice (placeholder for now)."""
-        servers = ["US East", "US West", "Europe", "Asia"]
-        return random.choice(servers)
 
     async def attempt_match(self):
         """Try to find and process all valid matches using the advanced algorithm."""
@@ -385,13 +389,13 @@ class Matchmaker:
             print(f"✅ Match found: {p1.user_id} vs {p2.user_id}")
             
             # Get available maps and pick one randomly
-            available_maps = self.get_available_maps(p1, p2)
+            available_maps = self._get_available_maps(p1, p2)
             if not available_maps:
                 print(f"❌ No available maps for {p1.user_id} vs {p2.user_id}")
                 continue
             
             map_choice = random.choice(available_maps)
-            server_choice = self.get_random_server()
+            server_choice = self.regions_service.get_random_game_server()
             in_game_channel = self.generate_in_game_channel()
             
             # Determine which races to use for the match

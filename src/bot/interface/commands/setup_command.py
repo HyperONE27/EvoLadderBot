@@ -204,8 +204,8 @@ class ErrorView(discord.ui.View):
         # Add restart and cancel buttons only
         buttons = ConfirmRestartCancelButtons.create_buttons(
             reset_target=SetupModal(),
-            restart_label="🔄 Try Again",
-            cancel_label="❌ Cancel",
+            restart_label="Try Again",
+            cancel_label="Cancel",
             show_cancel_fields=False,
             include_confirm=False,
             include_restart=True,
@@ -424,13 +424,13 @@ class UnifiedSetupView(discord.ui.View):
                     super().__init__(timeout=GLOBAL_TIMEOUT)
                     self.original_view = original_view
                 
-                @discord.ui.button(label="🔄 Try Again", style=discord.ButtonStyle.secondary)
+                @discord.ui.button(emote="🔄", label="Try Again", style=discord.ButtonStyle.secondary)
                 async def restart(self, interaction: discord.Interaction, button: discord.ui.Button):
                     # Go back to the country/region selection view
                     embed = self.original_view.get_embed()
                     await interaction.response.edit_message(embed=embed, view=self.original_view)
                 
-                @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.danger)
+                @discord.ui.button(emote="❌", label="Cancel", style=discord.ButtonStyle.danger)
                 async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
                     await send_ephemeral_response(
                         interaction,

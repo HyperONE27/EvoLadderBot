@@ -51,3 +51,7 @@ class MapsService(BaseConfigService):
 
     def get_map_names(self) -> List[str]:
         return self.get_names()
+
+    def get_available_maps(self) -> List[str]:
+        """Get list of available map short names."""
+        return self.get_map_short_names()

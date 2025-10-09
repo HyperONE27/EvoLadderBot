@@ -5,6 +5,7 @@ from typing import Union, Optional
 import discord
 import json
 import os
+import time
 
 
 def should_be_ephemeral(interaction: discord.Interaction) -> bool:
@@ -190,3 +191,13 @@ def get_flag_emote(country_code: str) -> str:
     else:
         # Use Unicode flag emoji for standard country codes
         return country_to_flag(country_code)
+
+
+def get_current_unix_timestamp() -> int:
+    """Get the current Unix epoch timestamp as an integer."""
+    return int(time.time())
+
+
+def format_discord_timestamp(unix_timestamp: int) -> str:
+    """Format a Unix timestamp for Discord's timestamp display."""
+    return f"<t:{unix_timestamp}:T>"

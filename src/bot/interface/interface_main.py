@@ -9,7 +9,7 @@ load_dotenv()
 
 from src.bot.interface.commands.activate_command import register_activate_command
 from src.bot.interface.commands.leaderboard_command import register_leaderboard_command
-from src.bot.interface.commands.queue_command import register_queue_command
+from src.bot.interface.commands.queue_command import register_queue_command, on_message as handle_replay_message
 from src.bot.interface.commands.setcountry_command import register_setcountry_command
 from src.bot.interface.commands.setup_command import register_setup_command
 from src.bot.interface.commands.termsofservice_command import register_termsofservice_command
@@ -32,6 +32,11 @@ async def on_ready():
         print("Matchmaker started")
     except Exception as e:
         print("Sync failed:", e)
+
+@bot.event
+async def on_message(message):
+    """Handle replay file detection for active match views."""
+    await handle_replay_message(message)
 
 def register_commands(bot: commands.Bot):
     register_activate_command(bot.tree)
