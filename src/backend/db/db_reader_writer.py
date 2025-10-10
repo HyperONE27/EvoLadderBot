@@ -365,11 +365,13 @@ class DatabaseWriter:
             
             if alt_player_name_1 is not None:
                 updates.append("alt_player_name_1 = :alt_player_name_1")
-                params["alt_player_name_1"] = alt_player_name_1
+                # Convert empty string to None for proper NULL storage
+                params["alt_player_name_1"] = alt_player_name_1 if alt_player_name_1.strip() else None
             
             if alt_player_name_2 is not None:
                 updates.append("alt_player_name_2 = :alt_player_name_2")
-                params["alt_player_name_2"] = alt_player_name_2
+                # Convert empty string to None for proper NULL storage
+                params["alt_player_name_2"] = alt_player_name_2 if alt_player_name_2.strip() else None
             
             if country is not None:
                 updates.append("country = :country")

@@ -69,7 +69,7 @@ class CancelButton(discord.ui.Button):
         row: int = 0,
         show_fields: bool = True
     ):
-        super().__init__(label=label, style=style, emoji="❌", row=row)
+        super().__init__(label=label, style=style, emoji="✖️", row=row)
         self.reset_target = reset_target
         self.show_fields = show_fields
 

@@ -8,6 +8,7 @@ from src.backend.services.maps_service import MapsService
 from src.backend.services.regions_service import RegionsService
 from src.bot.interface.components.error_embed import ErrorEmbedException, create_error_view_from_exception
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
+from src.bot.interface.components.cancel_embed import create_cancel_embed
 from src.backend.services.matchmaking_service import matchmaker, Player, QueuePreferences, MatchResult
 from src.backend.services.user_info_service import get_user_info
 from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader
@@ -16,6 +17,7 @@ from src.backend.services.command_guard_service import CommandGuardService, Comm
 from src.backend.services.replay_service import ReplayService
 from typing import Optional
 import logging
+import time
 
 race_service = RacesService()
 maps_service = MapsService()
@@ -184,14 +186,10 @@ class JoinQueueButton(discord.ui.Button):
             player=player
         )
         
-        searching_embed = discord.Embed(
-            title="🔍 Searching...",
-            description="The queue is searching for a game.",
-            color=discord.Color.teal()
-        )
-        
+        searching_view.start_status_updates()
+
         await interaction.response.edit_message(
-            embed=searching_embed,
+            embed=searching_view.build_searching_embed(),
             view=searching_view
         )
         
@@ -221,6 +219,27 @@ class ClearSelectionsButton(discord.ui.Button):
         await self.view.update_embed(interaction)
 
 
+class CancelQueueSetupButton(discord.ui.Button):
+    """Cancel button that shows cancel embed"""
+    
+    def __init__(self):
+        super().__init__(
+            label="Cancel",
+            emoji="✖️",
+            style=discord.ButtonStyle.danger,
+            row=0
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        # Create and show the cancel embed
+        cancel_view = create_cancel_embed()
+        await interaction.response.edit_message(
+            content="",
+            embed=cancel_view.embed,
+            view=cancel_view
+        )
+
+
 class QueueView(discord.ui.View):
     """Main queue view with race and map veto selections"""
     
@@ -233,6 +252,7 @@ class QueueView(discord.ui.View):
         self.vetoed_maps = default_maps or []
         self.add_item(JoinQueueButton())
         self.add_item(ClearSelectionsButton())
+        self.add_item(CancelQueueSetupButton())
         self.add_item(BroodWarRaceSelect(default_value=self.selected_bw_race))
         self.add_item(StarCraftRaceSelect(default_value=self.selected_sc2_race))
         self.add_item(MapVetoSelect(default_values=default_maps))
@@ -356,6 +376,9 @@ class QueueSearchingView(discord.ui.View):
         self.vetoed_maps = vetoed_maps
         self.player = player
         self.last_interaction = None
+        self.is_active = True
+        self.status_task: Optional[asyncio.Task] = None
+        self.status_lock = asyncio.Lock()
         
         # Store this view globally so we can update it when match is found
         active_queue_views[player.discord_user_id] = self
@@ -366,6 +389,45 @@ class QueueSearchingView(discord.ui.View):
         # Start async match checking
         asyncio.create_task(self.periodic_match_check())
     
+    def start_status_updates(self) -> None:
+        if self.status_task is None:
+            self.status_task = asyncio.create_task(self.periodic_status_update())
+
+    async def periodic_status_update(self):
+        while self.is_active and self.player.discord_user_id in active_queue_views:
+            await asyncio.sleep(15)
+            if not self.is_active or self.last_interaction is None:
+                continue
+            async with self.status_lock:
+                if not self.is_active:
+                    continue
+                try:
+                    await self.last_interaction.edit_original_response(
+                        embed=self.build_searching_embed(),
+                        view=self
+                    )
+                except Exception:
+                    pass
+
+    def build_searching_embed(self) -> discord.Embed:
+        stats = matchmaker.get_queue_snapshot()
+        next_wave_epoch = int(time.time() - (time.time() % matchmaker.MATCH_INTERVAL_SECONDS) + matchmaker.MATCH_INTERVAL_SECONDS)
+        embed = discord.Embed(
+            title="🔍 Searching...",
+            description=(
+                "The queue is searching for a game.\n\n"
+                f"- Search interval: {matchmaker.MATCH_INTERVAL_SECONDS} seconds\n"
+                f"- Next match wave: <t:{next_wave_epoch}:R>\n"
+                f"- Unique players seen in the last 15 minutes: {stats['active_population']}\n"
+                "- Current players queueing:\n"
+                f"  - Brood War: {stats['bw_only']}\n"
+                f"  - StarCraft II: {stats['sc2_only']}\n"
+                f"  - Both: {stats['both_races']}"
+            ),
+            color=discord.Color.teal()
+        )
+        return embed
+
     async def periodic_match_check(self):
         """Periodically check for matches and update the view"""
         while self.player.discord_user_id in active_queue_views:
@@ -398,6 +460,9 @@ class QueueSearchingView(discord.ui.View):
                 del match_results[self.player.discord_user_id]
                 if self.player.discord_user_id in active_queue_views:
                     del active_queue_views[self.player.discord_user_id]
+                self.is_active = False
+                if self.status_task:
+                    self.status_task.cancel()
                 break
             
             # Wait 1 second before checking again
@@ -414,7 +479,7 @@ class CancelQueueButton(discord.ui.Button):
     def __init__(self, original_view, player):
         super().__init__(
             label="Cancel Queue",
-            emoji="❌",
+            emoji="✖️",
             style=discord.ButtonStyle.danger,
             row=0
         )
@@ -429,6 +494,10 @@ class CancelQueueButton(discord.ui.Button):
         # Clean up from active views
         if self.player.discord_user_id in active_queue_views:
             del active_queue_views[self.player.discord_user_id]
+        if isinstance(interaction.view, QueueSearchingView):
+            interaction.view.is_active = False
+            if interaction.view.status_task:
+                interaction.view.status_task.cancel()
         
         # Return to the original queue view with its embed
         await interaction.response.edit_message(
@@ -647,6 +716,7 @@ class MatchFoundView(discord.ui.View):
 
         if not map_link:
             # Fallback to Americas link if specific region not available
+            print(f"🔍 FALLBACK: No map link found for {map_short_name} in {region_name}, falling back to Americas")
             map_link = maps_service.get_map_battlenet_link(map_short_name, "americas")
 
         map_author = maps_service.get_map_author(map_short_name) or "Unknown"

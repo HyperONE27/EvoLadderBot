@@ -33,8 +33,11 @@ async def setup_command(interaction: discord.Interaction):
         await send_ephemeral_response(interaction, embed=error_embed)
         return
     
-    # Send the modal directly as the initial response
-    modal = SetupModal()
+    # Get existing player data for presets
+    existing_data = user_info_service.get_player(interaction.user.id)
+    
+    # Send the modal with existing data as presets
+    modal = SetupModal(existing_data=existing_data)
     await interaction.response.send_modal(modal)
 
 
@@ -53,41 +56,53 @@ def register_setup_command(tree: app_commands.CommandTree):
 
 # UI Elements
 class SetupModal(discord.ui.Modal, title="Player Setup"):
-    def __init__(self, error_message: Optional[str] = None) -> None:
+    def __init__(self, error_message: Optional[str] = None, existing_data: Optional[dict] = None) -> None:
         super().__init__(timeout=GLOBAL_TIMEOUT)
         self.error_message = error_message
+        self.existing_data = existing_data or {}
         
-    user_id = discord.ui.TextInput(
-        label="User ID",
-        placeholder="Enter your user ID (3-12 characters)",
-        min_length=3,
-        max_length=12,
-        required=True
-    )
-    
-    battle_tag = discord.ui.TextInput(
-        label="BattleTag",
-        placeholder="e.g., Username#1234 (3-12 letters + # + 4-12 digits)",
-        min_length=8,
-        max_length=25,  # 12 + # + 12 = 25 max
-        required=True
-    )
-    
-    alt_id_1 = discord.ui.TextInput(
-        label="Alternative ID 1 (optional)",
-        placeholder="Enter your first alternative ID (3-12 characters)",
-        min_length=3,
-        max_length=12,
-        required=False
-    )
-    
-    alt_id_2 = discord.ui.TextInput(
-        label="Alternative ID 2 (optional)",
-        placeholder="Enter your second alternative ID (3-12 characters)",
-        min_length=3,
-        max_length=12,
-        required=False
-    )
+        # Create TextInput fields with existing data as defaults
+        self.user_id = discord.ui.TextInput(
+            label="User ID",
+            placeholder="Enter your user ID (3-12 characters)",
+            default=self.existing_data.get('player_name', ''),
+            min_length=3,
+            max_length=12,
+            required=True
+        )
+        
+        self.battle_tag = discord.ui.TextInput(
+            label="BattleTag",
+            placeholder="e.g., Username#1234 (3-12 letters + # + 4-12 digits)",
+            default=self.existing_data.get('battletag', ''),
+            min_length=8,
+            max_length=25,  # 12 + # + 12 = 25 max
+            required=True
+        )
+        
+        self.alt_id_1 = discord.ui.TextInput(
+            label="Alternative ID 1 (optional)",
+            placeholder="Enter your first alternative ID (3-12 characters)",
+            default=self.existing_data.get('alt_player_name_1', ''),
+            min_length=3,
+            max_length=12,
+            required=False
+        )
+        
+        self.alt_id_2 = discord.ui.TextInput(
+            label="Alternative ID 2 (optional)",
+            placeholder="Enter your second alternative ID (3-12 characters)",
+            default=self.existing_data.get('alt_player_name_2', ''),
+            min_length=3,
+            max_length=12,
+            required=False
+        )
+        
+        # Add the fields to the modal
+        self.add_item(self.user_id)
+        self.add_item(self.battle_tag)
+        self.add_item(self.alt_id_1)
+        self.add_item(self.alt_id_2)
 
     async def on_submit(self, interaction: discord.Interaction):
         # Validate user ID
@@ -101,7 +116,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
             await send_ephemeral_response(
                 interaction,
                 embed=error_embed,
-                view=ErrorView(error)
+                view=ErrorView(error, self.existing_data)
             )
             return
 
@@ -116,7 +131,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
             await send_ephemeral_response(
                 interaction,
                 embed=error_embed,
-                view=ErrorView(error)
+                view=ErrorView(error, self.existing_data)
             )
             return
 
@@ -135,7 +150,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
                 await send_ephemeral_response(
                     interaction,
                     embed=error_embed,
-                    view=ErrorView(error)
+                    view=ErrorView(error, self.existing_data)
                 )
                 return
             alt_ids_list.append(self.alt_id_1.value.strip())
@@ -152,7 +167,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
                 await send_ephemeral_response(
                     interaction,
                     embed=error_embed,
-                    view=ErrorView(error)
+                    view=ErrorView(error, self.existing_data)
                 )
                 return
             alt_ids_list.append(self.alt_id_2.value.strip())
@@ -168,19 +183,66 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
             await send_ephemeral_response(
                 interaction,
                 embed=error_embed,
-                view=ErrorView("Duplicate IDs detected")
+                view=ErrorView("Duplicate IDs detected", self.existing_data)
             )
             return
 
+        # Get existing country and region data for presets
+        existing_country = None
+        existing_region = None
+        country_page1_selection = None
+        country_page2_selection = None
+        
+        if self.existing_data:
+            existing_country_code = self.existing_data.get('country')
+            existing_region_code = self.existing_data.get('region')
+            
+            if existing_country_code:
+                try:
+                    # Try to find the country in common countries
+                    existing_country = next(
+                        (c for c in countries_service.get_common_countries() 
+                         if c['code'] == existing_country_code), 
+                        None
+                    )
+                    if existing_country:
+                        # Check which page the country is on
+                        common_countries = countries_service.get_common_countries()
+                        country_index = next(
+                            (i for i, c in enumerate(common_countries) if c['code'] == existing_country_code), 
+                            -1
+                        )
+                        if country_index >= 0:
+                            if country_index < 25:
+                                country_page1_selection = existing_country_code
+                            else:
+                                country_page2_selection = existing_country_code
+                except:
+                    # If country is not in common countries, default to "Other"
+                    existing_country = next(
+                        (c for c in countries_service.get_common_countries() 
+                         if c['code'] == 'ZZ'), 
+                        None
+                    )
+                    if existing_country:
+                        country_page2_selection = 'ZZ'
+            
+            if existing_region_code:
+                existing_region = next(
+                    (r for r in regions_service.get_all_regions() 
+                     if r['code'] == existing_region_code), 
+                    None
+                )
+        
         # Store data and show unified selection view
         view = UnifiedSetupView(
             user_id=self.user_id.value,
             alt_ids=alt_ids_list,
             battle_tag=self.battle_tag.value,
-            selected_country=None,
-            selected_region=None,
-            country_page1_selection=None,
-            country_page2_selection=None
+            selected_country=existing_country,
+            selected_region=existing_region,
+            country_page1_selection=country_page1_selection,
+            country_page2_selection=country_page2_selection
         )
         
         # Create initial blue embed
@@ -197,13 +259,14 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         )
 
 class ErrorView(discord.ui.View):
-    def __init__(self, error_message: str) -> None:
+    def __init__(self, error_message: str, existing_data: Optional[dict] = None) -> None:
         super().__init__(timeout=GLOBAL_TIMEOUT)
         self.error_message = error_message
+        self.existing_data = existing_data or {}
         
         # Add restart and cancel buttons only
         buttons = ConfirmRestartCancelButtons.create_buttons(
-            reset_target=SetupModal(),
+            reset_target=SetupModal(existing_data=self.existing_data),
             restart_label="Try Again",
             cancel_label="Cancel",
             show_cancel_fields=False,
@@ -484,12 +547,13 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
         user_info = get_user_info(interaction)
         
         # Send data to backend
+        # Always pass alt names (empty string if not provided) to ensure clearing is recorded
         success = user_info_service.complete_setup(
             discord_uid=user_info["id"],
             player_name=user_id,
             battletag=battle_tag,
-            alt_player_name_1=alt_ids[0] if len(alt_ids) > 0 else None,
-            alt_player_name_2=alt_ids[1] if len(alt_ids) > 1 else None,
+            alt_player_name_1=alt_ids[0] if len(alt_ids) > 0 else "",
+            alt_player_name_2=alt_ids[1] if len(alt_ids) > 1 else "",
             country=country['code'],
             region=region['code']
         )
@@ -516,7 +580,7 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
             description="Your player profile has been successfully configured:",
             fields=fields,
             mode="post_confirmation",
-            reset_target=SetupModal(),
+            reset_target=SetupModal(existing_data=user_info_service.get_player(user_info["id"])),
             restart_label="🔄 Setup Again"
         )
         

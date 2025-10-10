@@ -163,7 +163,7 @@ async def termsofservice_command(interaction: discord.Interaction):
         async def accept_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
             await confirm_callback(interaction)
 
-        @discord.ui.button(label="I Decline These Terms", emoji="❌", style=discord.ButtonStyle.danger)
+        @discord.ui.button(label="I Decline These Terms", emoji="✖️", style=discord.ButtonStyle.danger)
         async def decline_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
             await cancel_callback(interaction)
 

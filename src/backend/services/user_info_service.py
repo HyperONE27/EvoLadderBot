@@ -264,23 +264,31 @@ class UserInfoService:
                     new_value=battletag
                 )
             
-            if alt_player_name_1 is not None and old_player.get("alt_player_name_1") != alt_player_name_1:
-                self.writer.log_player_action(
-                    discord_uid=discord_uid,
-                    player_name=current_player_name,
-                    setting_name="alt_player_name_1",
-                    old_value=old_player.get("alt_player_name_1"),
-                    new_value=alt_player_name_1
-                )
+            if alt_player_name_1 is not None:
+                # Normalize: empty string becomes None for comparison
+                normalized_new = alt_player_name_1.strip() if alt_player_name_1 else None
+                normalized_old = old_player.get("alt_player_name_1") or None
+                if normalized_old != normalized_new:
+                    self.writer.log_player_action(
+                        discord_uid=discord_uid,
+                        player_name=current_player_name,
+                        setting_name="alt_player_name_1",
+                        old_value=old_player.get("alt_player_name_1"),
+                        new_value=normalized_new
+                    )
             
-            if alt_player_name_2 is not None and old_player.get("alt_player_name_2") != alt_player_name_2:
-                self.writer.log_player_action(
-                    discord_uid=discord_uid,
-                    player_name=current_player_name,
-                    setting_name="alt_player_name_2",
-                    old_value=old_player.get("alt_player_name_2"),
-                    new_value=alt_player_name_2
-                )
+            if alt_player_name_2 is not None:
+                # Normalize: empty string becomes None for comparison
+                normalized_new = alt_player_name_2.strip() if alt_player_name_2 else None
+                normalized_old = old_player.get("alt_player_name_2") or None
+                if normalized_old != normalized_new:
+                    self.writer.log_player_action(
+                        discord_uid=discord_uid,
+                        player_name=current_player_name,
+                        setting_name="alt_player_name_2",
+                        old_value=old_player.get("alt_player_name_2"),
+                        new_value=normalized_new
+                    )
             
             if country is not None and old_player.get("country") != country:
                 self.writer.log_player_action(

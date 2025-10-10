@@ -84,6 +84,33 @@ class Player:
 
 
 class Matchmaker:
+    # --- System Tuning Parameters ---
+    # The time window in seconds to consider a player "active" after their last activity.
+    # Chosen based on the average game length (10-15 minutes).
+    ACTIVITY_WINDOW_SECONDS = 15 * 60
+
+    # How often to prune the recent_activity list, in seconds.
+    PRUNE_INTERVAL_SECONDS = 60
+
+    # Global matchmaking interval (matchwave) in seconds.
+    MATCH_INTERVAL_SECONDS = 45
+
+    # The number of matchmaking waves before the MMR window expands.
+    # With a 45-second wave interval, expansion occurs once per wave.
+    MMR_EXPANSION_STEP = 1
+
+    # --- Queue Pressure Ratio Thresholds ---
+    # Ratio of (players in queue) / (total active players).
+    HIGH_PRESSURE_THRESHOLD = 0.5  # More than 50% of active players are queueing.
+    MODERATE_PRESSURE_THRESHOLD = 0.3 # More than 30% of active players are queueing.
+
+    # --- MMR Window Parameters (Base, Growth) ---
+    # (base, growth) values for the max_diff function under different pressures.
+    HIGH_PRESSURE_PARAMS = (75, 25)
+    MODERATE_PRESSURE_PARAMS = (100, 35)
+    LOW_PRESSURE_PARAMS = (125, 45)
+    DEFAULT_PARAMS = (75, 25) # Fallback for when effective_pop is zero.
+
     def __init__(self, players: Optional[List[Player]] = None):
         self.players: List[Player] = players or []
         self.running = False
@@ -92,6 +119,10 @@ class Matchmaker:
         self.db_writer = DatabaseWriter()
         self.regions_service = RegionsService()
         self.maps_service = MapsService()
+        
+        # System for tracking effective population
+        self.recent_activity: Dict[int, float] = {}
+        self.last_prune_time: float = time.time()
 
     def add_player(self, player: Player) -> None:
         """Add a player to the matchmaking pool with MMR lookup."""
@@ -126,6 +157,9 @@ class Matchmaker:
         print(f"   Vetoed maps: {player.preferences.vetoed_maps}")
         self.players.append(player)
         print(f"   Total players in queue: {len(self.players)}")
+        
+        # Log player activity
+        self.recent_activity[player.discord_user_id] = time.time()
 
     def remove_player(self, discord_user_id: int) -> None:
         """Remove a player from the matchmaking pool by Discord ID."""
@@ -139,25 +173,54 @@ class Matchmaker:
         """Set the callback function to be called when a match is found."""
         self.match_callback = callback
 
-    def max_diff(self, wait_cycles: int, queue_size: int) -> int:
-        """
-        Calculate maximum acceptable MMR difference based on wait time and queue size.
-        
-        Args:
-            wait_cycles: Number of matching cycles the player has waited
-            queue_size: Total number of players in queue
-            
-        Returns:
-            Maximum MMR difference allowed
-        """
-        if queue_size < 6:
-            base, growth = 150, 75
-        elif queue_size < 12:
-            base, growth = 125, 50
+    def get_queue_snapshot(self) -> Dict[str, int]:
+        """Return current queue statistics for UI display."""
+        current_players = list(self.players)
+        bw_only, sc2_only, both_races = self.categorize_players(current_players)
+        return {
+            "active_population": len(self.recent_activity),
+            "bw_only": len(bw_only),
+            "sc2_only": len(sc2_only),
+            "both_races": len(both_races),
+        }
+
+    def _calculate_queue_pressure(self, queue_size: int, effective_pop: int) -> float:
+        """Calculate the scale-adjusted queue pressure ratio."""
+        if effective_pop <= 0:
+            return 0.0
+
+        if effective_pop <= 25:
+            scale = 1.2  # amplify impact in small populations
+        elif effective_pop <= 100:
+            scale = 1.0  # balanced default
         else:
-            base, growth = 100, 25
-        step = 6  # number of queue attempts, not number of seconds
-        return base + (wait_cycles // step) * growth
+            scale = 0.8  # dampen for large populations
+
+        return min(1.0, (scale * queue_size) / effective_pop)
+
+    def max_diff(self, wait_cycles: int) -> int:
+        """
+        Calculate max MMR difference based on queue pressure and wait time.
+        """
+        queue_size = len(self.players)
+        effective_pop = len(self.recent_activity)
+        
+        # Avoid division by zero if no one is active
+        if effective_pop == 0:
+            # Fallback to a default conservative behavior
+            base, growth = self.DEFAULT_PARAMS
+        else:
+            pressure_ratio = self._calculate_queue_pressure(queue_size, effective_pop)
+
+            if pressure_ratio >= self.HIGH_PRESSURE_THRESHOLD:  # High pressure
+                base, growth = self.HIGH_PRESSURE_PARAMS
+            elif pressure_ratio >= self.MODERATE_PRESSURE_THRESHOLD:  # Moderate pressure
+                base, growth = self.MODERATE_PRESSURE_PARAMS
+            else:  # Low pressure
+                base, growth = self.LOW_PRESSURE_PARAMS
+
+        # Increase MMR range once per matchmaking wave
+        return base + (wait_cycles // self.MMR_EXPANSION_STEP) * growth
 
     def categorize_players(self, players: List[Player]) -> Tuple[List[Player], List[Player], List[Player]]:
         """
@@ -301,7 +364,7 @@ class Matchmaker:
                 continue
                 
             lead_mmr = lead_player.get_effective_mmr(is_bw_match) or 0
-            max_diff = self.max_diff(lead_player.wait_cycles, len(self.players))
+            max_diff = self.max_diff(lead_player.wait_cycles)
             
             # Find best match in follow side
             best_match = None
@@ -396,7 +459,7 @@ class Matchmaker:
             if not available_maps:
                 print(f"❌ No available maps for {p1.user_id} vs {p2.user_id}")
                 continue
-            
+
             map_choice = random.choice(available_maps)
             server_choice = self.regions_service.get_random_game_server()
             in_game_channel = self.generate_in_game_channel()
@@ -428,7 +491,7 @@ class Matchmaker:
                 p2_mmr,
                 0.0  # MMR change will be calculated and updated after match result
             )
-            
+
             # Create match result
             match_result = MatchResult(
                 match_id=match_id,
@@ -442,18 +505,18 @@ class Matchmaker:
                 server_choice=server_choice,
                 in_game_channel=in_game_channel
             )
-            
+
             # Call the match callback if set
             if self.match_callback:
                 print(f"📞 Calling match callback for {p1.user_id} vs {p2.user_id}")
                 self.match_callback(match_result)
             else:
                 print("⚠️  No match callback set!")
-            
+
             # Start monitoring this match for completion
             from src.backend.services.match_completion_service import match_completion_service
             match_completion_service.start_monitoring_match(match_id)
-            
+
             # Track matched players
             matched_players.add(p1.discord_user_id)
             matched_players.add(p2.discord_user_id)
@@ -467,6 +530,16 @@ class Matchmaker:
         if not matches:
             print("❌ No valid matches this round.")
 
+    def _prune_recent_activity(self):
+        """Remove players from activity log if they haven't been seen in 15 minutes."""
+        now = time.time()
+        stale_players = [
+            uid for uid, timestamp in self.recent_activity.items()
+            if now - timestamp > self.ACTIVITY_WINDOW_SECONDS
+        ]
+        for uid in stale_players:
+            del self.recent_activity[uid]
+
     def _update_queue_after_matching(self, matched_players: set, original_bw_only: List[Player], 
                                    original_sc2_only: List[Player], original_both_races: List[Player]):
         """
@@ -478,6 +551,11 @@ class Matchmaker:
             original_sc2_only: Original SC2-only players list  
             original_both_races: Original both-races players list
         """
+        # Update activity for matched players
+        timestamp = time.time()
+        for discord_id in matched_players:
+            self.recent_activity[discord_id] = timestamp
+            
         # Remove matched players from the main queue
         for discord_id in matched_players:
             self.remove_player(discord_id)
@@ -490,11 +568,28 @@ class Matchmaker:
         print(f"   📊 Remaining players: BW-only={len(remaining_bw)}, SC2-only={len(remaining_sc2)}, Both={len(remaining_both)}")
 
     async def run(self):
-        """Continuously try to match players every 5 seconds."""
+        """Continuously try to match players every MATCH_INTERVAL_SECONDS."""
         self.running = True
-        print("🚀 Advanced matchmaker started - checking for matches every 5 seconds")
+        print("🚀 Advanced matchmaker started - checking for matches every 45 seconds")
+
+        interval = self.MATCH_INTERVAL_SECONDS
+
         while self.running:
-            await asyncio.sleep(5)
+            now = time.time()
+            remainder = now % interval
+            sleep_duration = interval - remainder if remainder > 0 else 0
+
+            if sleep_duration > 0:
+                await asyncio.sleep(sleep_duration)
+                if not self.running:
+                    break
+
+            # Prune stale activity data periodically
+            current_time = time.time()
+            if current_time - self.last_prune_time > self.PRUNE_INTERVAL_SECONDS:
+                self._prune_recent_activity()
+                self.last_prune_time = current_time
+
             if len(self.players) > 0:
                 print(f"⏰ Checking for matches with {len(self.players)} players in queue...")
             await self.attempt_match()
