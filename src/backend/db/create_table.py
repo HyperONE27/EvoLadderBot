@@ -73,7 +73,7 @@ def create_database(db_path: str = "evoladder.db") -> None:
             discord_uid             INTEGER NOT NULL,
             player_name             TEXT NOT NULL,
             race                    TEXT NOT NULL,
-            mmr                     FLOAT NOT NULL,
+            mmr                     INTEGER NOT NULL,
             games_played            INTEGER DEFAULT 0,
             games_won               INTEGER DEFAULT 0,
             games_lost              INTEGER DEFAULT 0,
@@ -89,10 +89,10 @@ def create_database(db_path: str = "evoladder.db") -> None:
             id                      INTEGER PRIMARY KEY AUTOINCREMENT,
             player_1_discord_uid    INTEGER NOT NULL,
             player_2_discord_uid    INTEGER NOT NULL,
-            player_1_mmr            FLOAT NOT NULL,
-            player_2_mmr            FLOAT NOT NULL,
+            player_1_mmr            INTEGER NOT NULL,
+            player_2_mmr            INTEGER NOT NULL,
             winner_discord_uid      INTEGER,
-            mmr_change              FLOAT NOT NULL,
+            mmr_change              INTEGER NOT NULL,
             map_played              TEXT NOT NULL,
             server_used             TEXT NOT NULL,
             played_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -208,7 +208,7 @@ def create_mock_data():
         
         for race in selected_races:
             # Random MMR between 1000-2000
-            mmr = round(random.uniform(1000.0, 2000.0), 1)
+            mmr = random.randint(1000, 2000)
             
             # Random game stats
             games_played = random.randint(10, 100)
@@ -258,12 +258,17 @@ def populate_database(cursor, mock_data):
             INSERT INTO players (
                 discord_uid, discord_username, player_name, battletag,
                 country, region, accepted_tos, completed_setup
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            player["discord_uid"], player["discord_username"], player["player_name"],
-            player["battletag"], player["country"], player["region"],
-            player["accepted_tos"], player["completed_setup"]
-        ))
+            ) VALUES (:discord_uid, :discord_username, :player_name, :battletag, :country, :region, :accepted_tos, :completed_setup)
+        """, {
+            "discord_uid": player["discord_uid"],
+            "discord_username": player["discord_username"],
+            "player_name": player["player_name"],
+            "battletag": player["battletag"],
+            "country": player["country"],
+            "region": player["region"],
+            "accepted_tos": player["accepted_tos"],
+            "completed_setup": player["completed_setup"]
+        })
     
     # Insert MMRs
     print("📊 Inserting mock MMR data...")
@@ -272,11 +277,17 @@ def populate_database(cursor, mock_data):
             INSERT INTO mmrs_1v1 (
                 discord_uid, player_name, race, mmr,
                 games_played, games_won, games_lost, games_drawn
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            mmr["discord_uid"], mmr["player_name"], mmr["race"], mmr["mmr"],
-            mmr["games_played"], mmr["games_won"], mmr["games_lost"], mmr["games_drawn"]
-        ))
+            ) VALUES (:discord_uid, :player_name, :race, :mmr, :games_played, :games_won, :games_lost, :games_drawn)
+        """, {
+            "discord_uid": mmr["discord_uid"],
+            "player_name": mmr["player_name"],
+            "race": mmr["race"],
+            "mmr": mmr["mmr"],
+            "games_played": mmr["games_played"],
+            "games_won": mmr["games_won"],
+            "games_lost": mmr["games_lost"],
+            "games_drawn": mmr["games_drawn"]
+        })
     
     # Insert preferences
     print("⚙️  Inserting mock preferences...")
@@ -284,10 +295,12 @@ def populate_database(cursor, mock_data):
         cursor.execute("""
             INSERT INTO preferences_1v1 (
                 discord_uid, last_chosen_races, last_chosen_vetoes
-            ) VALUES (?, ?, ?)
-        """, (
-            pref["discord_uid"], pref["last_chosen_races"], pref["last_chosen_vetoes"]
-        ))
+            ) VALUES (:discord_uid, :last_chosen_races, :last_chosen_vetoes)
+        """, {
+            "discord_uid": pref["discord_uid"],
+            "last_chosen_races": pref["last_chosen_races"],
+            "last_chosen_vetoes": pref["last_chosen_vetoes"]
+        })
     
     
     print("✅ Mock data population complete!")

@@ -254,7 +254,9 @@ class QueueView(discord.ui.View):
 
     async def persist_preferences(self) -> None:
         races_payload = json.dumps(self.get_selected_race_codes())
-        vetoes_payload = json.dumps(self.vetoed_maps)
+        # Sort vetoed maps alphabetically before saving to DB
+        sorted_vetoes = sorted(self.vetoed_maps)
+        vetoes_payload = json.dumps(sorted_vetoes)
 
         loop = asyncio.get_running_loop()
 
@@ -285,7 +287,17 @@ class QueueView(discord.ui.View):
             for code in selected_codes:
                 label = race_service.get_race_group_label(code)
                 name = race_service.get_race_name(code)
-                details.append(f"• {label}: {name}")
+                # Get race emote for display
+                from src.bot.utils.discord_utils import get_race_emote
+                race_emote = get_race_emote(code)
+                # Simplify the label (remove BW/SC2 suffix)
+                if label == "Brood War":
+                    simplified_label = "Brood War"
+                elif label == "StarCraft II":
+                    simplified_label = "StarCraft II"
+                else:
+                    simplified_label = label
+                details.append(f"• {simplified_label}: {race_emote} {name}")
             race_list = "\n".join(details)
             embed.add_field(
                 name="Selected Races",
@@ -305,7 +317,9 @@ class QueueView(discord.ui.View):
             # Sort maps according to the service's defined order
             map_order = maps_service.get_map_short_names()
             sorted_maps = [map_name for map_name in map_order if map_name in self.vetoed_maps]
-            map_list = "\n".join([f"• {map_name}" for map_name in sorted_maps])
+            # Add Discord number emotes
+            number_emotes = [":one:", ":two:", ":three:", ":four:"]
+            map_list = "\n".join([f"{number_emotes[i]} {map_name}" for i, map_name in enumerate(sorted_maps)])
             embed.add_field(
                 name=f"Vetoed Maps ({veto_count}/4)",
                 value=map_list,
@@ -429,6 +443,34 @@ match_results = {}
 # Global dictionary to store active queue views by Discord user ID
 active_queue_views = {}
 
+async def wait_for_match_completion(match_id: int, timeout: int = 30) -> Optional[dict]:
+    """
+    Wait for a match to be fully completed and return the final results.
+    
+    Args:
+        match_id: The ID of the match to wait for
+        timeout: Maximum time to wait in seconds (default: 30)
+    
+    Returns:
+        Dictionary with final match results or None if timeout/error
+    """
+    try:
+        from src.backend.services.match_completion_service import match_completion_service
+        
+        # Wait for the match completion service to process the match
+        final_results = await match_completion_service.wait_for_match_completion(match_id, timeout)
+        
+        if final_results:
+            print(f"✅ Match {match_id} completed with results: {final_results}")
+            return final_results
+        else:
+            print(f"⏰ Match {match_id} completion timed out after {timeout} seconds")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error waiting for match {match_id} completion: {e}")
+        return None
+
 def handle_match_result(match_result: MatchResult):
     """Handle when a match is found"""
     print(f"🎉 MATCH FOUND!")
@@ -454,7 +496,7 @@ class MatchFoundView(discord.ui.View):
     """View shown when a match is found"""
     
     def __init__(self, match_result: MatchResult, is_player1: bool):
-        super().__init__(timeout=GLOBAL_TIMEOUT)
+        super().__init__(timeout=None)  # No timeout - let match completion service handle cleanup
         self.match_result = match_result
         self.is_player1 = is_player1
         self.selected_result = match_result.match_result
@@ -555,8 +597,15 @@ class MatchFoundView(discord.ui.View):
         p1_race_emote = get_race_emote(p1_race)
         p2_race_emote = get_race_emote(p2_race)
         
-        # Create title with new format including races
-        title = f"Match #{self.match_result.match_id}: {p1_flag} {p1_race_emote} {p1_display_name} vs {p2_flag} {p2_race_emote} {p2_display_name}"
+        # Get MMR values from database
+        from src.backend.db.db_reader_writer import DatabaseReader
+        db_reader = DatabaseReader()
+        match_data = db_reader.get_match_1v1(self.match_result.match_id)
+        p1_mmr = int(match_data.get('player_1_mmr', 0)) if match_data else 0
+        p2_mmr = int(match_data.get('player_2_mmr', 0)) if match_data else 0
+        
+        # Create title with new format including races and MMR
+        title = f"Match #{self.match_result.match_id}: {p1_flag} {p1_race_emote} {p1_display_name} ({p1_mmr}) vs {p2_flag} {p2_race_emote} {p2_display_name} ({p2_mmr})"
         
         # Get race names for display using races service
         p1_race_name = race_service.get_race_name(p1_race)
@@ -586,22 +635,22 @@ class MatchFoundView(discord.ui.View):
         )
         
         # Match Result section
-        if self.match_result.match_result:
+        print(f"🔍 EMBED: match_result value = '{self.match_result.match_result}'")
+        
+        if self.match_result.match_result == 'conflict':
+            result_display = "Conflict"
+            mmr_display = "\n• MMR Awarded: :x: Report Conflict Detected"
+        elif self.match_result.match_result:
             # Convert to human-readable format
             if self.match_result.match_result == "player1_win":
                 result_display = f"{p1_display_name} victory"
             elif self.match_result.match_result == "player2_win":
                 result_display = f"{p2_display_name} victory"
-            else:  # draw
+            else:  # draw or other value
+                print(f"⚠️ EMBED: Unexpected match_result value: '{self.match_result.match_result}'")
                 result_display = "Draw"
-        else:
-            result_display = "Not selected"
             
-        confirmation_display = self.match_result.match_result_confirmation_status or "Not confirmed"
-        # Calculate MMR changes - show TBD if not confirmed, actual values if confirmed
-        mmr_display = ""
-        if self.match_result.match_result:
-            # Get MMR changes from the match result
+            # Always show MMR field - calculate MMR changes
             p1_mmr_change = getattr(self.match_result, 'p1_mmr_change', None)
             p2_mmr_change = getattr(self.match_result, 'p2_mmr_change', None)
             
@@ -618,8 +667,13 @@ class MatchFoundView(discord.ui.View):
                 
                 mmr_display = f"\n• MMR Awarded: `{p1_display_name}: {p1_sign}{p1_mmr_rounded}`, `{p2_display_name}: {p2_sign}{p2_mmr_rounded}`"
             else:
-                # MMR changes not calculated yet
+                # MMR changes not calculated yet - always show TBD
                 mmr_display = f"\n• MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
+        else:
+            result_display = "Not selected"
+            mmr_display = f"\n• MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
+            
+        confirmation_display = self.match_result.match_result_confirmation_status or "Not confirmed"
         
         embed.add_field(
             name="**Match Result:**",
@@ -646,21 +700,20 @@ class MatchFoundView(discord.ui.View):
         """Register this view for replay detection in the specified channel."""
         self.channel_id = channel_id
         register_match_view(channel_id, self)
-    
-    def unregister_for_replay_detection(self):
-        """Unregister this view from replay detection."""
-        if self.channel_id:
-            unregister_match_view(self.channel_id)
-    
-    async def on_timeout(self):
-        """Handle view timeout - cleanup replay detection registration."""
-        # Only unregister if result is not confirmed (keep listener active for replay updates)
-        if self.confirmation_status != "Confirmed":
-            # Don't unregister - keep listener active for replay updates
-            pass
-        else:
-            # Result is confirmed, safe to unregister
-            self.unregister_for_replay_detection()
+        match_id = getattr(self.match_result, "match_id", None)
+        if match_id is not None:
+            match_view_snapshots.setdefault(match_id, [])
+            # Avoid duplicate entries for the same channel
+            existing_channels = {cid for cid, _ in match_view_snapshots[match_id]}
+            if channel_id not in existing_channels:
+                match_view_snapshots[match_id].append((channel_id, self))
+            else:
+                # Replace existing entry with latest view reference
+                match_view_snapshots[match_id] = [
+                    (cid, self if cid == channel_id else view)
+                    for cid, view in match_view_snapshots[match_id]
+                ]
+        print(f"🔍 REGISTER: Registered match view for channel {channel_id}, match {self.match_result.match_id}")
 
 
 class MatchResultConfirmSelect(discord.ui.Select):
@@ -690,48 +743,20 @@ class MatchResultConfirmSelect(discord.ui.Select):
         # Persist the confirmation status
         self.parent_view.match_result.match_result_confirmation_status = "Confirmed"
         
-        # Disable both dropdowns after confirmation
-        self.parent_view.result_select.disabled = True
-        self.parent_view.confirm_select.disabled = True
-        
-        # Process the confirmed result
-        # Get the current player's Discord ID
-        current_player_id = interaction.user.id
-        
-        # Store the result
-        result_key = f"{self.parent_view.match_result.player1_discord_id}_{self.parent_view.match_result.player2_discord_id}"
-        
-        # Initialize match results storage if not exists
-        if not hasattr(MatchFoundView, 'match_results_reported'):
-            MatchFoundView.match_results_reported = {}
-        
-        # Store this player's reported result
-        MatchFoundView.match_results_reported[result_key] = MatchFoundView.match_results_reported.get(result_key, {})
-        MatchFoundView.match_results_reported[result_key][current_player_id] = self.parent_view.selected_result
+        # Set the selected option as default for persistence
+        for option in self.options:
+            option.default = (option.value == self.values[0])
         
         # Disable both dropdowns after confirmation
         self.parent_view.result_select.disabled = True
         self.parent_view.confirm_select.disabled = True
-        
-        # Unregister replay detection since result is now confirmed
-        self.parent_view.unregister_for_replay_detection()
         
         # Update the embed to show confirmation status
         embed = self.parent_view.get_embed()
         await interaction.response.edit_message(embed=embed, view=self.parent_view)
-        
-        # Check if both players have reported (but don't try to respond again)
-        reported_results = MatchFoundView.match_results_reported[result_key]
-        if len(reported_results) == 2:
-            # Both players have reported - check for agreement
-            results = list(reported_results.values())
-            if len(set(results)) == 1:  # All results are the same
-                # Results match - process the match (without responding to interaction)
-                await self.parent_view.result_select.process_match_result_silent(results[0])
-            else:
-                # Results don't match - show error to both players (without responding to interaction)
-                await self.parent_view.result_select.handle_disagreement_silent()
-        # Note: We don't need to handle the single player case here since we already updated the embed
+
+        # Record the player's individual report
+        await self.parent_view.result_select.record_player_report(self.parent_view.selected_result)
 
 
 class MatchResultSelect(discord.ui.Select):
@@ -810,9 +835,6 @@ class MatchResultSelect(discord.ui.Select):
                 option.default = True
             else:
                 option.default = False
-        
-        # Update dropdown states after selection
-        self.parent_view._update_dropdown_states()
         
         # Update the message with new embed
         embed = self.parent_view.get_embed()
@@ -895,32 +917,7 @@ class MatchResultSelect(discord.ui.Select):
         
         print(f"📊 Match result recorded: {winner} defeated {loser} on {self.match_result.map_choice} (Match ID: {self.match_result.match_id})")
     
-    async def handle_disagreement(self, interaction: discord.Interaction):
-        """Handle when players report different results"""
-        # Get the original match embed
-        original_embed = self.view.get_embed()
-        
-        # Create disagreement embed
-        disagreement_embed = discord.Embed(
-            title="⚠️ Result Disagreement",
-            description="The reported results don't match. Please contact an administrator to resolve this dispute.",
-            color=discord.Color.red()
-        )
-        
-        # Disable the dropdown and update the message
-        self.disabled = True
-        self.placeholder = f"Selected: {self.get_selected_label()}"
-        
-        # Update the message with both embeds
-        await interaction.response.edit_message(
-            embeds=[original_embed, disagreement_embed],
-            view=self.view
-        )
-        
-        # Also send the disagreement to the other player
-        await self.notify_other_player_disagreement(original_embed, disagreement_embed)
-        
-        print(f"⚠️ Result disagreement for match {self.match_result.player1_user_id} vs {self.match_result.player2_user_id}")
+    # Removed handle_disagreement - no longer needed with individual reporting
     
     def get_selected_label(self):
         """Get the label for the selected result"""
@@ -975,49 +972,48 @@ class MatchResultSelect(discord.ui.Select):
                     except:
                         pass  # Interaction might be expired
     
-    async def process_match_result_silent(self, result: str):
-        """Process match result without responding to interaction"""
-        # Convert result to winner/loser format
+    async def record_player_report(self, result: str):
+        """Record a player's individual report for the match"""
+        # Convert result to report value format
         if result == "player1_win":
-            winner = self.p1_name
-            loser = self.p2_name
-            winner_discord_id = self.match_result.player1_discord_id
+            report_value = 1  # Player 1 won
         elif result == "player2_win":
-            winner = self.p2_name
-            loser = self.p1_name
-            winner_discord_id = self.match_result.player2_discord_id
+            report_value = 2  # Player 2 won
         else:  # draw
-            winner = "Draw"
-            loser = "Draw"
-            winner_discord_id = -1
+            report_value = 0  # Draw
         
-        # Record the match result in the database
+        # Record the player's report in the database
         try:
             from src.backend.services.matchmaking_service import matchmaker
-            matchmaker.record_match_result(self.match_result.match_id, winner_discord_id)
+            # Get the current player's Discord ID
+            current_player_id = self.parent_view.match_result.player1_discord_id if self.is_player1 else self.parent_view.match_result.player2_discord_id
+            success = matchmaker.record_match_result(self.match_result.match_id, current_player_id, report_value)
             
-            # Get MMR changes from the database
-            from src.backend.db.db_reader_writer import DatabaseReader
-            db_reader = DatabaseReader()
-            match_details = db_reader.get_match_1v1(self.match_result.match_id)
-            
-            if match_details:
-                p1_mmr_change = match_details.get('mmr_change', 0)
-                p2_mmr_change = -p1_mmr_change  # Opposite change for player 2
+            if success:
+                print(f"📝 Player report recorded for match {self.match_result.match_id}")
                 
-                # Store MMR changes in match result
-                self.match_result.p1_mmr_change = p1_mmr_change
-                self.match_result.p2_mmr_change = p2_mmr_change
+                # Wait for match completion and get final results
+                final_results = await wait_for_match_completion(self.match_result.match_id)
                 
-                # Update the embed with MMR changes
-                await self.update_embed_with_mmr_changes()
-            
-            print(f"📊 Match result recorded: {winner} vs {loser} (Match ID: {self.match_result.match_id})")
+                if final_results:
+                    # Update match result with final data
+                    print(f"🔍 FINAL RESULTS: {final_results}")
+                    self.match_result.match_result = final_results['match_result']
+                    self.match_result.p1_mmr_change = final_results['p1_mmr_change']
+                    self.match_result.p2_mmr_change = final_results['p2_mmr_change']
+                    print(f"🔍 SET match_result to: {self.match_result.match_result}")
+                    
+                    # Update the embed with final results
+                    await self.update_embed_with_mmr_changes()
+                else:
+                    print(f"📝 Match {self.match_result.match_id} still waiting for other player")
+            else:
+                print(f"❌ Failed to record player report for match {self.match_result.match_id}")
         except Exception as e:
-            print(f"❌ Error recording match result: {e}")
+            print(f"❌ Error recording player report: {e}")
     
     async def update_embed_with_mmr_changes(self):
-        """Update the embed to show MMR changes and send notification message"""
+        """Update the embed to show MMR changes"""
         try:
             # Update the original message with new embed
             if hasattr(self.parent_view, 'last_interaction') and self.parent_view.last_interaction:
@@ -1027,80 +1023,10 @@ class MatchResultSelect(discord.ui.Select):
                     view=self.parent_view
                 )
             
-            # Send a new notification message about MMR changes
-            await self.send_mmr_notification()
-            
         except Exception as e:
             print(f"❌ Error updating embed with MMR changes: {e}")
     
-    async def send_mmr_notification(self):
-        """Send a notification message about MMR changes"""
-        try:
-            # Get player names
-            p1_name = self.p1_name
-            p2_name = self.p2_name
-            
-            # Get MMR changes
-            p1_mmr_change = self.match_result.p1_mmr_change
-            p2_mmr_change = self.match_result.p2_mmr_change
-            
-            # Get player info for proper formatting
-            from src.backend.db.db_reader_writer import DatabaseReader
-            from src.bot.utils.discord_utils import get_flag_emote, get_race_emote
-            db_reader = DatabaseReader()
-            
-            p1_info = db_reader.get_player_by_discord_uid(self.match_result.player1_discord_id)
-            p1_country = p1_info.get('country') if p1_info else None
-            p1_flag = get_flag_emote(p1_country) if p1_country else get_flag_emote("XX")
-            p1_race_emote = get_race_emote(self.match_result.player1_race)
-            
-            p2_info = db_reader.get_player_by_discord_uid(self.match_result.player2_discord_id)
-            p2_country = p2_info.get('country') if p2_info else None
-            p2_flag = get_flag_emote(p2_country) if p2_country else get_flag_emote("XX")
-            p2_race_emote = get_race_emote(self.match_result.player2_race)
-            
-            # Create notification embed
-            notification_embed = discord.Embed(
-                title=f"🏆 Match #{self.match_result.match_id} Result Finalized",
-                description=f"**{p1_flag} {p1_race_emote} {p1_name}** vs **{p2_flag} {p2_race_emote} {p2_name}**",
-                color=discord.Color.gold()
-            )
-            
-            if p1_mmr_change is not None and p2_mmr_change is not None:
-                # Round MMR changes to integers using MMR service
-                from src.backend.services.mmr_service import MMRService
-                mmr_service = MMRService()
-                p1_mmr_rounded = mmr_service.round_mmr_change(p1_mmr_change)
-                p2_mmr_rounded = mmr_service.round_mmr_change(p2_mmr_change)
-                
-                # Format MMR changes with proper signs
-                p1_sign = "+" if p1_mmr_rounded >= 0 else ""
-                p2_sign = "+" if p2_mmr_rounded >= 0 else ""
-                
-                notification_embed.add_field(
-                    name="**MMR Changes:**",
-                    value=f"• {p1_name}: `{p1_sign}{p1_mmr_rounded}`\n• {p2_name}: `{p2_sign}{p2_mmr_rounded}`",
-                    inline=False
-                )
-            else:
-                # MMR changes not calculated yet
-                notification_embed.add_field(
-                    name="**MMR Changes:**",
-                    value=f"• {p1_name}: `TBD`\n• {p2_name}: `TBD`",
-                    inline=False
-                )
-            
-            # Send notification to the channel
-            if hasattr(self.parent_view, 'last_interaction') and self.parent_view.last_interaction:
-                channel = self.parent_view.last_interaction.channel
-                await channel.send(embed=notification_embed)
-                
-        except Exception as e:
-            print(f"❌ Error sending MMR notification: {e}")
-    
-    async def handle_disagreement_silent(self):
-        """Handle disagreement without responding to interaction"""
-        print(f"⚠️ Result disagreement for match {self.match_result.player1_user_id} vs {self.match_result.player2_user_id}")
+    # Removed handle_disagreement_silent - no longer needed with individual reporting
 
 
 class BroodWarRaceSelect(discord.ui.Select):
@@ -1155,6 +1081,7 @@ class StarCraftRaceSelect(discord.ui.Select):
 
 # Global dictionary to track active match views for replay detection
 active_match_views = {}
+match_view_snapshots = {}
 
 
 async def on_message(message: discord.Message):
@@ -1171,14 +1098,14 @@ async def on_message(message: discord.Message):
     
     # Check if any attachment is an SC2Replay file
     replay_service = ReplayService()
-    has_replay = False
+    replay_attachment = None
     
     for attachment in message.attachments:
         if replay_service.is_sc2_replay(attachment.filename):
-            has_replay = True
-            break
+            replay_attachment = attachment
+            break  # Take the first SC2Replay file and ignore the rest
     
-    if not has_replay:
+    if not replay_attachment:
         return
     
     # Check if this channel has an active match view
@@ -1191,37 +1118,110 @@ async def on_message(message: discord.Message):
     if not match_view or not hasattr(match_view, 'match_result'):
         return
     
-    # Update the replay status and timestamp (overwrites previous replay if any)
-    match_view.match_result.replay_uploaded = "Yes"
-    match_view.match_result.replay_upload_time = get_current_unix_timestamp()
-    
-    # Update dropdown states now that replay is uploaded
-    match_view._update_dropdown_states()
-    
-    # Update the existing embed
+    # Download and store the replay file
     try:
-        embed = match_view.get_embed()
-        # Update the original message if we have the interaction reference
-        if hasattr(match_view, 'last_interaction') and match_view.last_interaction:
-            await match_view.last_interaction.edit_original_response(
-                embed=embed,
-                view=match_view
-            )
+        # Download the replay file
+        replay_data = await replay_attachment.read()
         
-        # Check if this is a replay overwrite
-        if match_view.match_result.replay_upload_time:
-            print(f"✅ Replay file detected and recorded for match {match_view.match_result.match_id} (timestamp: {match_view.match_result.replay_upload_time})")
+        # Get current timestamp
+        from src.backend.db.db_reader_writer import get_timestamp
+        current_timestamp = get_timestamp()
+        
+        # Store replay in database
+        from src.backend.db.db_reader_writer import DatabaseWriter
+        db_writer = DatabaseWriter()
+        
+        # Determine which player uploaded the replay
+        player_discord_uid = message.author.id
+        
+        # print(f"🔍 Attempting to store replay for match {match_view.match_result.match_id}, player {player_discord_uid}, data size: {len(replay_data)} bytes")
+        
+        success = db_writer.update_match_replay_1v1(
+            match_view.match_result.match_id,
+            player_discord_uid,
+            replay_data,
+            current_timestamp
+        )
+        
+        if success:
+            # Update the replay status and timestamp
+            match_view.match_result.replay_uploaded = "Yes"
+            match_view.match_result.replay_upload_time = get_current_unix_timestamp()
+
+            # Update dropdown states now that replay is uploaded
+            match_view._update_dropdown_states()
+
+            # Update the existing embed
+            embed = match_view.get_embed()
+            if hasattr(match_view, 'last_interaction') and match_view.last_interaction:
+                await match_view.last_interaction.edit_original_response(
+                    embed=embed,
+                    view=match_view
+                )
+
+            print(f"✅ Replay file stored for match {match_view.match_result.match_id} (player: {player_discord_uid})")
+        else:
+            print(f"❌ Failed to store replay for match {match_view.match_result.match_id}")
+            
     except Exception as e:
-        print(f"Error updating replay status: {e}")
+        print(f"❌ Error processing replay file: {e}")
 
 
 def register_match_view(channel_id: int, match_view):
     """Register a match view for replay detection."""
     active_match_views[channel_id] = match_view
+    match_id = getattr(getattr(match_view, "match_result", None), "match_id", "unknown")
+    print(f"🔍 REGISTER: Added match view to active_match_views: {channel_id} -> match {match_id}")
+    print(f"🔍 REGISTER: Total active match views: {len(active_match_views)}")
 
 
 def unregister_match_view(channel_id: int):
     """Unregister a match view when it's no longer active."""
     if channel_id in active_match_views:
+        match_view = active_match_views[channel_id]
+        match_id = getattr(getattr(match_view, "match_result", None), "match_id", "unknown")
         del active_match_views[channel_id]
+        print(f"🔍 UNREGISTER: Removed match view from active_match_views: {channel_id} -> match {match_id}")
+        print(f"🔍 UNREGISTER: Total active match views: {len(active_match_views)}")
+
+        if match_id in match_view_snapshots:
+            match_view_snapshots[match_id] = [
+                pair for pair in match_view_snapshots[match_id] if pair[0] != channel_id
+            ]
+            if not match_view_snapshots[match_id]:
+                del match_view_snapshots[match_id]
+    else:
+        print(f"⚠️ UNREGISTER: Channel {channel_id} not in active_match_views")
+
+
+def unregister_match_views_by_match_id(match_id: int):
+    """Remove all registered match views whose match id matches the provided id."""
+    if match_id in match_view_snapshots:
+        for channel_id, _ in match_view_snapshots[match_id]:
+            unregister_match_view(channel_id)
+        match_view_snapshots.pop(match_id, None)
+    else:
+        to_remove = []
+        for channel_id, match_view in active_match_views.items():
+            current_match_id = getattr(getattr(match_view, "match_result", None), "match_id", None)
+            if current_match_id == match_id:
+                to_remove.append(channel_id)
+
+        for channel_id in to_remove:
+            unregister_match_view(channel_id)
+
+
+def get_active_match_views_by_match_id(match_id: int):
+    """Return a list of active match views whose match id matches the provided id."""
+    if match_id in match_view_snapshots:
+        return match_view_snapshots[match_id].copy()
+
+    matches = []
+    for channel_id, match_view in active_match_views.items():
+        current_match_id = getattr(getattr(match_view, "match_result", None), "match_id", None)
+        if current_match_id == match_id:
+            matches.append((channel_id, match_view))
+
+    match_view_snapshots[match_id] = matches.copy()
+    return matches
 

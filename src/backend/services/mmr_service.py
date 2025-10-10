@@ -16,17 +16,18 @@ from typing import Tuple
 class MatchMMROutcome:
     """Container for the updated MMR values after a match."""
 
-    player_one_mmr: float
-    player_two_mmr: float
+    player_one_mmr: int
+    player_two_mmr: int
 
 
 class MMRService:
     """Helper for calculating new MMR values after a match."""
 
-    _DEFAULT_MMR: float = 1500.0
-    _K_FACTOR: float = 40.0
+    _DEFAULT_MMR: int = 1500
+    _K_FACTOR: float = 50.0
+    _DIVISOR: float = 500.0
 
-    def calculate_new_mmr(self, player_one_mmr: float, player_two_mmr: float, result: int) -> MatchMMROutcome:
+    def calculate_new_mmr(self, player_one_mmr: int, player_two_mmr: int, result: int) -> MatchMMROutcome:
         """Return the updated MMR values for both players.
 
         Args:
@@ -45,12 +46,12 @@ class MMRService:
 
         return MatchMMROutcome(player_one_mmr=updated_one, player_two_mmr=updated_two)
 
-    def default_mmr(self) -> float:
+    def default_mmr(self) -> int:
         """Return the default starting MMR value."""
 
         return self._DEFAULT_MMR
 
-    def calculate_mmr_change(self, player_one_mmr: float, player_two_mmr: float, result: int) -> float:
+    def calculate_mmr_change(self, player_one_mmr: int, player_two_mmr: int, result: int) -> int:
         """Calculate the MMR change for player one.
         
         Args:
@@ -64,10 +65,10 @@ class MMRService:
         outcome = self.calculate_new_mmr(player_one_mmr, player_two_mmr, result)
         return outcome.player_one_mmr - player_one_mmr
 
-    def _calculate_expected_mmr(self, player_one_mmr: float, player_two_mmr: float) -> Tuple[float, float]:
+    def _calculate_expected_mmr(self, player_one_mmr: int, player_two_mmr: int) -> Tuple[float, float]:
         """Return the expected MMR scores for both players."""
 
-        difference = (player_two_mmr - player_one_mmr) / 400.0
+        difference = (player_two_mmr - player_one_mmr) / self._DIVISOR
         expected_one = 1.0 / (1.0 + 10.0 ** difference)
         expected_two = 1.0 / (1.0 + 10.0 ** -difference)
         return expected_one, expected_two
@@ -83,7 +84,11 @@ class MMRService:
             return 0.5, 0.5
         raise ValueError("result must be 0, 1, or 2")
 
-    def _apply_rating_delta(self, current_mmr: float, expected_score: float, actual_score: float) -> float:
+    def round_mmr_change(self, mmr_change: int) -> int:
+        """Rounds an MMR change to the nearest integer."""
+        return round(mmr_change)
+
+    def _apply_rating_delta(self, current_mmr: int, expected_score: float, actual_score: float) -> int:
         """Apply the MMR delta produced by the probabilistic model."""
 
-        return current_mmr + self._K_FACTOR * (actual_score - expected_score)
+        return int(round(current_mmr + self._K_FACTOR * (actual_score - expected_score)))

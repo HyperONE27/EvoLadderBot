@@ -43,8 +43,8 @@ class MatchResult:
     match_result_confirmation_status: Optional[str] = None
     replay_uploaded: Optional[str] = None
     replay_upload_time: Optional[int] = None
-    p1_mmr_change: Optional[float] = None
-    p2_mmr_change: Optional[float] = None
+    p1_mmr_change: Optional[int] = None
+    p2_mmr_change: Optional[int] = None
 
 class Player:
     def __init__(self, discord_user_id: int, user_id: str, preferences: QueuePreferences, 
@@ -159,7 +159,7 @@ class Matchmaker:
         step = 6  # number of queue attempts, not number of seconds
         return base + (wait_cycles // step) * growth
 
-    def categorize_players(self) -> Tuple[List[Player], List[Player], List[Player]]:
+    def categorize_players(self, players: List[Player]) -> Tuple[List[Player], List[Player], List[Player]]:
         """
         Categorize players into BW-only, SC2-only, and both lists.
         
@@ -170,7 +170,7 @@ class Matchmaker:
         sc2_only = []
         both_races = []
         
-        for player in self.players:
+        for player in players:
             if player.has_bw_race and not player.has_sc2_race:
                 bw_only.append(player)
             elif player.has_sc2_race and not player.has_bw_race:
@@ -341,17 +341,21 @@ class Matchmaker:
 
     async def attempt_match(self):
         """Try to find and process all valid matches using the advanced algorithm."""
-        if len(self.players) < 2:
+        
+        # Operate on a copy of the list to prevent race conditions from new players joining
+        current_players = self.players.copy()
+        
+        if len(current_players) < 2:
             return  # Silent when not enough players
 
         print("🎯 Attempting to match players with advanced algorithm...")
         
         # Increment wait cycles for all players
-        for player in self.players:
+        for player in current_players:
             player.wait_cycles += 1
 
         # Categorize players into original lists
-        original_bw_only, original_sc2_only, original_both_races = self.categorize_players()
+        original_bw_only, original_sc2_only, original_both_races = self.categorize_players(current_players)
         
         print(f"   📊 Queue composition: BW-only={len(original_bw_only)}, SC2-only={len(original_sc2_only)}, Both={len(original_both_races)}")
         
@@ -387,7 +391,6 @@ class Matchmaker:
         matched_players = set()
         for p1, p2 in matches:
             print(f"✅ Match found: {p1.user_id} vs {p2.user_id}")
-            
             # Get available maps and pick one randomly
             available_maps = self._get_available_maps(p1, p2)
             if not available_maps:
@@ -410,13 +413,15 @@ class Matchmaker:
                 p2_race = p2.get_race_for_match(True)  # BW race
             
             # Get current MMR values for both players
-            p1_mmr = p1.get_effective_mmr(is_bw_match) or 1500.0
-            p2_mmr = p2.get_effective_mmr(not is_bw_match) or 1500.0
+            p1_mmr = p1.get_effective_mmr(is_bw_match) or 1500
+            p2_mmr = p2.get_effective_mmr(not is_bw_match) or 1500
             
-            # Create match in database
+            # Create the match record in the database
             match_id = self.db_writer.create_match_1v1(
                 p1.discord_user_id,
                 p2.discord_user_id,
+                p1_race,
+                p2_race,
                 map_choice,
                 server_choice,
                 p1_mmr,
@@ -444,6 +449,10 @@ class Matchmaker:
                 self.match_callback(match_result)
             else:
                 print("⚠️  No match callback set!")
+            
+            # Start monitoring this match for completion
+            from src.backend.services.match_completion_service import match_completion_service
+            match_completion_service.start_monitoring_match(match_id)
             
             # Track matched players
             matched_players.add(p1.discord_user_id)
@@ -494,31 +503,45 @@ class Matchmaker:
         """Stop matchmaking loop."""
         self.running = False
 
-    def record_match_result(self, match_id: int, winner_discord_uid: Optional[int]) -> bool:
+    def record_match_result(self, match_id: int, player_discord_uid: int, report_value: int) -> bool:
         """
-        Record the result of a match and update MMR values.
+        Record a player's report for a match and update MMR values if both players have reported.
         
         Args:
             match_id: The ID of the match to update
-            winner_discord_uid: The Discord UID of the winner, or -1 for a draw
+            player_discord_uid: The Discord UID of the player reporting
+            report_value: The report value (1 = player_1 won, 2 = player_2 won, 0 = draw)
             
         Returns:
             True if the update was successful, False otherwise
         """
-        # First, update the match result in the database
-        success = self.db_writer.update_match_result_1v1(match_id, winner_discord_uid)
+        # Update the player's report in the database
+        success = self.db_writer.update_player_report_1v1(match_id, player_discord_uid, report_value)
         if not success:
             return False
         
-        # Get match details to determine races played
+        # Get match details to check if both players have reported
         match_data = self.db_reader.get_match_1v1(match_id)
         if not match_data:
-            print(f"❌ Could not find match {match_id} for MMR calculation")
+            print(f"❌ Could not find match {match_id}")
             return False
         
-        # For now, we need to determine the races played
-        # This is a limitation - we need to store race information in the match
-        # For now, we'll use a default approach or get from player preferences
+        # Check if both players have reported and if their reports match
+        p1_report = match_data.get('player_1_report')
+        p2_report = match_data.get('player_2_report')
+        match_result = match_data.get('match_result')
+        
+        if p1_report is None or p2_report is None:
+            print(f"📝 Player report recorded for match {match_id}, waiting for other player")
+            return True
+        
+        if match_result == -1:
+            print(f"⚠️ Conflicting reports for match {match_id}, manual resolution required")
+            return True
+        
+        # Both players have reported and reports match - process MMR
+        print(f"✅ Both players reported for match {match_id}, processing MMR changes")
+        
         player1_uid = match_data['player_1_discord_uid']
         player2_uid = match_data['player_2_discord_uid']
         
@@ -557,18 +580,13 @@ class Matchmaker:
                 from src.backend.services.mmr_service import MMRService
                 mmr_service = MMRService()
                 
-                # Determine match result for MMR calculation
-                if winner_discord_uid == -1:  # Draw
-                    result = 0
-                elif winner_discord_uid == player1_uid:  # Player 1 won
-                    result = 1
-                else:  # Player 2 won
-                    result = 2
+                # Use the match_result for MMR calculation
+                result = match_result
                 
                 # Calculate new MMR values
                 mmr_outcome = mmr_service.calculate_new_mmr(
-                    float(p1_current_mmr), 
-                    float(p2_current_mmr), 
+                    p1_current_mmr, 
+                    p2_current_mmr, 
                     result
                 )
                 
@@ -594,18 +612,24 @@ class Matchmaker:
                 
                 # Calculate and store MMR change using MMR service
                 p1_mmr_change = mmr_service.calculate_mmr_change(
-                    float(p1_current_mmr), 
-                    float(p2_current_mmr), 
+                    p1_current_mmr, 
+                    p2_current_mmr, 
                     result
                 )
                 self.db_writer.update_match_mmr_change(match_id, p1_mmr_change)
                 
                 print(f"📊 Updated MMR for match {match_id}:")
-                print(f"   Player 1 ({player1_uid}): {p1_current_mmr} → {mmr_outcome.player_one_mmr:.1f} ({p1_race})")
-                print(f"   Player 2 ({player2_uid}): {p2_current_mmr} → {mmr_outcome.player_two_mmr:.1f} ({p2_race})")
-                print(f"   MMR Change: {p1_mmr_change:+.1f} (positive = player 1 gained)")
+                print(f"   Player 1 ({player1_uid}): {p1_current_mmr} → {mmr_outcome.player_one_mmr} ({p1_race})")
+                print(f"   Player 2 ({player2_uid}): {p2_current_mmr} → {mmr_outcome.player_two_mmr} ({p2_race})")
+                print(f"   MMR Change: {p1_mmr_change:+} (positive = player 1 gained)")
             else:
                 print(f"❌ Could not get MMR data for players in match {match_id}")
+        
+        # Now that all DB writes are done, trigger the completion service immediately
+        import asyncio
+        from src.backend.services.match_completion_service import match_completion_service
+        print(f"🚀 Triggering immediate completion check for match {match_id}")
+        asyncio.create_task(match_completion_service.check_match_completion(match_id))
         
         return True
 
