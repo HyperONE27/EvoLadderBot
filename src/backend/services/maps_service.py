@@ -55,3 +55,42 @@ class MapsService(BaseConfigService):
     def get_available_maps(self) -> List[str]:
         """Get list of available map short names."""
         return self.get_map_short_names()
+
+    def get_map_author(self, short_name: str) -> Optional[str]:
+        """Return the author for the given map, if available."""
+
+        map_data = self.get_map_by_short_name(short_name)
+        if not map_data:
+            return None
+        author = map_data.get("author")
+        return str(author) if isinstance(author, str) else None
+
+    def get_map_battlenet_link(self, short_name: str, region: str) -> Optional[str]:
+        """Return the Battle.net link for the given map and region.
+
+        Args:
+            short_name: Map short name.
+            region: Region identifier. Accepts "americas", "europe",
+                "asia" or abbreviations "am", "eu", "as" (case-insensitive).
+        """
+
+        map_data = self.get_map_by_short_name(short_name)
+        if not map_data:
+            return None
+
+        normalized = (region or "").strip().lower()
+        region_key_map = {
+            "americas": "am_link",
+            "am": "am_link",
+            "europe": "eu_link",
+            "eu": "eu_link",
+            "asia": "as_link",
+            "as": "as_link",
+        }
+
+        link_key = region_key_map.get(normalized)
+        if not link_key:
+            return None
+
+        link_value = map_data.get(link_key)
+        return str(link_value) if isinstance(link_value, str) and link_value else None

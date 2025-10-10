@@ -151,11 +151,11 @@ class Matchmaker:
             Maximum MMR difference allowed
         """
         if queue_size < 6:
-            base, growth = 125, 75
+            base, growth = 150, 75
         elif queue_size < 12:
-            base, growth = 100, 50
+            base, growth = 125, 50
         else:
-            base, growth = 75, 25
+            base, growth = 100, 25
         step = 6  # number of queue attempts, not number of seconds
         return base + (wait_cycles // step) * growth
 

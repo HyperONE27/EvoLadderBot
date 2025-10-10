@@ -4,6 +4,7 @@
             {
                 "name": "[SC:Evo] Death Valley (데스밸리)",
                 "short_name": "Death Valley",
+                "author": "SCEvoLadder",
                 "am_link": "battlenet:://starcraft/map/1/367495",
                 "eu_link": "battlenet:://starcraft/map/2/258890",
                 "as_link": "battlenet:://starcraft/map/3/184685"
@@ -11,6 +12,7 @@
             {
                 "name": "[SC:Evo] Holy World (홀리울드)",
                 "short_name": "Holy World",
+                "author": "SCEvoLadder",
                 "am_link": "battlenet:://starcraft/map/1/367497",
                 "eu_link": "battlenet:://starcraft/map/2/258892",
                 "as_link": "battlenet:://starcraft/map/3/184687"
@@ -18,6 +20,7 @@
             {
                 "name": "Keres Passage SEL",
                 "short_name": "Keres Passage",
+                "author": "HyperONE",
                 "am_link": "battlenet:://starcraft/map/1/367550",
                 "eu_link": "battlenet:://starcraft/map/2/258950",
                 "as_link": "battlenet:://starcraft/map/3/184790"
@@ -25,6 +28,7 @@
             {
                 "name": "Khione SEL",
                 "short_name": "Khione",
+                "author": "HyperONE",
                 "am_link": "battlenet:://starcraft/map/1/367554",
                 "eu_link": "battlenet:://starcraft/map/2/258956",
                 "as_link": "battlenet:://starcraft/map/3/184800"
@@ -32,6 +36,7 @@
             {
                 "name": "Pylon SEL",
                 "short_name": "Pylon",
+                "author": "HyperONE",
                 "am_link": "battlenet:://starcraft/map/1/367574",
                 "eu_link": "battlenet:://starcraft/map/2/258974",
                 "as_link": "battlenet:://starcraft/map/3/184817"
@@ -39,6 +44,7 @@
             {
                 "name": "[SC:Evo] Radeon (라데온)",
                 "short_name": "Radeon",
+                "author": "SCEvoLadder",
                 "am_link": "battlenet:://starcraft/map/1/367511",
                 "eu_link": "battlenet:://starcraft/map/2/258907",
                 "as_link": "battlenet:://starcraft/map/3/184703"
@@ -46,6 +52,7 @@
             {
                 "name": "Subsequence SEL",
                 "short_name": "Subsequence",
+                "author": "HyperONE",
                 "am_link": "battlenet:://starcraft/map/1/367590",
                 "eu_link": "battlenet:://starcraft/map/2/258981",
                 "as_link": "battlenet:://starcraft/map/3/184833"
@@ -53,6 +60,7 @@
             {
                 "name": "[SC:Evo] Sylphid (실피드)",
                 "short_name": "Sylphid",
+                "author": "SCEvoLadder",
                 "am_link": "battlenet:://starcraft/map/1/367510",
                 "eu_link": "battlenet:://starcraft/map/2/258906",
                 "as_link": "battlenet:://starcraft/map/3/184701"
@@ -60,6 +68,7 @@
             {
                 "name": "[SC:Evo] Vermeer (버미어)",
                 "short_name": "Vermeer",
+                "author": "SCEvoLadder",
                 "am_link": "battlenet:://starcraft/map/1/367512",
                 "eu_link": "battlenet:://starcraft/map/2/258908",
                 "as_link": "battlenet:://starcraft/map/3/184704"

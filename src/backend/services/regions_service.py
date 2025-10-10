@@ -89,6 +89,22 @@ class RegionsService(BaseConfigService):
                 return region
         return None
 
+    def get_game_region_for_server(self, server_code: str) -> Optional[Dict[str, Any]]:
+        """Return the game region definition for the provided server code."""
+
+        if not server_code:
+            return None
+
+        server = self.get_game_server_by_code(server_code)
+        if not server:
+            return None
+
+        region_code = server.get("region_code")
+        if not region_code:
+            return None
+
+        return self.get_game_region_by_code(region_code)
+
     def format_server_with_region(self, server_code: str) -> str:
         """Return server display string such as 'Western United States (Americas)'"""
         if not server_code:

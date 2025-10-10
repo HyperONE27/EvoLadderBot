@@ -24,7 +24,7 @@
         {"code": "BRZ", "name": "Brazil",                "region_code": "AM"},
         {"code": "EUC", "name": "Central Europe",        "region_code": "EU"},
         {"code": "SNG", "name": "Singapore",             "region_code": "AS"},
-        {"code": "AUS", "name": "Australia",             "region_code": "AS"},
+        {"code": "AUS", "name": "Australia",             "region_code": "AM"},
         {"code": "KOR", "name": "Korea",                 "region_code": "AS"},
         {"code": "TWN", "name": "Taiwan",                "region_code": "AS"}
     ],

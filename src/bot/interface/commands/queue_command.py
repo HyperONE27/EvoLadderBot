@@ -297,7 +297,7 @@ class QueueView(discord.ui.View):
                     simplified_label = "StarCraft II"
                 else:
                     simplified_label = label
-                details.append(f"• {simplified_label}: {race_emote} {name}")
+                details.append(f"- {simplified_label}: {race_emote} {name}")
             race_list = "\n".join(details)
             embed.add_field(
                 name="Selected Races",
@@ -623,14 +623,44 @@ class MatchFoundView(discord.ui.View):
         # Player Information section
         embed.add_field(
             name="**Player Information:**",
-            value=f"• Player 1: {p1_flag} {p1_race_emote} {p1_display_name} ({p1_race_name})\n• Player 2: {p2_flag} {p2_race_emote} {p2_display_name} ({p2_race_name})",
+            value=f"- Player 1: {p1_flag} {p1_race_emote} {p1_display_name} ({p1_race_name})\n- Player 2: {p2_flag} {p2_race_emote} {p2_display_name} ({p2_race_name})",
             inline=False
         )
         
         # Match Information section
+        map_short_name = self.match_result.map_choice
+        map_name = maps_service.get_map_name(map_short_name) or map_short_name
+
+        # Determine map link based on server region
+        map_link: Optional[str] = None
+        server_code = self.match_result.server_choice
+        if server_code:
+            region_info = regions_service.get_game_region_for_server(server_code)
+            if region_info:
+                region_name = (region_info.get("name") or "").lower()
+                if "americas" in region_name:
+                    map_link = maps_service.get_map_battlenet_link(map_short_name, "americas")
+                elif "europe" in region_name:
+                    map_link = maps_service.get_map_battlenet_link(map_short_name, "europe")
+                elif "asia" in region_name:
+                    map_link = maps_service.get_map_battlenet_link(map_short_name, "asia")
+
+        if not map_link:
+            # Fallback to Americas link if specific region not available
+            map_link = maps_service.get_map_battlenet_link(map_short_name, "americas")
+
+        map_author = maps_service.get_map_author(map_short_name) or "Unknown"
+        map_link_display = map_link if map_link else "Unavailable"
+
         embed.add_field(
             name="**Match Information:**",
-            value=f"• Map: `{self.match_result.map_choice}`\n• Server: `{server_display}`\n• In-Game Channel: `{self.match_result.in_game_channel}`",
+            value=(
+                f"- Map: `{map_name}`\n"
+                f"  - Map Link: `{map_link_display}`\n"
+                f"  - Author: `{map_author}`\n"
+                f"- Server: `{server_display}`\n"
+                f"- In-Game Channel: `{self.match_result.in_game_channel}`"
+            ),
             inline=False
         )
         
@@ -639,7 +669,7 @@ class MatchFoundView(discord.ui.View):
         
         if self.match_result.match_result == 'conflict':
             result_display = "Conflict"
-            mmr_display = "\n• MMR Awarded: :x: Report Conflict Detected"
+            mmr_display = "\n- MMR Awarded: :x: Report Conflict Detected"
         elif self.match_result.match_result:
             # Convert to human-readable format
             if self.match_result.match_result == "player1_win":
@@ -665,19 +695,19 @@ class MatchFoundView(discord.ui.View):
                 p1_sign = "+" if p1_mmr_rounded >= 0 else ""
                 p2_sign = "+" if p2_mmr_rounded >= 0 else ""
                 
-                mmr_display = f"\n• MMR Awarded: `{p1_display_name}: {p1_sign}{p1_mmr_rounded}`, `{p2_display_name}: {p2_sign}{p2_mmr_rounded}`"
+                mmr_display = f"\n- MMR Awarded: `{p1_display_name}: {p1_sign}{p1_mmr_rounded}`, `{p2_display_name}: {p2_sign}{p2_mmr_rounded}`"
             else:
                 # MMR changes not calculated yet - always show TBD
-                mmr_display = f"\n• MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
+                mmr_display = f"\n- MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
         else:
             result_display = "Not selected"
-            mmr_display = f"\n• MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
+            mmr_display = f"\n- MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
             
         confirmation_display = self.match_result.match_result_confirmation_status or "Not confirmed"
         
         embed.add_field(
             name="**Match Result:**",
-            value=f"• Result: `{result_display}`\n• Result Confirmation Status: `{confirmation_display}`{mmr_display}",
+            value=f"- Result: `{result_display}`\n- Result Confirmation Status: `{confirmation_display}`{mmr_display}",
             inline=False
         )
 
@@ -690,7 +720,7 @@ class MatchFoundView(discord.ui.View):
         
         embed.add_field(
             name="**Replay Status:**",
-            value=f"• Replay Uploaded: `{replay_status}`\n• Replay Uploaded At: {replay_upload_time}",
+            value=f"- Replay Uploaded: `{replay_status}`\n- Replay Uploaded At: {replay_upload_time}",
             inline=False
         )
 
