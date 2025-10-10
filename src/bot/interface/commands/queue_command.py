@@ -9,15 +9,19 @@ from src.backend.services.regions_service import RegionsService
 from src.bot.interface.components.error_embed import ErrorEmbedException, create_error_view_from_exception
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.interface.components.cancel_embed import create_cancel_embed
+from functools import partial
+from typing import Callable
 from src.backend.services.matchmaking_service import matchmaker, Player, QueuePreferences, MatchResult
 from src.backend.services.user_info_service import get_user_info
-from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader
-from src.bot.utils.discord_utils import send_ephemeral_response, get_current_unix_timestamp, format_discord_timestamp
+from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader, get_timestamp
+from src.bot.utils.discord_utils import send_ephemeral_response, get_current_unix_timestamp, format_discord_timestamp, get_flag_emote, get_race_emote
 from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from src.backend.services.replay_service import ReplayService
+from src.backend.services.mmr_service import MMRService
 from typing import Optional
 import logging
 import time
+from src.backend.services.match_completion_service import match_completion_service
 
 race_service = RacesService()
 maps_service = MapsService()
@@ -25,6 +29,7 @@ db_writer = DatabaseWriter()
 db_reader = DatabaseReader()
 guard_service = CommandGuardService()
 regions_service = RegionsService()
+mmr_service = MMRService()
 
 # Get global timeout from environment
 GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
@@ -54,6 +59,16 @@ async def queue_command(interaction: discord.Interaction):
     except CommandGuardError as exc:
         error_embed = guard_service.create_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
+        return
+
+    # Prevent multiple queue attempts or queuing while a match is active
+    if interaction.user.id in active_queue_views or interaction.user.id in match_results:
+        error = ErrorEmbedException(
+            title="Queueing Not Allowed",
+            description="You cannot queue more than once, or while a match is active."
+        )
+        error_view = create_error_view_from_exception(error)
+        await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
         return
     
     # Get user's saved preferences from database
@@ -158,18 +173,29 @@ class JoinQueueButton(discord.ui.Button):
         
         # Get user info
         user_info = get_user_info(interaction)
+        user_id = user_info["id"]
+
+        # Prevent multiple queue attempts or queuing while a match is active
+        if user_id in active_queue_views or user_id in match_results:
+            error = ErrorEmbedException(
+                title="Queueing Not Allowed",
+                description="You cannot queue more than once, or while a match is active."
+            )
+            error_view = create_error_view_from_exception(error)
+            await interaction.response.edit_message(embed=error_view.embed, view=error_view)
+            return
         
         # Create queue preferences
         preferences = QueuePreferences(
             selected_races=self.view.get_selected_race_codes(),
             vetoed_maps=self.view.vetoed_maps,
-            discord_user_id=user_info["id"],
-            user_id="Player" + str(user_info["id"])  # TODO: Get actual user ID from database
+            discord_user_id=user_id,
+            user_id="Player" + str(user_id)  # TODO: Get actual user ID from database
         )
         
         # Create player and add to matchmaking queue
         player = Player(
-            discord_user_id=user_info["id"],
+            discord_user_id=user_id,
             user_id=preferences.user_id,
             preferences=preferences
         )
@@ -308,7 +334,6 @@ class QueueView(discord.ui.View):
                 label = race_service.get_race_group_label(code)
                 name = race_service.get_race_name(code)
                 # Get race emote for display
-                from src.bot.utils.discord_utils import get_race_emote
                 race_emote = get_race_emote(code)
                 # Simplify the label (remove BW/SC2 suffix)
                 if label == "Brood War":
@@ -379,6 +404,7 @@ class QueueSearchingView(discord.ui.View):
         self.is_active = True
         self.status_task: Optional[asyncio.Task] = None
         self.status_lock = asyncio.Lock()
+        self.last_interaction = None
         
         # Store this view globally so we can update it when match is found
         active_queue_views[player.discord_user_id] = self
@@ -558,8 +584,6 @@ async def wait_for_match_completion(match_id: int, timeout: int = 30) -> Optiona
         Dictionary with final match results or None if timeout/error
     """
     try:
-        from src.backend.services.match_completion_service import match_completion_service
-        
         # Wait for the match completion service to process the match
         final_results = await match_completion_service.wait_for_match_completion(match_id, timeout)
         
@@ -574,7 +598,7 @@ async def wait_for_match_completion(match_id: int, timeout: int = 30) -> Optiona
         print(f"❌ Error waiting for match {match_id} completion: {e}")
         return None
 
-def handle_match_result(match_result: MatchResult):
+def handle_match_result(match_result: MatchResult, register_completion_callback: Callable[[Callable], None]):
     """Handle when a match is found"""
     print(f"🎉 MATCH FOUND!")
     print(f"   Player 1: {match_result.player1_user_id} (Discord: {match_result.player1_discord_id})")
@@ -590,6 +614,9 @@ def handle_match_result(match_result: MatchResult):
     
     # Match results are now stored and will be picked up when players click "Check for Match"
     print(f"📱 Match results ready for both players to check")
+
+    # Attach the register callback so views can subscribe to completion notifications
+    setattr(match_result, 'register_completion_callback', register_completion_callback)
 
 
 # Set the match callback
@@ -607,6 +634,10 @@ class MatchFoundView(discord.ui.View):
         self.channel_id = None  # Will be set when the view is sent
         self.last_interaction = None  # Store reference to last interaction for updates
         
+        # Register this view's notification handler with the backend
+        if hasattr(match_result, "register_completion_callback"):
+            match_result.register_completion_callback(self.handle_completion_notification)
+
         # Add match result reporting dropdown
         self.result_select = MatchResultSelect(match_result, is_player1, self)
         self.add_item(self.result_select)
@@ -671,13 +702,6 @@ class MatchFoundView(discord.ui.View):
     
     def get_embed(self) -> discord.Embed:
         """Get the match found embed"""
-        # Get player information from database
-        from src.backend.db.db_reader_writer import DatabaseReader
-        db_reader = DatabaseReader()
-        
-        # Import discord utils for flag and emote functions
-        from src.bot.utils.discord_utils import get_flag_emote, get_race_emote
-        
         # Get player 1 info
         p1_info = db_reader.get_player_by_discord_uid(self.match_result.player1_discord_id)
         p1_name = p1_info.get('player_name') if p1_info else None
@@ -701,8 +725,6 @@ class MatchFoundView(discord.ui.View):
         p2_race_emote = get_race_emote(p2_race)
         
         # Get MMR values from database
-        from src.backend.db.db_reader_writer import DatabaseReader
-        db_reader = DatabaseReader()
         match_data = db_reader.get_match_1v1(self.match_result.match_id)
         p1_mmr = int(match_data.get('player_1_mmr', 0)) if match_data else 0
         p2_mmr = int(match_data.get('player_2_mmr', 0)) if match_data else 0
@@ -849,6 +871,120 @@ class MatchFoundView(discord.ui.View):
                 ]
         print(f"🔍 REGISTER: Registered match view for channel {channel_id}, match {self.match_result.match_id}")
 
+    async def handle_completion_notification(self, status: str, data: dict):
+        """This is the callback that the backend will invoke."""
+        print(f"Callback received for match {self.match_result.match_id}: status={status}")
+        if status == "complete":
+            # Update the view's internal state with the final results
+            result_raw = data.get('match_result_raw')
+            result_map = {
+                1: "player1_win",
+                2: "player2_win",
+                0: "draw",
+                "conflict": "conflict"
+            }
+            mapped_result = result_map.get(result_raw)
+
+            self.match_result.match_result = mapped_result
+            self.match_result.p1_mmr_change = data.get('p1_mmr_change')
+            self.match_result.p2_mmr_change = data.get('p2_mmr_change')
+            if mapped_result:
+                self.match_result.match_result_confirmation_status = "Confirmed"
+            
+            # Disable components and update the original embed
+            self.disable_all_components()
+            if self.last_interaction:
+                await self.last_interaction.edit_original_response(
+                    embed=self.get_embed(),
+                    view=self
+                )
+            
+            # Send the final gold embed as a follow-up
+            await self._send_final_notification_embed(data)
+            
+        elif status == "conflict":
+            # Update the view's state to reflect the conflict
+            self.match_result.match_result = "conflict"
+            
+            # Disable components and update the original embed
+            self.disable_all_components()
+            await self.edit_original_response()
+
+            # Send the conflict embed as a follow-up
+            await self._send_conflict_notification_embed()
+
+        # The view's work is done
+        self.stop()
+        
+    async def _send_final_notification_embed(self, final_results: dict):
+        """Creates and sends the final gold embed notification."""
+        if not self.last_interaction:
+            return
+
+        p1_info = final_results['p1_info']
+        p2_info = final_results['p2_info']
+        p1_name = final_results['p1_name']
+        p2_name = final_results['p2_name']
+
+        p1_flag = get_flag_emote(p1_info.get('country', 'XX'))
+        p2_flag = get_flag_emote(p2_info.get('country', 'XX'))
+        p1_race_emote = get_race_emote(final_results['p1_race'])
+        p2_race_emote = get_race_emote(final_results['p2_race'])
+
+        p1_current_mmr = final_results['p1_current_mmr']
+        p2_current_mmr = final_results['p2_current_mmr']
+        p1_mmr_change = final_results['p1_mmr_change']
+        p2_mmr_change = final_results['p2_mmr_change']
+        p1_new_mmr = p1_current_mmr + p1_mmr_change
+        p2_new_mmr = p2_current_mmr + p2_mmr_change
+
+        p1_mmr_rounded = mmr_service.round_mmr_change(p1_mmr_change)
+        p2_mmr_rounded = mmr_service.round_mmr_change(p2_mmr_change)
+
+        notification_embed = discord.Embed(
+            title=f"🏆 Match #{self.match_result.match_id} Result Finalized",
+            description=f"**{p1_flag} {p1_race_emote} {p1_name} ({p1_current_mmr} → {int(p1_new_mmr)})** vs **{p2_flag} {p2_race_emote} {p2_name} ({p2_current_mmr} → {int(p2_new_mmr)})**",
+            color=discord.Color.gold()
+        )
+
+        p1_sign = "+" if p1_mmr_rounded >= 0 else ""
+        p2_sign = "+" if p2_mmr_rounded >= 0 else ""
+
+        notification_embed.add_field(
+            name="**MMR Changes:**",
+            value=f"- {p1_name}: `{p1_sign}{p1_mmr_rounded} ({p1_current_mmr} → {int(p1_new_mmr)})`\n- {p2_name}: `{p2_sign}{p2_mmr_rounded} ({p2_current_mmr} → {int(p2_new_mmr)})`",
+            inline=False
+        )
+
+        try:
+            await self.last_interaction.followup.send(embed=notification_embed, ephemeral=False)
+        except discord.HTTPException as e:
+            print(f"Error sending final notification for match {self.match_result.match_id}: {e}")
+
+    async def _send_conflict_notification_embed(self):
+        """Sends a new follow-up message indicating a match conflict."""
+        if not self.last_interaction:
+            return
+            
+        conflict_embed = discord.Embed(
+            title="⚠️ Match Result Conflict",
+            description="The reported results for this match do not agree. Please contact an administrator to resolve this dispute.",
+            color=discord.Color.red()
+        )
+        try:
+            await self.last_interaction.followup.send(embed=conflict_embed, ephemeral=False)
+        except discord.HTTPException as e:
+            print(f"Error sending conflict notification for match {self.match_result.match_id}: {e}")
+
+    def disable_all_components(self):
+        """Disables all components in the view."""
+        for item in self.children:
+            if isinstance(item, (discord.ui.Button, discord.ui.Select)):
+                item.disabled = True
+
+    async def on_timeout(self):
+        pass # Timeout is now handled by the match completion service
+
 
 class MatchResultConfirmSelect(discord.ui.Select):
     """Confirmation dropdown for match result"""
@@ -902,9 +1038,6 @@ class MatchResultSelect(discord.ui.Select):
         self.parent_view = parent_view
         
         # Get player names from database
-        from src.backend.db.db_reader_writer import DatabaseReader
-        db_reader = DatabaseReader()
-        
         p1_info = db_reader.get_player_by_discord_uid(match_result.player1_discord_id)
         self.p1_name = p1_info.get('player_name') if p1_info else str(match_result.player1_user_id)
         
@@ -1013,7 +1146,6 @@ class MatchResultSelect(discord.ui.Select):
             loser = "Draw"
         
         # Record the result in the database
-        from src.backend.services.matchmaking_service import matchmaker
         success = matchmaker.record_match_result(self.match_result.match_id, winner_discord_id)
         
         if not success:
@@ -1116,7 +1248,7 @@ class MatchResultSelect(discord.ui.Select):
         else:  # draw
             report_value = 0  # Draw
         
-        # Record the player's report in the database
+        # Record the player's report in the database (fire-and-forget)
         try:
             from src.backend.services.matchmaking_service import matchmaker
             # Get the current player's Discord ID
@@ -1124,23 +1256,7 @@ class MatchResultSelect(discord.ui.Select):
             success = matchmaker.record_match_result(self.match_result.match_id, current_player_id, report_value)
             
             if success:
-                print(f"📝 Player report recorded for match {self.match_result.match_id}")
-                
-                # Wait for match completion and get final results
-                final_results = await wait_for_match_completion(self.match_result.match_id)
-                
-                if final_results:
-                    # Update match result with final data
-                    print(f"🔍 FINAL RESULTS: {final_results}")
-                    self.match_result.match_result = final_results['match_result']
-                    self.match_result.p1_mmr_change = final_results['p1_mmr_change']
-                    self.match_result.p2_mmr_change = final_results['p2_mmr_change']
-                    print(f"🔍 SET match_result to: {self.match_result.match_result}")
-                    
-                    # Update the embed with final results
-                    await self.update_embed_with_mmr_changes()
-                else:
-                    print(f"📝 Match {self.match_result.match_id} still waiting for other player")
+                print(f"📝 Player report recorded for match {self.match_result.match_id}. Waiting for backend notification.")
             else:
                 print(f"❌ Failed to record player report for match {self.match_result.match_id}")
         except Exception as e:
@@ -1258,12 +1374,7 @@ async def on_message(message: discord.Message):
         replay_data = await replay_attachment.read()
         
         # Get current timestamp
-        from src.backend.db.db_reader_writer import get_timestamp
         current_timestamp = get_timestamp()
-        
-        # Store replay in database
-        from src.backend.db.db_reader_writer import DatabaseWriter
-        db_writer = DatabaseWriter()
         
         # Determine which player uploaded the replay
         player_discord_uid = message.author.id

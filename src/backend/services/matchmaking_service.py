@@ -169,7 +169,7 @@ class Matchmaker:
         print(f"🚪 Player with Discord ID {discord_user_id} left the queue")
         print(f"   Players before removal: {before_count}, after: {after_count}")
 
-    def set_match_callback(self, callback: Callable[[MatchResult], None]) -> None:
+    def set_match_callback(self, callback: Callable[[MatchResult, Callable[[Callable], None]], None]) -> None:
         """Set the callback function to be called when a match is found."""
         self.match_callback = callback
 
@@ -503,17 +503,23 @@ class Matchmaker:
                 server_choice=server_choice,
                 in_game_channel=in_game_channel
             )
-            
+                    
+            from src.backend.services.match_completion_service import match_completion_service
+
             if self.match_callback:
                 print(f"📞 Calling match callback for {p1.user_id} vs {p2.user_id}")
-                self.match_callback(match_result)
+                self.match_callback(
+                    match_result,
+                    register_completion_callback=lambda callback: match_completion_service.start_monitoring_match(
+                        match_id,
+                        on_complete_callback=callback
+                    )
+                )
             else:
+                # If no frontend is registered, still monitor the match so backend workflows continue
+                match_completion_service.start_monitoring_match(match_id)
                 print("⚠️  No match callback set!")
-            
-            # Start monitoring this match for completion
-            from src.backend.services.match_completion_service import match_completion_service
-            match_completion_service.start_monitoring_match(match_id)
-
+                    
             # Track matched players
             matched_players.add(p1.discord_user_id)
             matched_players.add(p2.discord_user_id)

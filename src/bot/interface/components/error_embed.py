@@ -40,8 +40,8 @@ class ErrorEmbedView(discord.ui.View):
         error_fields: list[tuple[str, str]] = None,
         reset_target: Optional[Union[discord.ui.View, discord.ui.Modal]] = None,
         retry_callback: Optional[Callable] = None,
-        retry_label: str = "🔄 Try Again",
-        dismiss_label: str = "❌ Dismiss"
+        retry_label: str = "Try Again",
+        dismiss_label: str = "Dismiss"
     ):
         super().__init__(timeout=300)
         
@@ -74,7 +74,7 @@ class RetryCallbackButton(discord.ui.Button):
     """Button that calls a custom retry callback function."""
     
     def __init__(self, callback: Callable, label: str):
-        super().__init__(label=label, style=discord.ButtonStyle.secondary)
+        super().__init__(emoji="🔄", label=label, style=discord.ButtonStyle.secondary)
         self.callback_func = callback
 
     async def callback(self, interaction: discord.Interaction):
@@ -85,7 +85,7 @@ class RetryTargetButton(discord.ui.Button):
     """Button that restarts to a specific view or modal."""
     
     def __init__(self, reset_target: Union[discord.ui.View, discord.ui.Modal], label: str):
-        super().__init__(label=label, style=discord.ButtonStyle.secondary)
+        super().__init__(emoji="🔄", label=label, style=discord.ButtonStyle.secondary)
         self.reset_target = reset_target
 
     async def callback(self, interaction: discord.Interaction):
@@ -108,7 +108,7 @@ class DismissButton(discord.ui.Button):
     """Button that dismisses the error message."""
     
     def __init__(self, label: str):
-        super().__init__(label=label, style=discord.ButtonStyle.danger)
+        super().__init__(emoji="✖️", label=label, style=discord.ButtonStyle.danger)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(

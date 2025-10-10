@@ -1,6 +1,7 @@
 import discord
 from typing import Optional, Union, Callable
 from src.bot.utils.discord_utils import send_ephemeral_response
+from src.bot.interface.components.cancel_embed import create_cancel_embed
 
 
 class ConfirmButton(discord.ui.Button):
@@ -74,9 +75,6 @@ class CancelButton(discord.ui.Button):
         self.show_fields = show_fields
 
     async def callback(self, interaction: discord.Interaction):
-        # Import here to avoid circular imports
-        from src.bot.interface.components.cancel_embed import create_cancel_embed
-        
         # Always use the cancel embed for consistency
         cancel_view = create_cancel_embed()
         
