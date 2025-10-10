@@ -454,16 +454,15 @@ class Matchmaker:
         matched_players = set()
         for p1, p2 in matches:
             print(f"✅ Match found: {p1.user_id} vs {p2.user_id}")
-            # Get available maps and pick one randomly
             available_maps = self._get_available_maps(p1, p2)
             if not available_maps:
                 print(f"❌ No available maps for {p1.user_id} vs {p2.user_id}")
                 continue
-
+                    
             map_choice = random.choice(available_maps)
             server_choice = self.regions_service.get_random_game_server()
             in_game_channel = self.generate_in_game_channel()
-            
+                    
             # Determine which races to use for the match
             # p1 is always from the lead side, p2 is always from the follow side
             if is_bw_match:
@@ -492,7 +491,6 @@ class Matchmaker:
                 0.0  # MMR change will be calculated and updated after match result
             )
 
-            # Create match result
             match_result = MatchResult(
                 match_id=match_id,
                 player1_discord_id=p1.discord_user_id,
@@ -505,14 +503,13 @@ class Matchmaker:
                 server_choice=server_choice,
                 in_game_channel=in_game_channel
             )
-
-            # Call the match callback if set
+            
             if self.match_callback:
                 print(f"📞 Calling match callback for {p1.user_id} vs {p2.user_id}")
                 self.match_callback(match_result)
             else:
                 print("⚠️  No match callback set!")
-
+            
             # Start monitoring this match for completion
             from src.backend.services.match_completion_service import match_completion_service
             match_completion_service.start_monitoring_match(match_id)
@@ -640,30 +637,12 @@ class Matchmaker:
         player1_uid = match_data['player_1_discord_uid']
         player2_uid = match_data['player_2_discord_uid']
         
-        # Get player preferences to determine races
-        p1_prefs = self.db_reader.get_preferences_1v1(player1_uid)
-        p2_prefs = self.db_reader.get_preferences_1v1(player2_uid)
-        
-        if not p1_prefs or not p2_prefs:
-            print(f"❌ Could not get preferences for players in match {match_id}")
-            return True  # Match result was recorded, but MMR not updated
-        
-        # Parse race preferences
-        try:
-            import json
-            p1_races = json.loads(p1_prefs.get('last_chosen_races', '[]'))
-            p2_races = json.loads(p2_prefs.get('last_chosen_races', '[]'))
-        except (json.JSONDecodeError, TypeError):
-            print(f"❌ Could not parse race preferences for match {match_id}")
-            return True
-        
-        # For now, we'll update MMR for the first race of each player
-        # TODO: This should be improved to store actual races played in the match
-        if p1_races and p2_races:
-            p1_race = p1_races[0]  # Use first selected race
-            p2_race = p2_races[0]  # Use first selected race
-            
-            # Get current MMR values
+        # Get the races that were actually played from the match data
+        p1_race = match_data.get('player_1_race')
+        p2_race = match_data.get('player_2_race')
+
+        if p1_race and p2_race:
+            # Get current MMR values for the races played
             p1_mmr_data = self.db_reader.get_player_mmr_1v1(player1_uid, p1_race)
             p2_mmr_data = self.db_reader.get_player_mmr_1v1(player2_uid, p2_race)
             

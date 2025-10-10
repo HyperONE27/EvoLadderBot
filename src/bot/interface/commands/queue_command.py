@@ -487,17 +487,51 @@ class CancelQueueButton(discord.ui.Button):
         self.player = player
     
     async def callback(self, interaction: discord.Interaction):
-        # Remove player from matchmaker
+        parent_view = self.view
+
+        # If a match has already been found, show the match instead of cancelling
+        existing_match = match_results.get(self.player.discord_user_id)
+        if existing_match:
+            print(f"⚠️ Cancel ignored: match already assigned to {self.player.user_id}")
+
+            # Determine player role in the match
+            is_player1 = existing_match.player1_discord_id == self.player.discord_user_id
+            match_view = MatchFoundView(existing_match, is_player1)
+
+            # Register replay detection if possible
+            channel_id = interaction.channel_id
+            if channel_id is not None:
+                match_view.register_for_replay_detection(channel_id)
+            match_view.last_interaction = interaction
+
+            # Stop the searching view heartbeat
+            if isinstance(parent_view, QueueSearchingView):
+                parent_view.is_active = False
+                if parent_view.status_task:
+                    parent_view.status_task.cancel()
+
+            # Remove this searching view from active queue views
+            active_queue_views.pop(self.player.discord_user_id, None)
+
+            # Prevent duplicate notifications for this player
+            match_results.pop(self.player.discord_user_id, None)
+
+            await interaction.response.edit_message(
+                embed=match_view.get_embed(),
+                view=match_view
+            )
+            return
+
+        # No match yet—proceed with cancelling the queue entry
         print(f"🚪 Removing player from matchmaker: {self.player.user_id}")
         matchmaker.remove_player(self.player.discord_user_id)
-        
-        # Clean up from active views
+
         if self.player.discord_user_id in active_queue_views:
             del active_queue_views[self.player.discord_user_id]
-        if isinstance(interaction.view, QueueSearchingView):
-            interaction.view.is_active = False
-            if interaction.view.status_task:
-                interaction.view.status_task.cancel()
+        if isinstance(parent_view, QueueSearchingView):
+            parent_view.is_active = False
+            if parent_view.status_task:
+                parent_view.status_task.cancel()
         
         # Return to the original queue view with its embed
         await interaction.response.edit_message(
