@@ -24,7 +24,7 @@ class MMRService:
     """Helper for calculating new MMR values after a match."""
 
     _DEFAULT_MMR: int = 1500
-    _K_FACTOR: float = 50.0
+    _K_FACTOR: float = 40.0
     _DIVISOR: float = 500.0
 
     def calculate_new_mmr(self, player_one_mmr: int, player_two_mmr: int, result: int) -> MatchMMROutcome:
