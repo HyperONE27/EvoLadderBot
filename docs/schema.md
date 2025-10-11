@@ -18,7 +18,8 @@ CREATE TABLE players (
     completed_setup_date    TIMESTAMP,
     activation_code         TEXT,
     created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    remaining_aborts        INTEGER DEFAULT 3
 );
 
 /*
@@ -78,23 +79,9 @@ CREATE TABLE matches_1v1 (
     player_2_discord_uid    INTEGER NOT NULL,
     player_1_mmr            FLOAT NOT NULL,
     player_2_mmr            FLOAT NOT NULL,
-    winner_discord_uid      INTEGER,            -- NULL for draw, -1 for draw, or Discord UID for winner
-    mmr_change              FLOAT NOT NULL,     -- Amount of MMR awarded. Positive value means player 1 gained MMR, negative value means player 2 gained MMR.
-    map_played              TEXT NOT NULL,
-    server_used             TEXT NOT NULL,
-    played_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-"""
-CREATE TABLE matches_1v1 (
-    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-    player_1_discord_uid    INTEGER NOT NULL,
-    player_2_discord_uid    INTEGER NOT NULL,
-    player_1_mmr            FLOAT NOT NULL,
-    player_2_mmr            FLOAT NOT NULL,
-    player_1_report         INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw
-    player_2_report         INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw
-    match_result            INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw, -1 for conflict between player_1_report and player_2_report
+    player_1_report         INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw, -1 for aborted match, -3 if player_1 initiated the abort
+    player_2_report         INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw, -1 for aborted match, -3 if player_2 initiated the abort
+    match_result            INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw, -1 for aborted match, -2 for conflict between player_1_report and player_2_report
     mmr_change              FLOAT NOT NULL,     -- Amount of MMR awarded. Positive value means player 1 gained MMR, negative value means player 2 gained MMR.
     map_played              TEXT NOT NULL,
     server_used             TEXT NOT NULL,
@@ -104,7 +91,6 @@ CREATE TABLE matches_1v1 (
     player_2_replay         BLOB,               -- stores the replay player_2 uploadded
     player_2_replay_time    TIMESTAMP,          -- stores the timestamp when player_2 uploaded
 );
-"""
 
 CREATE TABLE preferences_1v1 (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,

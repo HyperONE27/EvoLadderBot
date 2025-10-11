@@ -429,6 +429,20 @@ class DatabaseWriter:
         """Update player's country."""
         return self.update_player(discord_uid, country=country)
     
+    def update_player_remaining_aborts(self, discord_uid: int, remaining_aborts: int) -> bool:
+        """Update player's remaining aborts count."""
+        with self.db.get_connection() as conn:
+            try:
+                conn.execute(
+                    "UPDATE players SET remaining_aborts = ? WHERE discord_uid = ?",
+                    (remaining_aborts, discord_uid)
+                )
+                conn.commit()
+                return True
+            except Exception as e:
+                print(f"Error updating remaining aborts for player {discord_uid}: {e}")
+                return False
+    
     def accept_terms_of_service(self, discord_uid: int) -> bool:
         """Mark player as having accepted terms of service."""
         return self.update_player(discord_uid, accepted_tos=True)
@@ -725,10 +739,39 @@ class DatabaseWriter:
             # Determine which report column to update
             if player_discord_uid == player_1_uid:
                 column = "player_1_report"
+                other_column = "player_2_report"
             elif player_discord_uid == player_2_uid:
                 column = "player_2_report"
+                other_column = "player_1_report"
             else:
                 return False  # Player not in this match
+            
+            if report_value == -1:
+                # An abort overrides other pending state. Initiator gets -3, other player -1.
+                if column == "player_1_report":
+                    cursor.execute(
+                        """
+                        UPDATE matches_1v1
+                        SET player_1_report = -3,
+                            player_2_report = CASE WHEN player_2_report = -3 THEN -3 ELSE -1 END,
+                            match_result = -1
+                        WHERE id = :match_id
+                        """,
+                        {"match_id": match_id}
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        UPDATE matches_1v1
+                        SET player_2_report = -3,
+                            player_1_report = CASE WHEN player_1_report = -3 THEN -3 ELSE -1 END,
+                            match_result = -1
+                        WHERE id = :match_id
+                        """,
+                        {"match_id": match_id}
+                    )
+                conn.commit()
+                return True
             
             # Update the appropriate report column
             cursor.execute(
@@ -749,8 +792,8 @@ class DatabaseWriter:
                     match_result = p1_report
                 else:
                     # Reports don't match - conflict
-                    match_result = -1
-                
+                    match_result = -2
+            
                 # Update match_result
                 cursor.execute(
                     "UPDATE matches_1v1 SET match_result = :match_result WHERE id = :match_id",
@@ -902,3 +945,73 @@ class DatabaseWriter:
             
             conn.commit()
             return True
+
+    def abort_match_1v1(self, match_id: int, player_discord_uid: int) -> bool:
+        """
+        Atomically abort a match if it has not already been completed.
+        
+        This prevents race conditions where both players could abort simultaneously.
+        
+        Args:
+            match_id: The ID of the match to abort.
+            player_discord_uid: The Discord UID of the player initiating the abort.
+            
+        Returns:
+            True if the match was successfully aborted by this operation, False otherwise.
+        """
+        with self.db.get_connection() as conn:
+            try:
+                cursor = conn.cursor()
+                
+                # First, get the player UIDs for the match
+                cursor.execute(
+                    "SELECT player_1_discord_uid, player_2_discord_uid FROM matches_1v1 WHERE id = :match_id",
+                    {"match_id": match_id}
+                )
+                match_players = cursor.fetchone()
+                
+                if not match_players:
+                    return False
+                
+                # Determine which player report column to update
+                if player_discord_uid == match_players["player_1_discord_uid"]:
+                    report_column = "player_1_report"
+                    other_column = "player_2_report"
+                elif player_discord_uid == match_players["player_2_discord_uid"]:
+                    report_column = "player_2_report"
+                    other_column = "player_1_report"
+                else:
+                    return False  # Player not in this match
+                
+                # Atomically update the match result and both player reports.
+                if report_column == "player_1_report":
+                    update_query = """
+                        UPDATE matches_1v1
+                        SET 
+                            match_result = -1,
+                            player_1_report = -3,
+                            player_2_report = CASE WHEN player_2_report = -3 THEN -3 ELSE COALESCE(player_2_report, -1) END
+                        WHERE 
+                            id = :match_id AND match_result IS NULL
+                    """
+                else:
+                    update_query = """
+                        UPDATE matches_1v1
+                        SET 
+                            match_result = -1,
+                            player_2_report = -3,
+                            player_1_report = CASE WHEN player_1_report = -3 THEN -3 ELSE COALESCE(player_1_report, -1) END
+                        WHERE 
+                            id = :match_id AND match_result IS NULL
+                    """
+                cursor.execute(update_query, {"match_id": match_id})
+                
+                conn.commit()
+                
+                # If any row was changed, the abort was successful
+                return cursor.rowcount > 0
+                
+            except Exception as e:
+                print(f"Error aborting match {match_id}: {e}")
+                conn.rollback()
+                return False

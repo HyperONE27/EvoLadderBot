@@ -503,3 +503,52 @@ class UserInfoService:
             List of action log dictionaries.
         """
         return self.reader.get_player_action_logs(discord_uid, limit)
+    
+    def get_remaining_aborts(self, discord_uid: int) -> int:
+        """
+        Get the number of remaining aborts for a player.
+        
+        Args:
+            discord_uid: Discord user ID.
+        
+        Returns:
+            Number of remaining aborts (defaults to 3 if player not found).
+        """
+        player = self.get_player(discord_uid)
+        if player:
+            return player.get('remaining_aborts', 3)
+        return 3
+    
+    def decrement_aborts(self, discord_uid: int) -> bool:
+        """
+        Decrement the remaining aborts count for a player.
+        
+        Args:
+            discord_uid: Discord user ID.
+        
+        Returns:
+            True if successful, False otherwise.
+        """
+        player = self.get_player(discord_uid)
+        if not player:
+            return False
+        
+        current_aborts = player.get('remaining_aborts', 3)
+        new_aborts = max(0, current_aborts - 1)
+        
+        success = self.writer.update_player_remaining_aborts(discord_uid, new_aborts)
+        
+        if success:
+            # Log the abort usage
+            player_name = (player.get("player_name") 
+                          or player.get("discord_username") 
+                          or "Unknown")
+            self.writer.log_player_action(
+                discord_uid=discord_uid,
+                player_name=player_name,
+                setting_name="remaining_aborts",
+                old_value=str(current_aborts),
+                new_value=str(new_aborts)
+            )
+        
+        return success

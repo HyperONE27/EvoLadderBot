@@ -95,6 +95,9 @@ class Matchmaker:
 	# Global matchmaking interval (matchwave) in seconds.
 	MATCH_INTERVAL_SECONDS = 45
 
+	# Time window in seconds for players to abort a match after it's found.
+	ABORT_TIMER_SECONDS = 180
+
 	# The number of matchmaking waves before the MMR window expands.
 	# With a 45-second wave interval, expansion occurs once per wave.
 	MMR_EXPANSION_STEP = 1
@@ -603,27 +606,53 @@ class Matchmaker:
 
 	def record_match_result(self, match_id: int, player_discord_uid: int, report_value: int) -> bool:
 		"""
-		Record a player's report for a match and update MMR values if both players have reported.
-		
-		Args:
-			match_id: The ID of the match to update
-			player_discord_uid: The Discord UID of the player reporting
-			report_value: The report value (1 = player_1 won, 2 = player_2 won, 0 = draw)
-			
-		Returns:
-			True if the update was successful, False otherwise
+		Record a player's report for a match. This is the single entry point for any report.
 		"""
-		# Update the player's report in the database
 		success = self.db_writer.update_player_report_1v1(match_id, player_discord_uid, report_value)
 		if not success:
+			print(f"❌ Failed to write player report for match {match_id} to DB.")
 			return False
 		
-		# Get match details to check if both players have reported
-		match_data = self.db_reader.get_match_1v1(match_id)
-		if match_data and match_data.get('player_1_report') is not None and match_data.get('player_2_report') is not None:
-			return self._calculate_and_write_mmr(match_id, match_data)
+		# After any report, trigger an immediate check.
+		# This will pick up aborts, conflicts, or completions instantly.
+		import asyncio
+		from src.backend.services.match_completion_service import match_completion_service
+		print(f"🚀 Triggering immediate completion check for match {match_id} after a report.")
+		asyncio.create_task(match_completion_service.check_match_completion(match_id))
 		
 		return True
+	
+	def abort_match(self, match_id: int, player_discord_uid: int) -> bool:
+		"""
+		Abort a match and decrement the player's abort count.
+		
+		This operation is atomic and prevents race conditions.
+		
+		Args:
+			match_id: The ID of the match to abort.
+			player_discord_uid: The Discord UID of the player initiating the abort.
+			
+		Returns:
+			True if the abort was successful, False otherwise.
+		"""
+		# Atomically update the match to an aborted state
+		was_aborted = self.db_writer.abort_match_1v1(match_id, player_discord_uid)
+		
+		if was_aborted:
+			# Decrement the player's abort count since they were the one to abort
+			from src.backend.services.user_info_service import UserInfoService
+			user_info_service = UserInfoService()
+			user_info_service.decrement_aborts(player_discord_uid)
+			
+			# Trigger completion check to notify players
+			import asyncio
+			from src.backend.services.match_completion_service import match_completion_service
+			print(f"🚀 Triggering immediate completion check for match {match_id} after abort.")
+			asyncio.create_task(match_completion_service.check_match_completion(match_id))
+			
+			return True
+		
+		return False
 	
 	def _calculate_and_write_mmr(self, match_id: int, match_data: dict) -> bool:
 		"""Helper to calculate and write MMR changes to the database."""
@@ -643,6 +672,10 @@ class Matchmaker:
 			return True
 		
 		if match_result == -1:
+			print(f"🚫 Match {match_id} was aborted. Skipping MMR calculation.")
+			return True
+
+		if match_result == -2:
 			print(f"⚠️ Conflicting reports for match {match_id}, manual resolution required")
 			return True
 		
@@ -714,13 +747,12 @@ class Matchmaker:
 			else:
 				print(f"❌ Could not get MMR data for players in match {match_id}")
 		
-		# Now that all DB writes are done, trigger the completion service immediately
-		import asyncio
-		from src.backend.services.match_completion_service import match_completion_service
-		print(f"🚀 Triggering immediate completion check for match {match_id}")
-		asyncio.create_task(match_completion_service.check_match_completion(match_id))
-		
 		return True
+
+	def is_player_in_queue(self, discord_user_id: int) -> bool:
+		"""Check if a player is in the queue."""
+		with self.lock:
+			return discord_user_id in self.players_in_queue
 
 
 # Global matchmaker instance

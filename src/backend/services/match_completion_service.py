@@ -64,6 +64,8 @@ class MatchCompletionService:
         if match_id not in self.monitored_matches:
             return
         
+        self.monitored_matches.remove(match_id)
+        
         task = self.monitoring_tasks.pop(match_id, None)
         if task:
             task.cancel()
@@ -71,7 +73,6 @@ class MatchCompletionService:
         # Clean up callbacks and locks
         self.notification_callbacks.pop(match_id, None)
         self.processing_locks.pop(match_id, None)
-        self.monitored_matches.discard(match_id)
 
         print(f"🛑 Stopped monitoring match {match_id}")
     
@@ -135,8 +136,21 @@ class MatchCompletionService:
                 
                 print(f"🔍 CHECK: Match {match_id} reports: p1={p1_report}, p2={p2_report}, result={match_result}")
                 
+                # Abort if any report is -3 (initiator) or both are -1/-3 with match_result=-1
+                if (p1_report == -3 or p2_report == -3) or (match_result == -1 and (p1_report in (-3, -1) and p2_report in (-3, -1))):
+                    print(f"🚫 Match {match_id} was aborted")
+                    self.processed_matches.add(match_id)  # Mark as processed
+                    await self._handle_match_abort(match_id, match_data)
+                    
+                    # Notify any waiting tasks
+                    if match_id in self.completion_waiters:
+                        self.completion_waiters[match_id].set()
+                        del self.completion_waiters[match_id]
+                    
+                    return True
+                
                 if p1_report is not None and p2_report is not None:
-                    if match_result == -1:
+                    if match_result == -2:
                         # Conflicting reports - manual resolution needed
                         print(f"⚠️ Conflicting reports for match {match_id}, manual resolution required")
                         await self._handle_match_conflict(match_id)
@@ -177,6 +191,11 @@ class MatchCompletionService:
                     p2_report = match_data.get('player_2_report')
                     match_result = match_data.get('match_result')
                     
+                    # Check for aborts (-3 initiator, -1 other)
+                    if (p1_report == -3 or p2_report == -3) or (match_result == -1 and (p1_report in (-3, -1) and p2_report in (-3, -1))):
+                        await self._handle_match_abort(match_id, match_data)
+                        break
+                    
                     if p1_report is not None and p2_report is not None:
                         # If both reports are in, process the result
                         if match_data.get('player_1_report') == match_data.get('player_2_report'):
@@ -184,8 +203,6 @@ class MatchCompletionService:
                         else:
                             await self._handle_match_conflict(match_id)
                         
-                        # Match is processed, break the loop
-                        break
                         # Match is processed, break the loop
                         break
             
@@ -203,6 +220,12 @@ class MatchCompletionService:
     async def _handle_match_completion(self, match_id: int, match_data: dict):
         """Handle a completed match."""
         try:
+            from src.backend.services.matchmaking_service import matchmaker
+            
+            # Calculate and write MMR changes
+            if not matchmaker._calculate_and_write_mmr(match_id, match_data):
+                print(f"❌ Failed to calculate and write MMR for match {match_id}")
+
             # Re-fetch match data to ensure it's the absolute latest
             final_match_data = await self._get_match_final_results(match_id)
             if not final_match_data:
@@ -219,12 +242,39 @@ class MatchCompletionService:
             # Notify/update all player views with the final data
             await self._notify_players_match_complete(match_id, final_match_data)
             
-            # Send the final gold embed notification
-            # await self._send_final_notification(match_id, final_match_data) # REMOVED
-
         except Exception as e:
             print(f"❌ Error handling match completion for {match_id}: {e}")
     
+    async def _handle_match_abort(self, match_id: int, match_data: dict):
+        """Handle an aborted match."""
+        try:
+            # Re-fetch to ensure we have the latest state
+            final_match_data = await self._get_match_final_results(match_id)
+            if not final_match_data:
+                final_match_data = match_data
+
+            # Mark as processed (abort) and notify any waiters
+            if match_id not in self.processed_matches:
+                self.processed_matches.add(match_id)
+                if match_id in self.completion_waiters:
+                    self.completion_waiters[match_id].set()
+                    del self.completion_waiters[match_id]
+
+            # Notify all callbacks with abort status
+            callbacks = self.notification_callbacks.pop(match_id, [])
+            print(f"  -> Notifying {len(callbacks)} callbacks for match {match_id} abort.")
+            for callback in callbacks:
+                try:
+                    await callback(status="abort", data={"match_id": match_id, "match_data": final_match_data})
+                except Exception as e:
+                    print(f"❌ Error executing abort callback for match {match_id}: {e}")
+
+        except Exception as e:
+            print(f"❌ Error handling match abort for {match_id}: {e}")
+        finally:
+            # Clean up monitoring for this match
+            self.stop_monitoring_match(match_id)
+
     async def _handle_match_conflict(self, match_id: int):
         """Handle a match with conflicting reports."""
         try:
@@ -290,10 +340,11 @@ class MatchCompletionService:
             p2_name = p2_info.get('player_name', str(match_data['player_2_discord_uid']))
 
             result_text_map = {
-                "player1_win": f"{p1_name} victory",
-                "player2_win": f"{p2_name} victory",
-                "draw": "Draw",
-                "conflict": "Conflict"
+                1: f"{p1_name} victory",
+                2: f"{p2_name} victory",
+                0: "Draw",
+                -1: "Aborted",
+                -2: "Conflict"
             }
             result_text = result_text_map.get(match_data['match_result'], "Undetermined")
 
@@ -309,6 +360,8 @@ class MatchCompletionService:
                 "p2_current_mmr": match_data['player_2_mmr'],
                 "p1_mmr_change": match_data.get('mmr_change', 0),
                 "p2_mmr_change": -match_data.get('mmr_change', 0),
+                "p1_report": match_data.get('player_1_report'),
+                "p2_report": match_data.get('player_2_report'),
                 "result_text": result_text,
                 "match_result_raw": match_data['match_result']
             }
