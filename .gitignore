@@ -184,3 +184,6 @@ cython_debug/
 # Specstory
 .specstory/**
 .specstory/ai_rules_backups
+
+# Personal Stuff
+markdown_cursor/**
