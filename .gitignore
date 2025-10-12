@@ -180,10 +180,13 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 .cursor/**
+.cursor/
 
 # Specstory
+.specstory/
 .specstory/**
 .specstory/ai_rules_backups
 
 # Personal Stuff
 markdown_cursor/**
+markdown_cursor/
