@@ -223,8 +223,7 @@ class MatchCompletionService:
             from src.backend.services.matchmaking_service import matchmaker
             
             # Calculate and write MMR changes
-            if not matchmaker._calculate_and_write_mmr(match_id, match_data):
-                print(f"❌ Failed to calculate and write MMR for match {match_id}")
+            await matchmaker._calculate_and_write_mmr(match_id, match_data)
 
             # Re-fetch match data to ensure it's the absolute latest
             final_match_data = await self._get_match_final_results(match_id)

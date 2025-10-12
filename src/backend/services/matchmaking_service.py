@@ -122,12 +122,13 @@ class Matchmaker:
 		self.db_writer = DatabaseWriter()
 		self.regions_service = RegionsService()
 		self.maps_service = MapsService()
+		self.lock = asyncio.Lock()
 		
 		# System for tracking effective population
 		self.recent_activity: Dict[int, float] = {}
 		self.last_prune_time: float = time.time()
 
-	def add_player(self, player: Player) -> None:
+	async def add_player(self, player: Player) -> None:
 		"""Add a player to the matchmaking pool with MMR lookup."""
 		# Look up MMR for each selected race
 		for race in player.preferences.selected_races:
@@ -154,23 +155,25 @@ class Matchmaker:
 				elif race.startswith("sc2_"):
 					player.sc2_mmr = default_mmr
 
-		print(f"👤 {player.user_id} (Discord ID: {player.discord_user_id}) joined the queue")
-		print(f"   Selected races: {player.preferences.selected_races}")
-		print(f"   BW MMR: {player.bw_mmr}, SC2 MMR: {player.sc2_mmr}")
-		print(f"   Vetoed maps: {player.preferences.vetoed_maps}")
-		self.players.append(player)
-		print(f"   Total players in queue: {len(self.players)}")
-		
-		# Log player activity
-		self.recent_activity[player.discord_user_id] = time.time()
+		async with self.lock:
+			print(f"👤 {player.user_id} (Discord ID: {player.discord_user_id}) joined the queue")
+			print(f"   Selected races: {player.preferences.selected_races}")
+			print(f"   BW MMR: {player.bw_mmr}, SC2 MMR: {player.sc2_mmr}")
+			print(f"   Vetoed maps: {player.preferences.vetoed_maps}")
+			self.players.append(player)
+			print(f"   Total players in queue: {len(self.players)}")
+			
+			# Log player activity
+			self.recent_activity[player.discord_user_id] = time.time()
 
-	def remove_player(self, discord_user_id: int) -> None:
+	async def remove_player(self, discord_user_id: int) -> None:
 		"""Remove a player from the matchmaking pool by Discord ID."""
-		before_count = len(self.players)
-		self.players = [p for p in self.players if p.discord_user_id != discord_user_id]
-		after_count = len(self.players)
-		print(f"🚪 Player with Discord ID {discord_user_id} left the queue")
-		print(f"   Players before removal: {before_count}, after: {after_count}")
+		async with self.lock:
+			before_count = len(self.players)
+			self.players = [p for p in self.players if p.discord_user_id != discord_user_id]
+			after_count = len(self.players)
+			print(f"🚪 Player with Discord ID {discord_user_id} left the queue")
+			print(f"   Players before removal: {before_count}, after: {after_count}")
 
 	def set_match_callback(self, callback: Callable[[MatchResult, Callable[[Callable], None]], None]) -> None:
 		"""Set the callback function to be called when a match is found."""
@@ -529,7 +532,7 @@ class Matchmaker:
 		
 		# Now clean up the matchmaker queue based on who was matched
 		# Remove matched players from the original lists
-		self._update_queue_after_matching(matched_players, original_bw_only, original_sc2_only, original_both_races)
+		await self._update_queue_after_matching(matched_players, original_bw_only, original_sc2_only, original_both_races)
 		
 		print(f"   📊 Final state: {len(matched_players)} players matched")
 
@@ -546,7 +549,7 @@ class Matchmaker:
 		for uid in stale_players:
 			del self.recent_activity[uid]
 
-	def _update_queue_after_matching(self, matched_players: set, original_bw_only: List[Player], 
+	async def _update_queue_after_matching(self, matched_players: set, original_bw_only: List[Player], 
 								   original_sc2_only: List[Player], original_both_races: List[Player]):
 		"""
 		Update the matchmaker queue after matching by removing matched players.
@@ -564,7 +567,7 @@ class Matchmaker:
 			
 		# Remove matched players from the main queue
 		for discord_id in matched_players:
-			self.remove_player(discord_id)
+			await self.remove_player(discord_id)
 		
 		# Log remaining players by category
 		remaining_bw = [p for p in original_bw_only if p.discord_user_id not in matched_players]
@@ -636,7 +639,9 @@ class Matchmaker:
 			True if the abort was successful, False otherwise.
 		"""
 		# Atomically update the match to an aborted state
-		was_aborted = self.db_writer.abort_match_1v1(match_id, player_discord_uid)
+		was_aborted = self.db_writer.abort_match_1v1(
+		    match_id, player_discord_uid, self.ABORT_TIMER_SECONDS
+		)
 		
 		if was_aborted:
 			# Decrement the player's abort count since they were the one to abort
@@ -654,13 +659,18 @@ class Matchmaker:
 		
 		return False
 	
-	def _calculate_and_write_mmr(self, match_id: int, match_data: dict) -> bool:
+	async def _calculate_and_write_mmr(self, match_id: int, match_data: dict) -> bool:
 		"""Helper to calculate and write MMR changes to the database."""
 		# Get match details to check if both players have reported
 		match_data = self.db_reader.get_match_1v1(match_id)
 		if not match_data:
 			print(f"❌ Could not find match {match_id}")
 			return False
+		
+		# Guard: Check if MMR has already been calculated for this match
+		if match_data.get('mmr_change') != 0.0:
+			print(f"ℹ️ MMR for match {match_id} has already been calculated. Skipping.")
+			return True
 		
 		# Check if both players have reported and if their reports match
 		p1_report = match_data.get('player_1_report')
@@ -749,10 +759,10 @@ class Matchmaker:
 		
 		return True
 
-	def is_player_in_queue(self, discord_user_id: int) -> bool:
+	async def is_player_in_queue(self, discord_user_id: int) -> bool:
 		"""Check if a player is in the queue."""
-		with self.lock:
-			return discord_user_id in self.players_in_queue
+		async with self.lock:
+			return any(p.discord_user_id == discord_user_id for p in self.players)
 
 
 # Global matchmaker instance

@@ -7,9 +7,13 @@ All SQL queries use named parameters for safety and maintainability.
 """
 
 import sqlite3
+import os
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from contextlib import contextmanager
+
+
+DATABASE_PATH = os.getenv("DATABASE_PATH", "evoladder.db")
 
 
 def get_timestamp() -> str:
@@ -26,7 +30,7 @@ class Database:
     """
     Base database connection manager.
     """
-    def __init__(self, db_path: str = "evoladder.db"):
+    def __init__(self, db_path: str = DATABASE_PATH):
         self.db_path = db_path
     
     @contextmanager
@@ -45,7 +49,7 @@ class DatabaseReader:
     """
     Reads from the database.
     """
-    def __init__(self, db_path: str = "evoladder.db"):
+    def __init__(self, db_path: str = DATABASE_PATH):
         self.db = Database(db_path)
     
     # ========== Players Table ==========
@@ -266,7 +270,7 @@ class DatabaseWriter:
     """
     Writes to the database.
     """
-    def __init__(self, db_path: str = "evoladder.db"):
+    def __init__(self, db_path: str = DATABASE_PATH):
         self.db = Database(db_path)
     
     # ========== Players Table ==========
@@ -946,15 +950,16 @@ class DatabaseWriter:
             conn.commit()
             return True
 
-    def abort_match_1v1(self, match_id: int, player_discord_uid: int) -> bool:
+    def abort_match_1v1(self, match_id: int, player_discord_uid: int, abort_timer_seconds: int) -> bool:
         """
-        Atomically abort a match if it has not already been completed.
+        Atomically abort a match if it has not already been completed and is within the time limit.
         
         This prevents race conditions where both players could abort simultaneously.
         
         Args:
             match_id: The ID of the match to abort.
             player_discord_uid: The Discord UID of the player initiating the abort.
+            abort_timer_seconds: The window in seconds during which an abort is allowed.
             
         Returns:
             True if the match was successfully aborted by this operation, False otherwise.
@@ -992,7 +997,9 @@ class DatabaseWriter:
                             player_1_report = -3,
                             player_2_report = CASE WHEN player_2_report = -3 THEN -3 ELSE COALESCE(player_2_report, -1) END
                         WHERE 
-                            id = :match_id AND match_result IS NULL
+                            id = :match_id 
+                            AND match_result IS NULL
+                            AND (strftime('%s', 'now') - strftime('%s', played_at)) < :abort_timer_seconds
                     """
                 else:
                     update_query = """
@@ -1002,9 +1009,11 @@ class DatabaseWriter:
                             player_2_report = -3,
                             player_1_report = CASE WHEN player_1_report = -3 THEN -3 ELSE COALESCE(player_1_report, -1) END
                         WHERE 
-                            id = :match_id AND match_result IS NULL
+                            id = :match_id 
+                            AND match_result IS NULL
+                            AND (strftime('%s', 'now') - strftime('%s', played_at)) < :abort_timer_seconds
                     """
-                cursor.execute(update_query, {"match_id": match_id})
+                cursor.execute(update_query, {"match_id": match_id, "abort_timer_seconds": abort_timer_seconds})
                 
                 conn.commit()
                 

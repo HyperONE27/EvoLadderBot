@@ -4,6 +4,7 @@ Replay service for handling StarCraft II replay files.
 
 import os
 from typing import Optional
+import sc2reader
 
 
 class ReplayService:
@@ -78,3 +79,15 @@ class ReplayService:
             "size": os.path.getsize(file_path),
             "valid": True
         }
+
+@dataclass
+class Replay:
+    """Holds relevant information about a replay file."""
+    filename: str
+    size: int
+    valid: bool
+    player1_name: str
+    player2_name: str
+    duration: int
+    map_name: str
+    game_version: str

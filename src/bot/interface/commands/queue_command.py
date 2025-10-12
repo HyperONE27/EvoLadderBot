@@ -284,7 +284,7 @@ class JoinQueueButton(discord.ui.Button):
         
         # Add player to matchmaker
         print(f"🎮 Adding player to matchmaker: {player.user_id}")
-        matchmaker.add_player(player)
+        await matchmaker.add_player(player)
         
         # Show searching state
         searching_view = QueueSearchingView(
@@ -581,8 +581,8 @@ class QueueSearchingView(discord.ui.View):
         await queue_searching_view_manager.unregister(self.player.discord_user_id, view=self)
         
         # Remove player from matchmaker if they are still in queue
-        if matchmaker.is_player_in_queue(self.player.discord_user_id):
-            matchmaker.remove_player(self.player.discord_user_id)
+        if await matchmaker.is_player_in_queue(self.player.discord_user_id):
+            await matchmaker.remove_player(self.player.discord_user_id)
             print(f"🚪 Player {self.player.user_id} timed out and was removed from queue.")
 
     def deactivate(self) -> None:
@@ -650,7 +650,7 @@ class CancelQueueButton(discord.ui.Button):
 
         # No match yet—proceed with cancelling the queue entry
         print(f"🚪 Removing player from matchmaker: {self.player.user_id}")
-        matchmaker.remove_player(self.player.discord_user_id)
+        await matchmaker.remove_player(self.player.discord_user_id)
         
         await queue_searching_view_manager.unregister(self.player.discord_user_id, view=parent_view)
         
@@ -726,26 +726,46 @@ class MatchFoundView(discord.ui.View):
         self.result_select = MatchResultSelect(match_result, is_player1, self)
         self.add_item(self.result_select)
         
-        # Add confirmation dropdown (moved to row 1)
-        self.confirm_select = MatchResultConfirmSelect(self)
-        self.add_item(self.confirm_select)
-        
-        # Add abort button (row 2)
+        # Add abort button (moved to row 0)
         self.abort_button = MatchAbortButton(self)
         self.add_item(self.abort_button)
-        
-        # Update dropdown states based on persisted data
-        self._update_dropdown_states()
 
+        # Add confirmation dropdown
+        self.confirm_select = MatchResultConfirmSelect(self)
+        self.add_item(self.confirm_select)
+
+        # Start a background task to disable the abort button when the timer expires
+        self.abort_deadline = get_current_unix_timestamp() + matchmaker.ABORT_TIMER_SECONDS
+        self.abort_disable_task = asyncio.create_task(self.disable_abort_after_delay())
+
+        # Update dropdown states based on initial data
+        self._update_dropdown_states()
+    
+    async def disable_abort_after_delay(self):
+        """A background task to disable the abort button after the deadline."""
+        await asyncio.sleep(matchmaker.ABORT_TIMER_SECONDS)
+
+        # Double-check if the button should still be active
+        if self.abort_button.disabled or self.match_result.match_result in ["aborted", "conflict", "player1_win", "player2_win", "draw"]:
+            return
+
+        self.abort_button.disabled = True
+
+        # Try to update the message
+        async with self.edit_lock:
+            if self.last_interaction:
+                try:
+                    # Update the embed to notify the user
+                    embed = self.get_embed() # Get the current embed state
+                    embed.add_field(name="⚠️ Abort Window Closed", value="The time to abort this match has expired.", inline=False)
+                    await self.last_interaction.edit_original_response(embed=embed, view=self)
+                except discord.HTTPException as e:
+                    print(f"Failed to edit message to disable abort button: {e}")
+    
     def _update_dropdown_states(self):
-        """Update dropdown states based on persisted data"""
-        if self.confirmation_status == "Confirmed":
-            # Result has been confirmed, disable dropdowns and abort button
-            self.result_select.disabled = True
-            self.confirm_select.disabled = True
-            self.abort_button.disabled = True
-        elif self.match_result.replay_uploaded == "Yes":
-            # Replay uploaded, enable result selection
+        """Update the state of the dropdowns based on the current view state"""
+        # If a replay has been uploaded, enable result selection
+        if self.match_result.replay_uploaded == "Yes":
             self.result_select.disabled = False
             self.result_select.placeholder = "Report match result..."
             if self.selected_result:
@@ -935,7 +955,10 @@ class MatchFoundView(discord.ui.View):
         
         embed.add_field(
             name="**Match Result:**",
-            value=f"- Result: `{result_display}`\n- Result Confirmation Status: `{confirmation_display}`{mmr_display}",
+            value= (
+                f"- Result: `{result_display} ({confirmation_display})`\n"
+                f"{mmr_display}"
+            ),
             inline=False
         )
         
@@ -951,20 +974,18 @@ class MatchFoundView(discord.ui.View):
         # Abort validity section
         # Get abort timer deadline (current time + ABORT_TIMER_SECONDS)
         current_time = get_current_unix_timestamp()
-        abort_deadline = current_time + matchmaker.ABORT_TIMER_SECONDS
         
         # Get remaining aborts for both players
         p1_aborts = user_info_service.get_remaining_aborts(self.match_result.player1_discord_id)
         p2_aborts = user_info_service.get_remaining_aborts(self.match_result.player2_discord_id)
         
         abort_validity_value = (
-            f"If you are unable to play for any reason, simply press the \"Abort Match\" button below to abort the match.\n"
-            f"You have a limited number of aborts per month. Abusing this feature to dodge matches will result in a ban.\n"
-            f"You must abort the match before <t:{abort_deadline}:R> (<t:{abort_deadline}:F>)\n"
-            f"**{p1_display_name}**: {p1_aborts} aborts remaining\n"
-            f"**{p2_display_name}**: {p2_aborts} aborts remaining"
+            f"You can use the button below to abort the match if you are unable to play.\n"
+            f"Aborting matches has no MMR penalty, but you have a limited number per month.\n" 
+            f"Abusing this feature (e.g., dodging opponents or matchups) will result in a ban.\n"
+            f"You can only abort the match before <t:{self.abort_deadline}:T> (<t:{self.abort_deadline}:R>)."
         )
-        embed.add_field(name="**Can't play? Need to abort?**", value=abort_validity_value, inline=False)
+        embed.add_field(name="**Can't play? Need to leave?**", value=abort_validity_value, inline=False)
         
         return embed
 
@@ -1008,58 +1029,30 @@ class MatchFoundView(discord.ui.View):
             await self._send_final_notification_embed(data)
             
         elif status == "abort":
-            # Reload from DB to determine current state and initiator
-            match_data = db_reader.get_match_1v1(self.match_result.match_id)
-            p1_report = match_data.get("player_1_report") if match_data else None
-            p2_report = match_data.get("player_2_report") if match_data else None
-
+            # Update the view's internal state to reflect the abort
             self.match_result.match_result = "aborted"
             self.match_result.match_result_confirmation_status = "Aborted"
-            self.match_result.p1_mmr_change = 0
-            self.match_result.p2_mmr_change = 0
 
-            if p1_report == -3:
-                aborted_by = data.get("match_data", {}).get("p1_name") if data else None
-                aborted_by = aborted_by or data.get("match_data", {}).get("p1_info", {}).get("player_name") if data else None
-                aborted_by = aborted_by or self.match_result.player1_user_id
-            elif p2_report == -3:
-                aborted_by = data.get("match_data", {}).get("p2_name") if data else None
-                aborted_by = aborted_by or data.get("match_data", {}).get("p2_info", {}).get("player_name") if data else None
-                aborted_by = aborted_by or self.match_result.player2_user_id
-            else:
-                aborted_by = "Unknown"
-
-            # Disable components and update the original embed
+            # Immediately disable all components to prevent further actions
             self.disable_all_components()
+
+            # Update the embed with the abort information
             async with self.edit_lock:
                 if self.last_interaction:
-                    await self.last_interaction.edit_original_response(
-                        embed=self.get_embed(),
-                        view=self
-                    )
+                    try:
+                        await self.last_interaction.edit_original_response(
+                            embed=self.get_embed(),
+                            view=self
+                        )
+                    except discord.HTTPException:
+                        pass  # Non-critical if this fails, the main state is updated
 
-            # Send abort notification
+            # Send a follow-up notification to ensure the user sees the final state
             await self._send_abort_notification_embed()
-
-            # Notify other active MatchFoundViews for this match
-            views = await match_found_view_manager.get_views_by_match_id(self.match_result.match_id)
-            for channel_id, view in views:
-                if view is self:
-                    continue
-                view.match_result.match_result = "aborted"
-                view.match_result.match_result_confirmation_status = "Aborted"
-                view.match_result.p1_mmr_change = 0
-                view.match_result.p2_mmr_change = 0
-                async with view.edit_lock:
-                    if view.last_interaction:
-                        try:
-                            await view.last_interaction.edit_original_response(
-                                embed=view.get_embed(),
-                                view=view
-                            )
-                        except discord.HTTPException:
-                            pass
-
+            
+            # The view's work is done
+            self.stop()
+            
         elif status == "conflict":
             # Update the view's state to reflect the conflict
             self.match_result.match_result = "conflict"
@@ -1206,11 +1199,22 @@ class MatchAbortButton(discord.ui.Button):
     
     def __init__(self, parent_view):
         self.parent_view = parent_view
+        viewer_id = (
+            parent_view.match_result.player1_discord_id
+            if parent_view.is_player1
+            else parent_view.match_result.player2_discord_id
+        )
+        remaining_aborts = user_info_service.get_remaining_aborts(viewer_id)
+        label_text = f"Abort Match ({remaining_aborts} left this month)"
+        
+        is_disabled = remaining_aborts == 0
+        
         super().__init__(
             emoji="🛑",
-            label="Abort Match",
+            label=label_text,
             style=discord.ButtonStyle.danger,
-            row=0
+            row=0,
+            disabled=is_disabled
         )
     
     async def callback(self, interaction: discord.Interaction):
@@ -1226,6 +1230,10 @@ class MatchAbortButton(discord.ui.Button):
             # The backend will now handle notifications.
             # We just need to update the UI to a disabled state.
             self.parent_view.disable_all_components()
+
+            # Stop the abort disable task as the match is now aborted
+            if self.parent_view.abort_disable_task and not self.parent_view.abort_disable_task.done():
+                self.parent_view.abort_disable_task.cancel()
             
             # Update the embed to show abort status temporarily
             # The backend will send the final authoritative state
@@ -1274,6 +1282,10 @@ class MatchResultConfirmSelect(discord.ui.Select):
         self.parent_view.confirm_select.disabled = True
         self.parent_view.abort_button.disabled = True
         self.parent_view.last_interaction = interaction
+
+        # Stop the abort disable task as a result has been confirmed
+        if self.parent_view.abort_disable_task and not self.parent_view.abort_disable_task.done():
+            self.parent_view.abort_disable_task.cancel()
 
         # Update the message to show the final state before backend processing
         async with self.parent_view.edit_lock:
