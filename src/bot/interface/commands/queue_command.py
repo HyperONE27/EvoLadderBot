@@ -16,7 +16,7 @@ from src.backend.services.user_info_service import get_user_info, UserInfoServic
 from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader, get_timestamp
 from src.bot.utils.discord_utils import send_ephemeral_response, get_current_unix_timestamp, format_discord_timestamp, get_flag_emote, get_race_emote
 from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
-from src.backend.services.replay_service import ReplayService
+# from src.backend.services.replay_service import ReplayService
 from src.backend.services.mmr_service import MMRService
 import logging
 import time
