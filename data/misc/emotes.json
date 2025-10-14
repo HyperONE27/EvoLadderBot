@@ -30,5 +30,37 @@
     {
         "name": "flag_zz",
         "markdown": "<:flag_zz:1425037183403823114>"
+    },
+    {
+        "name": "s_rank",
+        "markdown": "<:s_rank:1427481074606542961>"
+    },
+    {
+        "name": "a_rank",
+        "markdown": "<:a_rank:1427481026447540284>"
+    },
+    {
+        "name": "b_rank",
+        "markdown": "<:b_rank:1427481034525511771>"
+    },
+    {
+        "name": "c_rank",
+        "markdown": "<:c_rank:1427481041437986966>"
+    },
+    {
+        "name": "d_rank",
+        "markdown": "<:d_rank:1427481050229248031>"
+    },
+    {
+        "name": "e_rank",
+        "markdown": "<:e_rank:1427481062694715422>"
+    },
+    {
+        "name": "f_rank",
+        "markdown": "<:f_rank:1427481066762932255>"
+    },
+    {
+        "name": "u_rank",
+        "markdown": "<:u_rank:1427481081585598626>"
     }
 ]

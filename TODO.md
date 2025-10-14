@@ -28,6 +28,7 @@
   - ✅ MMR curve now more closely resembles that of Brood War
 - Leaderboards:
   - ⏰ Add dynamic rank calculations (S/A/B/C/D/E/F) to leaderboard and player profiles
+  - ✅ Edit and add rank emotes
 - Account config:
   - ⏰ Update Terms of Service for closed alpha/open beta stage
   - ⏰ Add activation code verification

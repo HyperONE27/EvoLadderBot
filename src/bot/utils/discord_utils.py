@@ -192,6 +192,26 @@ def get_flag_emote(country_code: str) -> str:
         # Use Unicode flag emoji for standard country codes
         return country_to_flag(country_code)
 
+def get_rank_emote(rank: str) -> str:
+    """Get the Discord emote for a rank from emotes.json."""
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    emotes_path = os.path.join(project_root, "data", "misc", "emotes.json")
+    
+    try:
+        with open(emotes_path, 'r', encoding='utf-8') as f:
+            emotes_data = json.load(f)
+        
+        # Find the emote for the rank
+        for emote in emotes_data:
+            if emote.get("name") == rank:
+                return emote.get("markdown", f":{rank}:")
+        
+        # Fallback to generic format if not found
+        return f":{rank}:"
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        # Fallback to generic format if file not found or invalid
+        return f":{rank}:"
+
 
 def get_current_unix_timestamp() -> int:
     """Get the current Unix epoch timestamp as an integer."""
