@@ -16,6 +16,7 @@ from src.backend.services.user_info_service import get_user_info, UserInfoServic
 from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader, get_timestamp
 from src.bot.utils.discord_utils import send_ephemeral_response, get_current_unix_timestamp, format_discord_timestamp, get_flag_emote, get_race_emote
 from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
+from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 # from src.backend.services.replay_service import ReplayService
 from src.backend.services.mmr_service import MMRService
 import logging
@@ -139,7 +140,7 @@ async def queue_command(interaction: discord.Interaction):
         player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
         guard_service.require_queue_access(player)
     except CommandGuardError as exc:
-        error_embed = guard_service.create_error_embed(exc)
+        error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
         return
 
@@ -949,15 +950,13 @@ class MatchFoundView(discord.ui.View):
                 mmr_display = f"\n- MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
         else:
             result_display = "Not selected"
-            mmr_display = f"\n- MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
+            mmr_display = f"`{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
             
-        confirmation_display = self.match_result.match_result_confirmation_status or "Not confirmed"
-        
         embed.add_field(
             name="**Match Result:**",
             value= (
-                f"- Result: `{result_display} ({confirmation_display})`\n"
-                f"{mmr_display}"
+                f"- Result: `{result_display}`\n"
+                f"- MMR Awarded: {mmr_display}"
             ),
             inline=False
         )
@@ -982,7 +981,8 @@ class MatchFoundView(discord.ui.View):
         abort_validity_value = (
             f"You can use the button below to abort the match if you are unable to play.\n"
             f"Aborting matches has no MMR penalty, but you have a limited number per month.\n" 
-            f"Abusing this feature (e.g., dodging opponents or matchups) will result in a ban.\n"
+            f"Abusing this feature (e.g., dodging opponents/matchups, repeatedly aborting at\n"
+            f"the last second, deliberately wasting the time of others, etc.) will result in a ban.\n"
             f"You can only abort the match before <t:{self.abort_deadline}:T> (<t:{self.abort_deadline}:R>)."
         )
         embed.add_field(name="**Can't play? Need to leave?**", value=abort_validity_value, inline=False)

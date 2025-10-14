@@ -1,6 +1,8 @@
+- Command guard:
+  - ✅ Fully decoupled command guarding errors from frontend
 - Matchmaking:
-  - ⏰ Fill out the full cross-table for 16 regions
-  - ⏰ Get the matchmaker to correctly assign server based on the cross-table
+  - ⏰ Fill out the full cross-table for 16 regions
+  - ⏰ Get the matchmaker to correctly assign server based on the cross-table
   - ✅ Add more information/clean up existing information on the match found embed
   - ✅ Matchmaker now assigns matches in waves occurring every 45 seconds, up from 5, trading time for fairer matches
   - ✅ Expanding MMR window for matchmaking scales dynamically with active player count and proportion of active player count 

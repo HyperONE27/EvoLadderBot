@@ -5,6 +5,7 @@ from src.backend.services.command_guard_service import CommandGuardService, Comm
 from src.backend.services.user_info_service import UserInfoService, get_user_info, log_user_action
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.interface.components.confirm_embed import ConfirmEmbedView
+from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 
 user_info_service = UserInfoService()
 guard_service = CommandGuardService(user_info_service)
@@ -19,7 +20,7 @@ async def termsofservice_command(interaction: discord.Interaction):
     try:
         guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
     except CommandGuardError as exc:
-        error_embed = guard_service.create_error_embed(exc)
+        error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
         return
 

@@ -11,6 +11,7 @@ from src.backend.services.validation_service import ValidationService
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.interface.components.confirm_embed import ConfirmEmbedView
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
+from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 
 countries_service = CountriesService()
 regions_service = RegionsService()
@@ -29,7 +30,7 @@ async def setup_command(interaction: discord.Interaction):
         player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
         guard_service.require_tos_accepted(player)
     except CommandGuardError as exc:
-        error_embed = guard_service.create_error_embed(exc)
+        error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
         return
     

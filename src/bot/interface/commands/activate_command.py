@@ -7,6 +7,7 @@ from src.bot.interface.components.error_embed import ErrorEmbedException, create
 from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from src.backend.services.user_info_service import UserInfoService
 from src.bot.utils.discord_utils import send_ephemeral_response
+from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 
 user_info_service = UserInfoService()
 guard_service = CommandGuardService()
@@ -70,7 +71,7 @@ def register_activate_command(tree: app_commands.CommandTree):
             player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
             guard_service.require_tos_accepted(player)
         except CommandGuardError as exc:
-            error_embed = guard_service.create_error_embed(exc)
+            error_embed = create_command_guard_error_embed(exc)
             await send_ephemeral_response(interaction, embed=error_embed)
             return
         
@@ -126,7 +127,7 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
             await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
             
         except CommandGuardError as e:
-            error_embed = guard_service.create_error_embed(e)
+            error_embed = create_command_guard_error_embed(e)
             await send_ephemeral_response(interaction, embed=error_embed)
             return
             
