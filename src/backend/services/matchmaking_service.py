@@ -28,23 +28,21 @@ class QueuePreferences:
 
 @dataclass
 class MatchResult:
-	"""Result of a successful match"""
-	match_id: int
-	player1_discord_id: int
-	player2_discord_id: int
-	player1_user_id: str
-	player2_user_id: str
-	player1_race: str
-	player2_race: str
-	map_choice: str
-	server_choice: str
-	in_game_channel: str
-	match_result: Optional[str] = None
-	match_result_confirmation_status: Optional[str] = None
-	replay_uploaded: Optional[str] = None
-	replay_upload_time: Optional[int] = None
-	p1_mmr_change: Optional[int] = None
-	p2_mmr_change: Optional[int] = None
+    """Represents the result of a match."""
+    match_id: int
+    player_1_discord_id: int
+    player_2_discord_id: int
+    player_1_user_id: str
+    player_2_user_id: str
+    player_1_race: str
+    player_2_race: str
+    map_choice: str
+    server_choice: str
+    in_game_channel: str
+    match_result: Optional[str] = None
+    match_result_confirmation_status: Optional[str] = None
+    replay_uploaded: str = "No"
+    replay_upload_time: Optional[int] = None
 
 class Player:
 	def __init__(self, discord_user_id: int, user_id: str, preferences: QueuePreferences, 
@@ -481,8 +479,8 @@ class Matchmaker:
 				p2_race = p2.get_race_for_match(True)  # BW race
 			
 			# Get current MMR values for both players
-			p1_mmr = p1.get_effective_mmr(is_bw_match) or 1500
-			p2_mmr = p2.get_effective_mmr(not is_bw_match) or 1500
+			p1_mmr = int(p1.get_effective_mmr(is_bw_match) or 1500)
+			p2_mmr = int(p2.get_effective_mmr(not is_bw_match) or 1500)
 			
 			# Create the match record in the database
 			match_id = self.db_writer.create_match_1v1(
@@ -494,17 +492,17 @@ class Matchmaker:
 				server_choice,
 				p1_mmr,
 				p2_mmr,
-				0.0  # MMR change will be calculated and updated after match result
+				0  # MMR change will be calculated and updated after match result
 			)
 
 			match_result = MatchResult(
 				match_id=match_id,
-				player1_discord_id=p1.discord_user_id,
-				player2_discord_id=p2.discord_user_id,
-				player1_user_id=p1.user_id,
-				player2_user_id=p2.user_id,
-				player1_race=p1_race,
-				player2_race=p2_race,
+				player_1_discord_id=p1.discord_user_id,
+				player_2_discord_id=p2.discord_user_id,
+				player_1_user_id=p1.user_id,
+				player_2_user_id=p2.user_id,
+				player_1_race=p1_race,
+				player_2_race=p2_race,
 				map_choice=map_choice,
 				server_choice=server_choice,
 				in_game_channel=in_game_channel

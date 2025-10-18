@@ -17,7 +17,7 @@ from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader, get_
 from src.bot.utils.discord_utils import send_ephemeral_response, get_current_unix_timestamp, format_discord_timestamp, get_flag_emote, get_race_emote
 from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
-# from src.backend.services.replay_service import ReplayService
+from src.backend.services.replay_service import ReplayService, ReplayRaw
 from src.backend.services.mmr_service import MMRService
 import logging
 import time
@@ -546,7 +546,7 @@ class QueueSearchingView(discord.ui.View):
             if self.player.discord_user_id in match_results:
                 # Match found! Update the view
                 match_result = match_results[self.player.discord_user_id]
-                is_player1 = match_result.player1_discord_id == self.player.discord_user_id
+                is_player1 = match_result.player_1_discord_id == self.player.discord_user_id
                 
                 # Create match found view
                 match_view = MatchFoundView(match_result, is_player1)
@@ -624,7 +624,7 @@ class CancelQueueButton(discord.ui.Button):
             print(f"⚠️ Cancel ignored: match already assigned to {self.player.user_id}")
 
             # Determine player role in the match
-            is_player1 = existing_match.player1_discord_id == self.player.discord_user_id
+            is_player1 = existing_match.player_1_discord_id == self.player.discord_user_id
             match_view = MatchFoundView(existing_match, is_player1)
 
             # Register replay detection if possible
@@ -693,11 +693,11 @@ async def wait_for_match_completion(match_id: int, timeout: int = 30) -> Optiona
 
 def handle_match_result(match_result: MatchResult, register_completion_callback: Callable[[Callable], None]):
     """Handle when a match is found"""
-    print(f"🎉 Match #{match_result.match_id}: {match_result.player1_user_id} vs {match_result.player2_user_id} | {match_result.map_choice} @ {match_result.server_choice}")
+    print(f"🎉 Match #{match_result.match_id}: {match_result.player_1_user_id} vs {match_result.player_2_user_id} | {match_result.map_choice} @ {match_result.server_choice}")
     
     # Store match results for both players
-    match_results[match_result.player1_discord_id] = match_result
-    match_results[match_result.player2_discord_id] = match_result
+    match_results[match_result.player_1_discord_id] = match_result
+    match_results[match_result.player_2_discord_id] = match_result
     
     # Attach the register callback so views can subscribe to completion notifications
     setattr(match_result, 'register_completion_callback', register_completion_callback)
@@ -813,22 +813,22 @@ class MatchFoundView(discord.ui.View):
     def get_embed(self) -> discord.Embed:
         """Get the match found embed"""
         # Get player 1 info
-        p1_info = db_reader.get_player_by_discord_uid(self.match_result.player1_discord_id)
+        p1_info = db_reader.get_player_by_discord_uid(self.match_result.player_1_discord_id)
         p1_name = p1_info.get('player_name') if p1_info else None
         p1_country = p1_info.get('country') if p1_info else None
-        p1_display_name = p1_name if p1_name else str(self.match_result.player1_discord_id)
+        p1_display_name = p1_name if p1_name else str(self.match_result.player_1_discord_id)
         p1_flag = get_flag_emote(p1_country) if p1_country else get_flag_emote("XX")
         
         # Get player 2 info
-        p2_info = db_reader.get_player_by_discord_uid(self.match_result.player2_discord_id)
+        p2_info = db_reader.get_player_by_discord_uid(self.match_result.player_2_discord_id)
         p2_name = p2_info.get('player_name') if p2_info else None
         p2_country = p2_info.get('country') if p2_info else None
-        p2_display_name = p2_name if p2_name else str(self.match_result.player2_discord_id)
+        p2_display_name = p2_name if p2_name else str(self.match_result.player_2_discord_id)
         p2_flag = get_flag_emote(p2_country) if p2_country else get_flag_emote("XX")
         
         # Get race information from match result
-        p1_race = self.match_result.player1_race
-        p2_race = self.match_result.player2_race
+        p1_race = self.match_result.player_1_race
+        p2_race = self.match_result.player_2_race
         
         # Get race emotes
         p1_race_emote = get_race_emote(p1_race)
@@ -903,7 +903,7 @@ class MatchFoundView(discord.ui.View):
         
         if self.match_result.match_result == 'conflict':
             result_display = "Conflict"
-            mmr_display = "\n- MMR Awarded: :x: Report Conflict Detected"
+            mmr_display = "- MMR Awarded: :x: Report Conflict Detected"
         elif self.match_result.match_result == 'aborted':
             # Pull fresh data so we know who initiated the abort
             match_data = db_reader.get_match_1v1(self.match_result.match_id)
@@ -918,7 +918,7 @@ class MatchFoundView(discord.ui.View):
                 aborted_by = "Unknown"
 
             result_display = f"Aborted by {aborted_by}"
-            mmr_display = "\n- MMR Awarded: `+/-0` (Match aborted)"
+            mmr_display = "- MMR Awarded: `+/-0` (Match aborted)"
         elif self.match_result.match_result:
             # Convert to human-readable format
             if self.match_result.match_result == "player1_win":
@@ -944,19 +944,19 @@ class MatchFoundView(discord.ui.View):
                 p1_sign = "+" if p1_mmr_rounded >= 0 else ""
                 p2_sign = "+" if p2_mmr_rounded >= 0 else ""
                 
-                mmr_display = f"\n- MMR Awarded: `{p1_display_name}: {p1_sign}{p1_mmr_rounded}`, `{p2_display_name}: {p2_sign}{p2_mmr_rounded}`"
+                mmr_display = f"- MMR Awarded: `{p1_display_name}: {p1_sign}{p1_mmr_rounded}`, `{p2_display_name}: {p2_sign}{p2_mmr_rounded}`"
             else:
                 # MMR changes not calculated yet - always show TBD
-                mmr_display = f"\n- MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
+                mmr_display = f"- MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
         else:
             result_display = "Not selected"
-            mmr_display = f"`{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
+            mmr_display = f"- MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
             
         embed.add_field(
             name="**Match Result:**",
             value= (
                 f"- Result: `{result_display}`\n"
-                f"- MMR Awarded: {mmr_display}"
+                f"{mmr_display}"
             ),
             inline=False
         )
@@ -975,8 +975,8 @@ class MatchFoundView(discord.ui.View):
         current_time = get_current_unix_timestamp()
         
         # Get remaining aborts for both players
-        p1_aborts = user_info_service.get_remaining_aborts(self.match_result.player1_discord_id)
-        p2_aborts = user_info_service.get_remaining_aborts(self.match_result.player2_discord_id)
+        p1_aborts = user_info_service.get_remaining_aborts(self.match_result.player_1_discord_id)
+        p2_aborts = user_info_service.get_remaining_aborts(self.match_result.player_2_discord_id)
         
         abort_validity_value = (
             f"You can use the button below to abort the match if you are unable to play.\n"
@@ -1099,7 +1099,7 @@ class MatchFoundView(discord.ui.View):
 
         notification_embed = discord.Embed(
             title=f"🏆 Match #{self.match_result.match_id} Result Finalized",
-            description=f"**{p1_flag} {p1_race_emote} {p1_name} ({p1_current_mmr} → {int(p1_new_mmr)})** vs **{p2_flag} {p2_race_emote} {p2_name} ({p2_current_mmr} → {int(p2_new_mmr)})**",
+            description=f"**{p1_flag} {p1_race_emote} {p1_name} ({int(p1_current_mmr)} → {int(p1_new_mmr)})** vs **{p2_flag} {p2_race_emote} {p2_name} ({int(p2_current_mmr)} → {int(p2_new_mmr)})**",
             color=discord.Color.gold()
         )
 
@@ -1108,7 +1108,7 @@ class MatchFoundView(discord.ui.View):
 
         notification_embed.add_field(
             name="**MMR Changes:**",
-            value=f"- {p1_name}: `{p1_sign}{p1_mmr_rounded} ({p1_current_mmr} → {int(p1_new_mmr)})`\n- {p2_name}: `{p2_sign}{p2_mmr_rounded} ({p2_current_mmr} → {int(p2_new_mmr)})`",
+            value=f"- {p1_name}: `{p1_sign}{p1_mmr_rounded} ({int(p1_current_mmr)} → {int(p1_new_mmr)})`\n- {p2_name}: `{p2_sign}{p2_mmr_rounded} ({int(p2_current_mmr)} → {int(p2_new_mmr)})`",
             inline=False
         )
         
@@ -1200,9 +1200,9 @@ class MatchAbortButton(discord.ui.Button):
     def __init__(self, parent_view):
         self.parent_view = parent_view
         viewer_id = (
-            parent_view.match_result.player1_discord_id
+            parent_view.match_result.player_1_discord_id
             if parent_view.is_player1
-            else parent_view.match_result.player2_discord_id
+            else parent_view.match_result.player_2_discord_id
         )
         remaining_aborts = user_info_service.get_remaining_aborts(viewer_id)
         label_text = f"Abort Match ({remaining_aborts} left this month)"
@@ -1229,6 +1229,11 @@ class MatchAbortButton(discord.ui.Button):
         if success:
             # The backend will now handle notifications.
             # We just need to update the UI to a disabled state.
+            
+            # Update button label
+            remaining_aborts = user_info_service.get_remaining_aborts(player_discord_uid)
+            self.label = f"Match Aborted ({remaining_aborts} left this month)"
+
             self.parent_view.disable_all_components()
 
             # Stop the abort disable task as the match is now aborted
@@ -1309,11 +1314,11 @@ class MatchResultSelect(discord.ui.Select):
         self.parent_view = parent_view
         
         # Get player names from database
-        p1_info = db_reader.get_player_by_discord_uid(match_result.player1_discord_id)
-        self.p1_name = p1_info.get('player_name') if p1_info else str(match_result.player1_user_id)
+        p1_info = db_reader.get_player_by_discord_uid(match_result.player_1_discord_id)
+        self.p1_name = p1_info.get('player_name') if p1_info else str(match_result.player_1_user_id)
         
-        p2_info = db_reader.get_player_by_discord_uid(match_result.player2_discord_id)
-        self.p2_name = p2_info.get('player_name') if p2_info else str(match_result.player2_user_id)
+        p2_info = db_reader.get_player_by_discord_uid(match_result.player_2_discord_id)
+        self.p2_name = p2_info.get('player_name') if p2_info else str(match_result.player_2_user_id)
         
         # Create options for the dropdown
         options = [
@@ -1389,7 +1394,7 @@ class MatchResultSelect(discord.ui.Select):
             report_value = 0
         
         try:
-            current_player_id = self.parent_view.match_result.player1_discord_id if self.is_player1 else self.parent_view.match_result.player2_discord_id
+            current_player_id = self.parent_view.match_result.player_1_discord_id if self.is_player1 else self.parent_view.match_result.player_2_discord_id
             success = matchmaker.record_match_result(self.match_result.match_id, current_player_id, report_value)
             
             if success:
@@ -1418,16 +1423,16 @@ class MatchResultSelect(discord.ui.Select):
     def get_selected_label(self):
         """Get the label for the selected result"""
         if self.values[0] == "player1_win":
-            return f"{self.match_result.player1_user_id} Won"
+            return f"{self.match_result.player_1_user_id} Won"
         elif self.values[0] == "player2_win":
-            return f"{self.match_result.player2_user_id} Won"
+            return f"{self.match_result.player_2_user_id} Won"
         else:
             return "Draw"
     
     async def notify_other_player_result(self, original_embed, result_embed):
         """Notify the other player about the match result"""
         # Notify both players about the result
-        for player_id in [self.match_result.player1_discord_id, self.match_result.player2_discord_id]:
+        for player_id in [self.parent_view.match_result.player_1_discord_id, self.parent_view.match_result.player_2_discord_id]:
             other_view = await queue_searching_view_manager.get_view(player_id)
             if other_view and hasattr(other_view, 'last_interaction') and other_view.last_interaction:
                     try:
@@ -1448,7 +1453,7 @@ class MatchResultSelect(discord.ui.Select):
     async def notify_other_player_disagreement(self, original_embed, disagreement_embed):
         """Notify the other player about the disagreement"""
         # Notify both players about the disagreement
-        for player_id in [self.match_result.player1_discord_id, self.match_result.player2_discord_id]:
+        for player_id in [self.parent_view.match_result.player_1_discord_id, self.parent_view.match_result.player_2_discord_id]:
             other_view = await queue_searching_view_manager.get_view(player_id)
             if other_view and hasattr(other_view, 'last_interaction') and other_view.last_interaction:
                     try:
@@ -1477,7 +1482,7 @@ class MatchResultSelect(discord.ui.Select):
             report_value = 0
         
         try:
-            current_player_id = self.parent_view.match_result.player1_discord_id if self.is_player1 else self.parent_view.match_result.player2_discord_id
+            current_player_id = self.parent_view.match_result.player_1_discord_id if self.is_player1 else self.parent_view.match_result.player_2_discord_id
             success = matchmaker.record_match_result(self.match_result.match_id, current_player_id, report_value)
             
             if success:
@@ -1584,30 +1589,23 @@ async def on_message(message: discord.Message):
     if not match_view:
         return
     
-    # Download and store the replay file
     try:
         # Download the replay file
-        replay_data = await replay_attachment.read()
+        replay_bytes = await replay_attachment.read()
         
-        # Get both timestamp formats
-        sql_timestamp = get_timestamp()
-        unix_epoch = get_current_unix_timestamp()
-        
-        # Determine which player uploaded the replay
-        player_discord_uid = message.author.id
-        
-        success = db_writer.update_match_replay_1v1(
+        # Use the ReplayService to handle the upload
+        result = replay_service.store_upload(
             match_view.match_result.match_id,
-            player_discord_uid,
-            replay_data,
-            sql_timestamp  # Use SQL-formatted timestamp for the database
+            message.author.id,
+            replay_bytes
         )
         
-        if success:
+        if result.get("success"):
+            unix_epoch = result.get("unix_epoch")
             match_view.match_result.replay_uploaded = "Yes"
-            match_view.match_result.replay_upload_time = unix_epoch  # Use Unix epoch for the embed
+            match_view.match_result.replay_upload_time = unix_epoch
             
-            # Update the view for all participants of the match
+            # Update all views for the match
             match_views = await match_found_view_manager.get_views_by_match_id(match_view.match_result.match_id)
             for _, view in match_views:
                 view.match_result.replay_uploaded = "Yes"
@@ -1618,11 +1616,11 @@ async def on_message(message: discord.Message):
                         await view.last_interaction.edit_original_response(
                             embed=view.get_embed(), view=view
                         )
-
-            print(f"✅ Replay file stored for match {match_view.match_result.match_id} (player: {player_discord_uid})")
+            
+            print(f"✅ Replay file stored for match {match_view.match_result.match_id} (player: {message.author.id})")
         else:
             print(f"❌ Failed to store replay for match {match_view.match_result.match_id}")
-            
+
     except Exception as e:
         print(f"❌ Error processing replay file: {e}")
 

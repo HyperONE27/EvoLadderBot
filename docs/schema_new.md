@@ -37,6 +37,22 @@ CREATE TABLE player_action_logs (
     changed_by              TEXT DEFAULT 'player'                     -- options include "player", "admin", "system"
 )
 
+CREATE TABLE replays (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    replay_path             TEXT NOT NULL,
+    replay_hash             TEXT NOT NULL,
+    replay_date             TIMESTAMP NOT NULL,
+    player_1_name           TEXT NOT NULL,
+    player_2_name           TEXT NOT NULL,
+    player_1_race           TEXT NOT NULL,
+    player_2_race           TEXT NOT NULL,
+    result                  INTEGER NOT NULL,   -- 1 or 2, 0 for draw
+    player_1_handle         TEXT NOT NULL,
+    observers               TEXT NOT NULL,
+    map_name                TEXT NOT NULL,
+    duration                INTEGER NOT NULL
+)
+
 /*
 Most players only play 1-2 races.
 Therefore, we avoid having several columns for each race, which would create many persistent empty cells.
@@ -77,6 +93,8 @@ CREATE TABLE matches_1v1 (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
     player_1_discord_uid    INTEGER NOT NULL,
     player_2_discord_uid    INTEGER NOT NULL,
+    player_1_race           TEXT NOT NULL,
+    player_2_race           TEXT NOT NULL,
     player_1_mmr            FLOAT NOT NULL,
     player_2_mmr            FLOAT NOT NULL,
     player_1_report         INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw, -1 for aborted match, -3 if player_1 initiated the abort
@@ -85,11 +103,11 @@ CREATE TABLE matches_1v1 (
     mmr_change              FLOAT NOT NULL,     -- Amount of MMR awarded. Positive value means player 1 gained MMR, negative value means player 2 gained MMR.
     map_played              TEXT NOT NULL,
     server_used             TEXT NOT NULL,
-    played_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    -- player_1_replay         BLOB,               -- stores the replay player_1 uploaded
-    -- player_1_replay_time    TIMESTAMP,          -- stores the timestamp when player_1 uploaded                      
-    -- player_2_replay         BLOB,               -- stores the replay player_2 uploadded
-    -- player_2_replay_time    TIMESTAMP,          -- stores the timestamp when player_2 uploaded
+    played_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    player_1_replay_path    TEXT,
+    player_1_replay_time    TIMESTAMP,          -- stores the timestamp when player_1 uploaded                      
+    player_2_replay_path    TEXT,
+    player_2_replay_time    TIMESTAMP          -- stores the timestamp when player_2 uploaded
 );
 
 CREATE TABLE preferences_1v1 (
@@ -98,14 +116,6 @@ CREATE TABLE preferences_1v1 (
     last_chosen_races       TEXT,               -- e.g., ["bw_terran", "sc2_zerg"]; i.e., JSON array
     last_chosen_vetoes      TEXT                -- e.g., ["Arkanoid", "Khione", "Pylon"]; i.e., JSON array
 );
-
--- This table will store replays for ALL gamemodes
-CREATE TABLE replays {
-    replay_name             TEXT NOT NULL,
-    replay_path             TEXT NOT NULL,
-    player_discord_uid      INTEGER NOT NULL,
-    match_table_row         TEXT NOT NULL       -- ???
-}
 
 /*
 MMR tables foar additional game modes (e.g., 3v3, FFA) will follow this same structure.

@@ -39,6 +39,8 @@
   - ✅ nulling of alt names is properly recorded in action logs table
   - ⏰ Add a /profile page to view one's own MMRs and settings
 - Replays:
+  - ✅ Replays are now redirected to storage instead of being stored directly in tables
+  - ✅ Tables now store replay paths
   - ⏰ Move replays to a dedicated table and add pointer logic between tables
   - ⏰ Parse replays for basic info: players, player races, observers, map, timestamp, length, etc.
   - ⏰ Send a message to the user with this information when they upload a replay

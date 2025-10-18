@@ -811,54 +811,50 @@ class DatabaseWriter:
         self,
         match_id: int,
         player_discord_uid: int,
-        replay_data: bytes,
-        replay_timestamp: str
+        replay_path: str,
+        replay_time: str
     ) -> bool:
         """
-        Update a player's replay for a 1v1 match.
+        Update the replay data for a specific match and player.
         
         Args:
             match_id: The ID of the match to update.
-            player_discord_uid: The Discord UID of the player uploading the replay.
-            replay_data: The replay file data as bytes.
-            replay_timestamp: Timestamp when the replay was uploaded.
-        
+            player_discord_uid: The Discord UID of the player who uploaded the replay.
+            replay_path: The path to the replay file.
+            replay_time: The timestamp of the replay upload.
+            
         Returns:
             True if the update was successful, False otherwise.
         """
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Get match details to determine which player is which
-            cursor.execute(
-                "SELECT player_1_discord_uid, player_2_discord_uid FROM matches_1v1 WHERE id = :match_id",
-                {"match_id": match_id}
-            )
-            match_data = cursor.fetchone()
-            if not match_data:
-                return False
-            
-            player_1_uid, player_2_uid = match_data
-            
-            # Determine which replay column to update
-            if player_discord_uid == player_1_uid:
-                replay_column = "player_1_replay"
-                timestamp_column = "player_1_replay_time"
-            elif player_discord_uid == player_2_uid:
-                replay_column = "player_2_replay"
-                timestamp_column = "player_2_replay_time"
-            else:
-                return False  # Player not in this match
-            
-            # Update the appropriate replay columns
-            cursor.execute(
-                f"UPDATE matches_1v1 SET {replay_column} = :replay_data, {timestamp_column} = :replay_timestamp WHERE id = :match_id",
-                {"replay_data": replay_data, "replay_timestamp": replay_timestamp, "match_id": match_id}
-            )
-            
-            conn.commit()
-            rows_affected = cursor.rowcount
-            return rows_affected > 0
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # First, determine if the player is player_1 or player_2
+                cursor.execute("SELECT player_1_discord_uid FROM matches_1v1 WHERE id = ?", (match_id,))
+                result = cursor.fetchone()
+                
+                if result is None:
+                    return False
+                
+                if result[0] == player_discord_uid:
+                    # Player is player_1
+                    cursor.execute(
+                        "UPDATE matches_1v1 SET player_1_replay_path = ?, player_1_replay_time = ? WHERE id = ?",
+                        (replay_path, replay_time, match_id)
+                    )
+                else:
+                    # Player is player_2
+                    cursor.execute(
+                        "UPDATE matches_1v1 SET player_2_replay_path = ?, player_2_replay_time = ? WHERE id = ?",
+                        (replay_path, replay_time, match_id)
+                    )
+                
+                conn.commit()
+                return True
+        except sqlite3.Error as e:
+            print(f"Database error in update_match_replay_1v1: {e}")
+            return False
     
     def update_match_mmr_change(
         self,
@@ -1024,3 +1020,33 @@ class DatabaseWriter:
                 print(f"Error aborting match {match_id}: {e}")
                 conn.rollback()
                 return False
+
+    def insert_replay(self, replay_data: Dict[str, Any]) -> bool:
+        """
+        Insert a new replay record into the replays table.
+        
+        Args:
+            replay_data: A dictionary containing the replay's parsed data.
+            
+        Returns:
+            True if the insertion was successful, False otherwise.
+        """
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO replays (
+                        replay_path, replay_hash, replay_date, player_1_name, player_2_name,
+                        player_1_race, player_2_race, result, player_1_handle, player_2_handle,
+                        observers, map_name, duration
+                    ) VALUES (
+                        :replay_path, :replay_hash, :replay_date, :player_1_name, :player_2_name,
+                        :player_1_race, :player_2_race, :result, :player_1_handle, :player_2_handle,
+                        :observers, :map_name, :duration
+                    )
+                """, replay_data)
+                conn.commit()
+                return True
+        except sqlite3.Error as e:
+            print(f"Database error in insert_replay: {e}")
+            return False

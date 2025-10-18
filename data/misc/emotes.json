@@ -1,66 +1,66 @@
 [
     {
         "name": "bw_terran",
-        "markdown": "<:bw_terran:1425037568638058629>"
+        "markdown": "<:t1:1425037568638058629>"
     },
     {
         "name": "bw_zerg",
-        "markdown": "<:bw_zerg:1425037525889712139>"
+        "markdown": "<:z1:1425037525889712139>"
     },
     {
         "name": "bw_protoss",
-        "markdown": "<:bw_protoss:1425037606529536040>"
+        "markdown": "<:p1:1425037606529536040>"
     },
     {
         "name": "sc2_terran",
-        "markdown": "<:sc2_terran:1425037422646919228>"
+        "markdown": "<:t2:1425037422646919228>"
     },
     {
         "name": "sc2_zerg",
-        "markdown": "<:sc2_zerg:1425037367479107715>"
+        "markdown": "<:z2:1425037367479107715>"
     },
     {
         "name": "sc2_protoss",
-        "markdown": "<:sc2_protoss:1425037487075622923>"
+        "markdown": "<:p2:1425037487075622923>"
     },
     {
         "name": "flag_xx",
-        "markdown": "<:flag_xx:1425037165414322186>"
+        "markdown": "<:x_:1425037165414322186>"
     },
     {
         "name": "flag_zz",
-        "markdown": "<:flag_zz:1425037183403823114>"
+        "markdown": "<:z_:1425037183403823114>"
     },
     {
         "name": "s_rank",
-        "markdown": "<:s_rank:1427481074606542961>"
+        "markdown": "<:s_:1427481074606542961>"
     },
     {
         "name": "a_rank",
-        "markdown": "<:a_rank:1427481026447540284>"
+        "markdown": "<:a_:1427481026447540284>"
     },
     {
         "name": "b_rank",
-        "markdown": "<:b_rank:1427481034525511771>"
+        "markdown": "<:b_:1427481034525511771>"
     },
     {
         "name": "c_rank",
-        "markdown": "<:c_rank:1427481041437986966>"
+        "markdown": "<:c_:1427481041437986966>"
     },
     {
         "name": "d_rank",
-        "markdown": "<:d_rank:1427481050229248031>"
+        "markdown": "<:d_:1427481050229248031>"
     },
     {
         "name": "e_rank",
-        "markdown": "<:e_rank:1427481062694715422>"
+        "markdown": "<:e_:1427481062694715422>"
     },
     {
         "name": "f_rank",
-        "markdown": "<:f_rank:1427481066762932255>"
+        "markdown": "<:f_:1427481066762932255>"
     },
     {
         "name": "u_rank",
-        "markdown": "<:u_rank:1427481081585598626>"
+        "markdown": "<:u_:1427481081585598626>"
     }
 ]

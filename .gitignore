@@ -190,3 +190,7 @@ cython_debug/
 # Personal Stuff
 markdown_cursor/**
 markdown_cursor/
+
+# Test Assets
+tests/test_data/test_replay_files/**
+data/replays/**

@@ -33,19 +33,19 @@ def create_database(db_path: str = "evoladder.db") -> None:
             player_2_discord_uid    INTEGER NOT NULL,
             player_1_race           TEXT NOT NULL,
             player_2_race           TEXT NOT NULL,
-            player_1_mmr            INTEGER NOT NULL,
-            player_2_mmr            INTEGER NOT NULL,
-            player_1_report         INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw, -1 for aborted
-            player_2_report         INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw, -1 for aborted
-            match_result            INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw, -1 for aborted, -2 for conflict between player_1_report and player_2_report
-            mmr_change              INTEGER NOT NULL,     -- Amount of MMR awarded. Positive value means player 1 gained MMR, negative value means player 2 gained MMR.
+            player_1_mmr            FLOAT NOT NULL,
+            player_2_mmr            FLOAT NOT NULL,
+            player_1_report         INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw, -1 for aborted match, -3 if player_1 initiated the abort
+            player_2_report         INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw, -1 for aborted match, -3 if player_2 initiated the abort
+            match_result            INTEGER,            -- NULL for not yet determined, 1 for player_1, 2 for player_2, 0 for draw, -1 for aborted match, -2 for conflict between player_1_report and player_2_report
+            mmr_change              FLOAT NOT NULL,     -- Amount of MMR awarded. Positive value means player 1 gained MMR, negative value means player 2 gained MMR.
             map_played              TEXT NOT NULL,
             server_used             TEXT NOT NULL,
             played_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            player_1_replay         BLOB,               -- stores the replay player_1 uploaded
+            player_1_replay_path    TEXT,
             player_1_replay_time    TIMESTAMP,          -- stores the timestamp when player_1 uploaded                      
-            player_2_replay         BLOB,               -- stores the replay player_2 uploadded
-            player_2_replay_time    TIMESTAMP           -- stores the timestamp when player_2 uploaded
+            player_2_replay_path    TEXT,
+            player_2_replay_time    TIMESTAMP          -- stores the timestamp when player_2 uploaded
         )
     """)
 

@@ -29,6 +29,7 @@ def create_database(db_path: str = "evoladder.db") -> None:
     cursor.execute("DROP TABLE IF EXISTS mmrs_1v1")
     cursor.execute("DROP TABLE IF EXISTS player_action_logs")
     cursor.execute("DROP TABLE IF EXISTS players")
+    cursor.execute("DROP TABLE IF EXISTS replays")
     
     # Create players table
     cursor.execute("""
@@ -95,7 +96,11 @@ def create_database(db_path: str = "evoladder.db") -> None:
             mmr_change              INTEGER NOT NULL,
             map_played              TEXT NOT NULL,
             server_used             TEXT NOT NULL,
-            played_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            played_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            player_1_replay_path    TEXT,
+            player_1_replay_time    TIMESTAMP,          -- stores the timestamp when player_1 uploaded
+            player_2_replay_path    TEXT,
+            player_2_replay_time    TIMESTAMP           -- stores the timestamp when player_2 uploaded
         )
     """)
     
@@ -106,6 +111,25 @@ def create_database(db_path: str = "evoladder.db") -> None:
             discord_uid             INTEGER NOT NULL UNIQUE,
             last_chosen_races       TEXT,
             last_chosen_vetoes      TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE replays (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            replay_path             TEXT NOT NULL,
+            replay_hash             TEXT NOT NULL,
+            replay_date             TIMESTAMP NOT NULL,
+            player_1_name           TEXT NOT NULL,
+            player_2_name           TEXT NOT NULL,
+            player_1_race           TEXT NOT NULL,
+            player_2_race           TEXT NOT NULL,
+            result                  INTEGER NOT NULL,
+            player_1_handle         TEXT NOT NULL,
+            player_2_handle         TEXT NOT NULL,
+            observers               TEXT NOT NULL,
+            map_name                TEXT NOT NULL,
+            duration                INTEGER NOT NULL
         )
     """)
     
@@ -302,6 +326,62 @@ def populate_database(cursor, mock_data):
             "last_chosen_vetoes": pref["last_chosen_vetoes"]
         })
     
+    # Insert matches_1v1
+    print("🎮 Inserting mock matches_1v1 data...")
+    for match in mock_data["matches_1v1"]:
+        cursor.execute("""
+            INSERT INTO matches_1v1 (
+                player_1_discord_uid, player_2_discord_uid, player_1_mmr, player_2_mmr,
+                mmr_change, map_played, server_used, played_at,
+                player_1_replay_path, player_1_replay_time, player_2_replay_path, player_2_replay_time
+            ) VALUES (
+                :player_1_discord_uid, :player_2_discord_uid, :player_1_mmr, :player_2_mmr,
+                :mmr_change, :map_played, :server_used, :played_at,
+                :player_1_replay_path, :player_1_replay_time, :player_2_replay_path, :player_2_replay_time
+            )
+        """, {
+            "player_1_discord_uid": match["player_1_discord_uid"],
+            "player_2_discord_uid": match["player_2_discord_uid"],
+            "player_1_mmr": match["player_1_mmr"],
+            "player_2_mmr": match["player_2_mmr"],
+            "mmr_change": match["mmr_change"],
+            "map_played": match["map_played"],
+            "server_used": match["server_used"],
+            "played_at": match["played_at"],
+            "player_1_replay_path": match["player_1_replay_path"],
+            "player_1_replay_time": match["player_1_replay_time"],
+            "player_2_replay_path": match["player_2_replay_path"],
+            "player_2_replay_time": match["player_2_replay_time"]
+        })
+    
+    # Insert replays
+    print("🎮 Inserting mock replays data...")
+    for replay in mock_data["replays"]:
+        cursor.execute("""
+            INSERT INTO replays (
+                replay_path, replay_hash, replay_date, player_1_name, player_2_name,
+                player_1_race, player_2_race, result, player_1_handle, player_2_handle,
+                observers, map_name, duration
+            ) VALUES (
+                :replay_path, :replay_hash, :replay_date, :player_1_name, :player_2_name,
+                :player_1_race, :player_2_race, :result, :player_1_handle, :player_2_handle,
+                :observers, :map_name, :duration
+            )
+        """, {
+            "replay_path": replay["replay_path"],
+            "replay_hash": replay["replay_hash"],
+            "replay_date": replay["replay_date"],
+            "player_1_name": replay["player_1_name"],
+            "player_2_name": replay["player_2_name"],
+            "player_1_race": replay["player_1_race"],
+            "player_2_race": replay["player_2_race"],
+            "result": replay["result"],
+            "player_1_handle": replay["player_1_handle"],
+            "player_2_handle": replay["player_2_handle"],
+            "observers": replay["observers"],
+            "map_name": replay["map_name"],
+            "duration": replay["duration"]
+        })
     
     print("✅ Mock data population complete!")
 
