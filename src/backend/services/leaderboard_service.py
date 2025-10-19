@@ -16,10 +16,20 @@ Intended usage:
 """
 
 from typing import Any, Dict, List, Optional
+from functools import lru_cache
+import time
 
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.races_service import RacesService
 from src.backend.db.db_reader_writer import DatabaseReader
+
+
+# Global cache for leaderboard data with timestamp
+_leaderboard_cache = {
+    "data": None,
+    "timestamp": 0,
+    "ttl": 60  # Cache for 60 seconds
+}
 
 
 class LeaderboardService:
@@ -75,17 +85,26 @@ class LeaderboardService:
         """Set current page."""
         self.current_page = page
     
-    async def get_leaderboard_data(self, page_size: int = 20) -> Dict[str, Any]:
+    def _get_cached_leaderboard_data(self) -> List[Dict]:
         """
-        Get leaderboard data with current filters applied.
+        Get leaderboard data from cache or database.
         
-        Args:
-            page_size: Number of items per page (default: 20)
+        Cache is global and shared across all LeaderboardService instances.
+        This dramatically reduces database load for frequently-accessed leaderboard data.
         
         Returns:
-            Dictionary containing players, pagination info, and totals
+            List of player dictionaries with all data
         """
-        # Get data from database
+        current_time = time.time()
+        
+        # Check if cache is valid
+        if (_leaderboard_cache["data"] is not None and 
+            current_time - _leaderboard_cache["timestamp"] < _leaderboard_cache["ttl"]):
+            print(f"[Leaderboard Cache] HIT - Age: {current_time - _leaderboard_cache['timestamp']:.1f}s")
+            return _leaderboard_cache["data"]
+        
+        # Cache miss or expired - fetch from database
+        print("[Leaderboard Cache] MISS - Fetching from database...")
         all_players = []
         
         # If filtering by specific race(s), query each race
@@ -99,6 +118,28 @@ class LeaderboardService:
         else:
             # Get all players regardless of race
             all_players = self.db_reader.get_leaderboard_1v1(limit=10000)
+        
+        # Update cache
+        _leaderboard_cache["data"] = all_players
+        _leaderboard_cache["timestamp"] = current_time
+        print(f"[Leaderboard Cache] Updated - Cached {len(all_players)} players")
+        
+        return all_players
+    
+    async def get_leaderboard_data(self, page_size: int = 20) -> Dict[str, Any]:
+        """
+        Get leaderboard data with current filters applied.
+        
+        Uses in-memory caching to reduce database load. Cache expires after 60 seconds.
+        
+        Args:
+            page_size: Number of items per page (default: 20)
+        
+        Returns:
+            Dictionary containing players, pagination info, and totals
+        """
+        # Get data from database (with caching)
+        all_players = self._get_cached_leaderboard_data()
         
         # Convert database format to expected format
         formatted_players = []
@@ -218,3 +259,15 @@ class LeaderboardService:
             "total_pages": total_pages,
             "total_players": total_players
         }
+    
+    @staticmethod
+    def invalidate_cache() -> None:
+        """
+        Invalidate the leaderboard cache.
+        
+        Call this when MMR values change (e.g., after a match is completed)
+        to ensure the leaderboard reflects the latest data.
+        """
+        _leaderboard_cache["data"] = None
+        _leaderboard_cache["timestamp"] = 0
+        print("[Leaderboard Cache] Invalidated")

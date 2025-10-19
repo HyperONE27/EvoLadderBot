@@ -42,7 +42,7 @@
 - Replays:
   - ✅ Replays are now redirected to storage instead of being stored directly in tables
   - ✅ Tables now store replay paths
-  - ❓ Move replays to a dedicated table and add pointer logic between tables
+  - ✅ Move replays to a dedicated table and add pointer logic between tables
   - ✅ Parse replays for basic info: players, player races, observers, map, timestamp, length, etc.
   - ✅ Send a message to the user with this information when they upload a replay
   - ❌ Update the MatchFoundViewEmbed with this information
@@ -51,7 +51,12 @@
   - ✅ Define PostgreSQL schema
   - ⏰ Full migrate to PostgreSQL
   - ✅ Store replays in separate persistent storage and not in SQL tables
-  - ⏰ Implement spawning helper processes for replay parsing
+  - ✅ Implement spawning helper processes for replay parsing (multiprocessing with ProcessPoolExecutor)
+    - ✅ Created parse_replay_data_blocking() worker function
+    - ✅ Implemented global process pool with configurable workers
+    - ✅ Updated on_message() to use run_in_executor()
+    - ✅ Comprehensive test suite (6/6 tests passing)
+    - ✅ Full documentation and demonstration scripts
 
 
 ## PRE-BETA

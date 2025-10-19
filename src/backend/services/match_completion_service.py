@@ -9,6 +9,7 @@ import asyncio
 from typing import Dict, Set, Optional, Callable, List
 from asyncio import Lock
 from src.backend.db.db_reader_writer import DatabaseReader
+from src.backend.services.leaderboard_service import LeaderboardService
 
 
 class MatchCompletionService:
@@ -159,6 +160,9 @@ class MatchCompletionService:
                         print(f"✅ CHECK: Match {match_id} completed successfully")
                         self.processed_matches.add(match_id)  # Mark as processed
                         await self._handle_match_completion(match_id, match_data)
+                        
+                        # Invalidate leaderboard cache since MMR values changed
+                        LeaderboardService.invalidate_cache()
                         
                         # Notify any waiting tasks
                         if match_id in self.completion_waiters:

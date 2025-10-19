@@ -3,6 +3,7 @@ import asyncio
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+from concurrent.futures import ProcessPoolExecutor
 
 # Load environment variables first
 load_dotenv()
@@ -57,7 +58,7 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     """Handle replay file detection for active match views."""
-    await handle_replay_message(message)
+    await handle_replay_message(message, bot)
 
 def register_commands(bot: commands.Bot):
     register_activate_command(bot.tree)
@@ -70,4 +71,25 @@ def register_commands(bot: commands.Bot):
 
 if __name__ == "__main__":
     TOKEN = os.getenv("EVOLADDERBOT_TOKEN")
-    bot.run(TOKEN)
+    
+    # Determine the number of worker processes from environment variable
+    # Defaults to 2 for safety, but can be configured based on CPU cores
+    worker_processes = int(os.getenv("WORKER_PROCESSES", "2"))
+    
+    # Create the process pool for CPU-bound tasks (replay parsing)
+    process_pool = ProcessPoolExecutor(max_workers=worker_processes)
+    
+    # Attach the pool to the bot instance for global access
+    bot.process_pool = process_pool
+    
+    print(f"[INFO] Initialized Process Pool with {worker_processes} worker process(es)")
+    print(f"[DEBUG] Process pool created with max_workers={worker_processes}")
+    
+    try:
+        # Run the bot
+        bot.run(TOKEN)
+    finally:
+        # Ensure the process pool is shut down gracefully
+        print("[INFO] Shutting down process pool...")
+        bot.process_pool.shutdown(wait=True)
+        print("[INFO] Process pool shutdown complete")

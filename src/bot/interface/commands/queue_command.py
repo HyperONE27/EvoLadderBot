@@ -17,7 +17,7 @@ from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader, get_
 from src.bot.utils.discord_utils import send_ephemeral_response, get_current_unix_timestamp, format_discord_timestamp, get_flag_emote, get_race_emote
 from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
-from src.backend.services.replay_service import ReplayService, ReplayRaw
+from src.backend.services.replay_service import ReplayService, ReplayRaw, parse_replay_data_blocking
 from src.backend.services.mmr_service import MMRService
 import logging
 import time
@@ -1566,9 +1566,14 @@ class StarCraftRaceSelect(discord.ui.Select):
         await self.view.update_embed(interaction)
 
 
-async def on_message(message: discord.Message):
+async def on_message(message: discord.Message, bot=None):
     """
     Listen for SC2Replay file uploads in channels with active match views.
+    Uses multiprocessing to parse replays without blocking the event loop.
+    
+    Args:
+        message: The Discord message containing the replay attachment
+        bot: The bot instance (required to access the process pool)
     """
     # Ignore bot messages
     if message.author.bot:
@@ -1600,11 +1605,66 @@ async def on_message(message: discord.Message):
         # Download the replay file
         replay_bytes = await replay_attachment.read()
         
-        # Use the ReplayService to handle the upload
-        result = replay_service.store_upload(
+        print(f"[Main Process] Replay uploaded by {message.author.name} "
+              f"(size: {len(replay_bytes)} bytes). Offloading to worker process...")
+        
+        # --- MULTIPROCESSING INTEGRATION ---
+        # Get the current asyncio event loop
+        loop = asyncio.get_running_loop()
+        
+        # Offload the blocking parsing function to the process pool
+        # The 'await' here does NOT block the bot. It pauses this
+        # function and lets the event loop run other tasks.
+        try:
+            if bot and hasattr(bot, 'process_pool'):
+                replay_info = await loop.run_in_executor(
+                    bot.process_pool, parse_replay_data_blocking, replay_bytes
+                )
+            else:
+                # Fallback to synchronous parsing if process pool is not available
+                # This shouldn't happen in production, but provides a safety net
+                print("[WARN] Process pool not available, falling back to synchronous parsing")
+                replay_info = parse_replay_data_blocking(replay_bytes)
+                
+        except Exception as e:
+            # This will catch any exception from the worker process
+            print(f"[FATAL] Replay parsing in worker process failed: {type(e).__name__}: {e}")
+            error_embed = ReplayDetailsEmbed.get_error_embed(
+                "A critical error occurred while parsing the replay. "
+                "The file may be corrupted. Please notify an admin."
+            )
+            await message.channel.send(embed=error_embed)
+            return
+        
+        print(f"[Main Process] Received result from worker process")
+        
+        # Check if parsing failed
+        if replay_info.get("error"):
+            error_message = replay_info["error"]
+            print(f"[Main Process] Worker process reported parsing error: {error_message}")
+            
+            # Send the red error embed
+            error_embed = ReplayDetailsEmbed.get_error_embed(error_message)
+            await message.channel.send(embed=error_embed)
+            
+            # Update the match view to show "Replay Invalid"
+            match_view.match_result.replay_uploaded = "Replay Invalid"
+            match_view._update_dropdown_states()
+            if match_view.last_interaction:
+                with suppress(discord.NotFound, discord.InteractionResponded):
+                    await match_view.last_interaction.edit_original_response(
+                        embed=match_view.get_embed(), view=match_view
+                    )
+            
+            print(f"❌ Failed to parse replay for match {match_view.match_result.match_id}: {error_message}")
+            return
+        
+        # Use the new method that accepts pre-parsed data
+        result = replay_service.store_upload_from_parsed_dict(
             match_view.match_result.match_id,
             message.author.id,
-            replay_bytes
+            replay_bytes,
+            replay_info
         )
         
         if result.get("success"):
