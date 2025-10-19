@@ -4,14 +4,15 @@ Implements a reader/writer for the database.
 Backend services must use these classes to read and write to the database.
 All SQL queries MUST be contained inside this module.
 All SQL queries use named parameters for safety and maintainability.
+
+Supports both SQLite and PostgreSQL via database adapters.
 """
 
-import sqlite3
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
-from contextlib import contextmanager
 
-from src.bot.config import SQLITE_DB_PATH
+from src.backend.db.adapters import get_adapter
+from src.bot.config import DATABASE_TYPE
 
 
 def get_timestamp() -> str:
@@ -26,70 +27,57 @@ def get_timestamp() -> str:
 
 class Database:
     """
-    Base database connection manager.
-    """
-    def __init__(self, db_path: str = SQLITE_DB_PATH):
-        self.db_path = db_path
+    Base database connection manager using adapters.
     
-    @contextmanager
+    Supports both SQLite and PostgreSQL transparently.
+    """
+    def __init__(self):
+        """Initialize database with the configured adapter."""
+        self.adapter = get_adapter(DATABASE_TYPE)
+        self.db_type = DATABASE_TYPE.lower()
+    
     def get_connection(self):
-        """Context manager for database connections."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;") # Enable Write-Ahead Logging
-        try:
-            yield conn
-        finally:
-            conn.close()
+        """Get database connection via adapter."""
+        return self.adapter.get_connection()
 
 
 class DatabaseReader:
     """
     Reads from the database.
     """
-    def __init__(self, db_path: str = SQLITE_DB_PATH):
-        self.db = Database(db_path)
+    def __init__(self):
+        self.db = Database()
+        self.adapter = self.db.adapter
     
     # ========== Players Table ==========
     
     def get_player_by_discord_uid(self, discord_uid: int) -> Optional[Dict[str, Any]]:
         """Get player by Discord UID."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM players WHERE discord_uid = :discord_uid",
-                {"discord_uid": discord_uid}
-            )
-            row = cursor.fetchone()
-            return dict(row) if row else None
+        results = self.adapter.execute_query(
+            "SELECT * FROM players WHERE discord_uid = :discord_uid",
+            {"discord_uid": discord_uid}
+        )
+        return results[0] if results else None
     
     def get_player_by_activation_code(self, activation_code: str) -> Optional[Dict[str, Any]]:
         """Get player by activation code."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM players WHERE activation_code = :activation_code",
-                {"activation_code": activation_code}
-            )
-            row = cursor.fetchone()
-            return dict(row) if row else None
+        results = self.adapter.execute_query(
+            "SELECT * FROM players WHERE activation_code = :activation_code",
+            {"activation_code": activation_code}
+        )
+        return results[0] if results else None
     
     def player_exists(self, discord_uid: int) -> bool:
         """Check if a player exists."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT 1 FROM players WHERE discord_uid = :discord_uid LIMIT 1",
-                {"discord_uid": discord_uid}
-            )
-            return cursor.fetchone() is not None
+        results = self.adapter.execute_query(
+            "SELECT 1 FROM players WHERE discord_uid = :discord_uid LIMIT 1",
+            {"discord_uid": discord_uid}
+        )
+        return len(results) > 0
     
     def get_all_players(self) -> List[Dict[str, Any]]:
         """Get all players."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM players")
-            return [dict(row) for row in cursor.fetchall()]
+        return self.adapter.execute_query("SELECT * FROM players")
     
     # ========== Player Action Logs Table ==========
     
@@ -268,8 +256,9 @@ class DatabaseWriter:
     """
     Writes to the database.
     """
-    def __init__(self, db_path: str = SQLITE_DB_PATH):
-        self.db = Database(db_path)
+    def __init__(self):
+        self.db = Database()
+        self.adapter = self.db.adapter
     
     # ========== Players Table ==========
     
