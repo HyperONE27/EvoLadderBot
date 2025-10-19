@@ -18,6 +18,12 @@ class ConfirmButton(discord.ui.Button):
         self.callback_func = callback
 
     async def callback(self, interaction: discord.Interaction):
+        # Disable all buttons immediately to prevent double-clicks
+        for item in self.view.children:
+            if isinstance(item, discord.ui.Button):
+                item.disabled = True
+        
+        # Call the actual callback function (which will handle deferral and response)
         await self.callback_func(interaction)
 
 

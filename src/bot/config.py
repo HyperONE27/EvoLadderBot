@@ -87,6 +87,12 @@ else:
 # SQLite Configuration (only used when DATABASE_TYPE=sqlite)
 SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "evoladder.db")
 
+# Supabase Configuration (for storage and additional features)
+SUPABASE_URL = _get_required_env("SUPABASE_URL")
+SUPABASE_KEY = _get_required_env("SUPABASE_KEY")  # Anon key for client-side operations
+SUPABASE_SERVICE_ROLE_KEY = _get_required_env("SUPABASE_SERVICE_ROLE_KEY")  # Service role for admin operations
+SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "replays")  # Default bucket name
+
 # =============================================================================
 # APPLICATION CONSTANTS
 # =============================================================================

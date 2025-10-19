@@ -3,3 +3,4 @@ python-dotenv>=1.0.0
 sc2reader>=1.8.0
 xxhash>=3.4.1
 psycopg2-binary>=2.9.11
+supabase>=2.3.0
