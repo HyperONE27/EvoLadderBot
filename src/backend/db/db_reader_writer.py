@@ -87,21 +87,18 @@ class DatabaseReader:
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """Get player action logs."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            if discord_uid:
-                cursor.execute(
-                    "SELECT * FROM player_action_logs WHERE discord_uid = :discord_uid "
-                    "ORDER BY changed_at DESC LIMIT :limit",
-                    {"discord_uid": discord_uid, "limit": limit}
-                )
-            else:
-                cursor.execute(
-                    "SELECT * FROM player_action_logs "
-                    "ORDER BY changed_at DESC LIMIT :limit",
-                    {"limit": limit}
-                )
-            return [dict(row) for row in cursor.fetchall()]
+        if discord_uid:
+            return self.adapter.execute_query(
+                "SELECT * FROM player_action_logs WHERE discord_uid = :discord_uid "
+                "ORDER BY changed_at DESC LIMIT :limit",
+                {"discord_uid": discord_uid, "limit": limit}
+            )
+        else:
+            return self.adapter.execute_query(
+                "SELECT * FROM player_action_logs "
+                "ORDER BY changed_at DESC LIMIT :limit",
+                {"limit": limit}
+            )
     
     # ========== MMRs 1v1 Table ==========
     
@@ -111,30 +108,24 @@ class DatabaseReader:
         race: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """Get player's 1v1 MMR for a specific race."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            if race:
-                cursor.execute(
-                    "SELECT * FROM mmrs_1v1 WHERE discord_uid = :discord_uid AND race = :race",
-                    {"discord_uid": discord_uid, "race": race}
-                )
-            else:
-                cursor.execute(
-                    "SELECT * FROM mmrs_1v1 WHERE discord_uid = :discord_uid",
-                    {"discord_uid": discord_uid}
-                )
-            row = cursor.fetchone()
-            return dict(row) if row else None
-    
-    def get_all_player_mmrs_1v1(self, discord_uid: int) -> List[Dict[str, Any]]:
-        """Get all 1v1 MMRs for a player."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
+        if race:
+            results = self.adapter.execute_query(
+                "SELECT * FROM mmrs_1v1 WHERE discord_uid = :discord_uid AND race = :race",
+                {"discord_uid": discord_uid, "race": race}
+            )
+        else:
+            results = self.adapter.execute_query(
                 "SELECT * FROM mmrs_1v1 WHERE discord_uid = :discord_uid",
                 {"discord_uid": discord_uid}
             )
-            return [dict(row) for row in cursor.fetchall()]
+        return results[0] if results else None
+    
+    def get_all_player_mmrs_1v1(self, discord_uid: int) -> List[Dict[str, Any]]:
+        """Get all 1v1 MMRs for a player."""
+        return self.adapter.execute_query(
+            "SELECT * FROM mmrs_1v1 WHERE discord_uid = :discord_uid",
+            {"discord_uid": discord_uid}
+        )
     
     def get_leaderboard_1v1(
         self,
@@ -229,27 +220,21 @@ class DatabaseReader:
     
     def get_match_1v1(self, match_id: int) -> Optional[Dict[str, Any]]:
         """Get a specific 1v1 match by ID."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM matches_1v1 WHERE id = :match_id",
-                {"match_id": match_id}
-            )
-            row = cursor.fetchone()
-            return dict(row) if row else None
+        results = self.adapter.execute_query(
+            "SELECT * FROM matches_1v1 WHERE id = :match_id",
+            {"match_id": match_id}
+        )
+        return results[0] if results else None
     
     # ========== Preferences 1v1 Table ==========
     
     def get_preferences_1v1(self, discord_uid: int) -> Optional[Dict[str, Any]]:
         """Get 1v1 preferences for a player."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM preferences_1v1 WHERE discord_uid = :discord_uid",
-                {"discord_uid": discord_uid}
-            )
-            row = cursor.fetchone()
-            return dict(row) if row else None
+        results = self.adapter.execute_query(
+            "SELECT * FROM preferences_1v1 WHERE discord_uid = :discord_uid",
+            {"discord_uid": discord_uid}
+        )
+        return results[0] if results else None
 
 
 class DatabaseWriter:
