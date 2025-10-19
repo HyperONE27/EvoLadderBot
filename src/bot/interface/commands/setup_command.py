@@ -1,7 +1,6 @@
 import discord
 from discord import app_commands
 import re
-import os
 from typing import Optional
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.regions_service import RegionsService
@@ -12,15 +11,13 @@ from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote
 from src.bot.interface.components.confirm_embed import ConfirmEmbedView
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.config import GLOBAL_TIMEOUT
 
 countries_service = CountriesService()
 regions_service = RegionsService()
 user_info_service = UserInfoService()
 validation_service = ValidationService()
 guard_service = CommandGuardService()
-
-# Get global timeout from environment
-GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
 
 
 # API Call / Data Handling

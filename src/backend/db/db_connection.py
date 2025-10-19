@@ -3,10 +3,12 @@ Database connection configuration.
 
 Supports both SQLite (for development) and PostgreSQL (for production).
 Switch between them using the DATABASE_TYPE environment variable.
+
+All environment variables are loaded from src.bot.config to ensure proper initialization order.
 """
 
-import os
 from typing import Optional
+from src.bot.config import DATABASE_TYPE, DATABASE_URL, SQLITE_DB_PATH
 
 
 def get_database_connection_string() -> str:
@@ -15,49 +17,34 @@ def get_database_connection_string() -> str:
     
     Supports:
     - SQLite: For local development (DATABASE_TYPE=sqlite)
-    - PostgreSQL: For local development and production (DATABASE_TYPE=postgresql)
-      - Local: Uses individual env vars (POSTGRES_HOST, POSTGRES_PORT, etc.)
-      - Production: Uses DATABASE_URL from Railway/Supabase
+    - PostgreSQL: For production (DATABASE_TYPE=postgresql)
     
     Returns:
         Connection string suitable for SQLAlchemy or psycopg2
         
     Examples:
         SQLite: "sqlite:///evoladder.db"
-        PostgreSQL (local): "postgresql://user:pass@localhost:5432/evoladder"
-        PostgreSQL (prod): "postgresql://user:pass@host.supabase.com:6543/postgres"
+        PostgreSQL: "postgresql://user:pass@host.supabase.com:5432/postgres"
     """
-    db_type = os.getenv("DATABASE_TYPE", "sqlite").lower()
+    db_type = DATABASE_TYPE.lower()
     
     if db_type == "sqlite":
         # SQLite connection
-        db_path = os.getenv("SQLITE_DB_PATH", "evoladder.db")
-        conn_str = f"sqlite:///{db_path}"
-        print(f"[Database] Using SQLite: {db_path}")
+        conn_str = f"sqlite:///{SQLITE_DB_PATH}"
+        print(f"[Database] Using SQLite: {SQLITE_DB_PATH}")
         return conn_str
     
     elif db_type == "postgresql":
-        # Check if using production DATABASE_URL (Supabase/Railway)
-        database_url = os.getenv("DATABASE_URL")
-        if database_url:
-            # Production: Use the full DATABASE_URL
-            # Fix for Railway/Supabase: Replace postgres:// with postgresql://
-            # (Some tools use the old postgres:// scheme)
-            if database_url.startswith("postgres://"):
-                database_url = database_url.replace("postgres://", "postgresql://", 1)
-            print(f"[Database] Using PostgreSQL (Production): {_mask_password(database_url)}")
-            return database_url
+        # PostgreSQL: Use DATABASE_URL
+        database_url = DATABASE_URL
         
-        # Local development: Build connection string from individual env vars
-        host = os.getenv("POSTGRES_HOST", "localhost")
-        port = os.getenv("POSTGRES_PORT", "5432")
-        database = os.getenv("POSTGRES_DB", "evoladder")
-        user = os.getenv("POSTGRES_USER", "evoladder_user")
-        password = os.getenv("POSTGRES_PASSWORD", "")
+        # Fix for Railway/Supabase: Replace postgres:// with postgresql://
+        # (Some tools use the old postgres:// scheme)
+        if database_url.startswith("postgres://"):
+            database_url = database_url.replace("postgres://", "postgresql://", 1)
         
-        conn_str = f"postgresql://{user}:{password}@{host}:{port}/{database}"
-        print(f"[Database] Using PostgreSQL (Local): {_mask_password(conn_str)}")
-        return conn_str
+        print(f"[Database] Using PostgreSQL: {_mask_password(database_url)}")
+        return database_url
     
     else:
         raise ValueError(
@@ -73,7 +60,7 @@ def get_database_type() -> str:
     Returns:
         'sqlite' or 'postgresql'
     """
-    return os.getenv("DATABASE_TYPE", "sqlite").lower()
+    return DATABASE_TYPE.lower()
 
 
 def is_postgresql() -> bool:
@@ -100,25 +87,13 @@ def get_database_config() -> dict:
     if db_type == "sqlite":
         return {
             "type": "sqlite",
-            "path": os.getenv("SQLITE_DB_PATH", "evoladder.db")
+            "path": SQLITE_DB_PATH
         }
     else:  # postgresql
-        if os.getenv("DATABASE_URL"):
-            return {
-                "type": "postgresql",
-                "source": "production (DATABASE_URL)",
-                "url": _mask_password(os.getenv("DATABASE_URL"))
-            }
-        else:
-            return {
-                "type": "postgresql",
-                "source": "local (env vars)",
-                "host": os.getenv("POSTGRES_HOST", "localhost"),
-                "port": os.getenv("POSTGRES_PORT", "5432"),
-                "database": os.getenv("POSTGRES_DB", "evoladder"),
-                "user": os.getenv("POSTGRES_USER", "evoladder_user"),
-                "password": "***masked***"
-            }
+        return {
+            "type": "postgresql",
+            "url": _mask_password(DATABASE_URL)
+        }
 
 
 def _mask_password(connection_string: str) -> str:
@@ -144,9 +119,6 @@ def _mask_password(connection_string: str) -> str:
 
 # Example usage and testing
 if __name__ == "__main__":
-    from dotenv import load_dotenv
-    load_dotenv()
-    
     print("\n" + "="*70)
     print("DATABASE CONNECTION CONFIGURATION")
     print("="*70 + "\n")

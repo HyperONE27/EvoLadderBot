@@ -1,15 +1,12 @@
 import discord
 from discord import app_commands
-import os
 from src.backend.services.leaderboard_service import LeaderboardService
 from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.config import GLOBAL_TIMEOUT
 
 guard_service = CommandGuardService()
-
-# Get global timeout from environment
-GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
 
 
 # Register Command

@@ -2,7 +2,6 @@ import asyncio
 import json
 import discord
 from discord import app_commands
-import os
 from src.backend.services.races_service import RacesService
 from src.backend.services.maps_service import MapsService
 from src.backend.services.regions_service import RegionsService
@@ -24,6 +23,7 @@ import time
 from src.backend.services.match_completion_service import match_completion_service
 from contextlib import suppress
 from src.bot.interface.components.replay_details_embed import ReplayDetailsEmbed
+from src.bot.config import GLOBAL_TIMEOUT
 
 
 class QueueSearchingViewManager:
@@ -114,9 +114,6 @@ guard_service = CommandGuardService()
 regions_service = RegionsService()
 mmr_service = MMRService()
 user_info_service = UserInfoService()
-
-# Get global timeout from environment
-GLOBAL_TIMEOUT = int(os.getenv('GLOBAL_TIMEOUT'))
 
 logger = logging.getLogger(__name__)
 

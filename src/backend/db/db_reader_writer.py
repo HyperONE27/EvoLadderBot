@@ -7,13 +7,11 @@ All SQL queries use named parameters for safety and maintainability.
 """
 
 import sqlite3
-import os
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from contextlib import contextmanager
 
-
-DATABASE_PATH = os.getenv("DATABASE_PATH", "evoladder.db")
+from src.bot.config import SQLITE_DB_PATH
 
 
 def get_timestamp() -> str:
@@ -30,7 +28,7 @@ class Database:
     """
     Base database connection manager.
     """
-    def __init__(self, db_path: str = DATABASE_PATH):
+    def __init__(self, db_path: str = SQLITE_DB_PATH):
         self.db_path = db_path
     
     @contextmanager
@@ -49,7 +47,7 @@ class DatabaseReader:
     """
     Reads from the database.
     """
-    def __init__(self, db_path: str = DATABASE_PATH):
+    def __init__(self, db_path: str = SQLITE_DB_PATH):
         self.db = Database(db_path)
     
     # ========== Players Table ==========
@@ -270,7 +268,7 @@ class DatabaseWriter:
     """
     Writes to the database.
     """
-    def __init__(self, db_path: str = DATABASE_PATH):
+    def __init__(self, db_path: str = SQLITE_DB_PATH):
         self.db = Database(db_path)
     
     # ========== Players Table ==========

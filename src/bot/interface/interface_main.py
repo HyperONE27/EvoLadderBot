@@ -1,13 +1,9 @@
-import os
 import asyncio
 import discord
 from discord.ext import commands
-from dotenv import load_dotenv
 from concurrent.futures import ProcessPoolExecutor
 
-# Load environment variables first
-load_dotenv()
-
+from src.bot.config import EVOLADDERBOT_TOKEN, WORKER_PROCESSES
 from src.bot.interface.commands.activate_command import register_activate_command
 from src.bot.interface.commands.leaderboard_command import register_leaderboard_command
 from src.bot.interface.commands.profile_command import register_profile_command
@@ -70,24 +66,18 @@ def register_commands(bot: commands.Bot):
     register_termsofservice_command(bot.tree)
 
 if __name__ == "__main__":
-    TOKEN = os.getenv("EVOLADDERBOT_TOKEN")
-    
-    # Determine the number of worker processes from environment variable
-    # Defaults to 2 for safety, but can be configured based on CPU cores
-    worker_processes = int(os.getenv("WORKER_PROCESSES", "2"))
-    
     # Create the process pool for CPU-bound tasks (replay parsing)
-    process_pool = ProcessPoolExecutor(max_workers=worker_processes)
+    process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
     
     # Attach the pool to the bot instance for global access
     bot.process_pool = process_pool
     
-    print(f"[INFO] Initialized Process Pool with {worker_processes} worker process(es)")
-    print(f"[DEBUG] Process pool created with max_workers={worker_processes}")
+    print(f"[INFO] Initialized Process Pool with {WORKER_PROCESSES} worker process(es)")
+    print(f"[DEBUG] Process pool created with max_workers={WORKER_PROCESSES}")
     
     try:
         # Run the bot
-        bot.run(TOKEN)
+        bot.run(EVOLADDERBOT_TOKEN)
     finally:
         # Ensure the process pool is shut down gracefully
         print("[INFO] Shutting down process pool...")
