@@ -48,24 +48,26 @@
   - ❌ Update the MatchFoundViewEmbed with this information
     - ✅ Send a new embed message with this information
 - Scaling
-  - ⏰ Migrate to PostgreSQL
+  - ✅ Define PostgreSQL schema
+  - ⏰ Full migrate to PostgreSQL
   - ✅ Store replays in separate persistent storage and not in SQL tables
   - ⏰ Implement spawning helper processes for replay parsing
-  - ⏰ Implement Supabase database functions to offload leaderboard and personal stats chunking
 
 
 ## PRE-BETA
 
 - Account config:
   - ⏰ Add activation code verification
-- Localization:
-  - ⏰ Add support for koKR and other languages
-  - ⏰ Replace 1 million hardcoded formatted strings...sobbing
 - Admin stuff:
   - ⏰ Add automatic logging/pinging of admins when a match disagreement arises
     - ⏰ Send replay data to admins
   - ⏰ Add an interface to allow admins to view conflicts in matches and resolve with 1 click
 - Command timeouts:
   - ⏰ Check that everyone lasts as long as it needs to
+- Localization:
+  - ⏰ Add support for koKR and other languages
+  - ⏰ Replace 1 million hardcoded formatted strings...sobbing
+- Scaling:
+  - ⏰ Implement Supabase database functions to offload leaderboard and personal stats chunking
 
 ## PRE-RELEASE
