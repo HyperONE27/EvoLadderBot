@@ -19,33 +19,32 @@
 
 ## This Week's Checklist
 
-### Monday-Tuesday: PostgreSQL Migration (6-8 hours)
+### Monday-Tuesday: PostgreSQL Migration (2-3 hours)
 ```bash
-# 1. Sign up for Supabase Pro
-# 2. Create new project, get connection string
-# 3. Update db_reader_writer.py
-#    - Change sqlite3 → psycopg2
-#    - Update connection string from .env
-# 4. Export data: sqlite3 evoladder.db .dump > dump.sql
-# 5. Clean for PostgreSQL: sed 's/AUTOINCREMENT/SERIAL/g'
-# 6. Import to PostgreSQL
-# 7. Test everything thoroughly
+# ✅ Schema already complete in docs/schema_postgres.md
+# ✅ db_connection.py infrastructure already exists
+# ✅ Named parameters throughout (easy to adapt)
+
+# 1. Sign up for Supabase Pro (15 mins)
+# 2. Update db_reader_writer.py (1 hour)
+#    - Add psycopg2 support to Database class
+#    - Add query parameter converter (:param → %(param)s)
+# 3. Deploy schema to Supabase SQL Editor (30 mins)
+# 4. Export & import data (30 mins)
+# 5. Test everything (30-60 mins)
 ```
 
-### Wednesday: Quick Wins (2-3 hours)
+### Wednesday: Already Done! ✅
 ```python
-# 1. Add leaderboard caching (30 mins)
-from cachetools import cached, TTLCache
+# ✅ Leaderboard caching - IMPLEMENTED
+#    See src/backend/services/leaderboard_service.py
+#    60-second TTL cache with invalidation working
 
-@cached(cache=TTLCache(maxsize=1, ttl=60))
-def get_leaderboard():
-    return db_reader.get_top_100_players()
+# ✅ CommandGuardService - CLEAN
+#    No Discord dependencies in backend
 
-# 2. Fix CommandGuardService (1 hour)
-#    Move discord.Embed creation to bot layer
-
-# 3. Profile command (1-2 hours)
-#    Copy leaderboard_command.py pattern
+# ✅ Profile command - EXISTS
+#    See src/bot/interface/commands/profile_command.py
 ```
 
 ### Thursday-Friday: Ping/Region Matching (4-6 hours)
@@ -63,7 +62,7 @@ def get_match_weights(mmr, wait_cycles):
 # 3. Test (1 hour)
 ```
 
-**Total**: ~12-15 hours → Ready for closed alpha! 🚀
+**Total**: ~8-12 hours (REVISED DOWN from 12-15!) → Ready for closed alpha! 🚀
 
 ---
 
@@ -85,13 +84,13 @@ def get_match_weights(mmr, wait_cycles):
 ## Files That Need Attention
 
 ### High Priority
-| File | What to do | Effort | Impact |
-|------|------------|--------|--------|
-| `src/backend/db/db_reader_writer.py` | PostgreSQL migration | HIGH | CRITICAL |
-| `src/backend/services/matchmaking_service.py` | Complete ping logic | MEDIUM | HIGH |
-| `src/backend/services/leaderboard_service.py` | Add caching | VERY LOW | HIGH |
-| `src/bot/interface/commands/profile_command.py` | Implement command | LOW | MEDIUM |
-| `src/backend/services/command_guard_service.py` | Remove Discord dependency | LOW | MEDIUM |
+| File | What to do | Effort | Impact | Status |
+|------|------------|--------|--------|--------|
+| `src/backend/db/db_reader_writer.py` | PostgreSQL migration | MEDIUM (was HIGH) | CRITICAL | ⏰ TODO |
+| `src/backend/services/matchmaking_service.py` | Complete ping logic | MEDIUM | HIGH | ⏰ TODO |
+| `src/backend/services/leaderboard_service.py` | Add caching | ~~VERY LOW~~ | ~~HIGH~~ | ✅ DONE |
+| `src/bot/interface/commands/profile_command.py` | Implement command | ~~LOW~~ | ~~MEDIUM~~ | ✅ DONE |
+| `src/backend/services/command_guard_service.py` | Remove Discord dependency | ~~LOW~~ | ~~MEDIUM~~ | ✅ DONE |
 
 ### Low Priority (Can Wait)
 | File | What to do | When |
