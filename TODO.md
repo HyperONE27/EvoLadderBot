@@ -1,3 +1,5 @@
+## PRE-ALPHA
+
 - Command guard:
   - ✅ Fully decoupled command guarding errors from frontend
 - Matchmaking:
@@ -33,7 +35,6 @@
   - ✅ Edit and add rank emotes
 - Account config:
   - ⏰ Update Terms of Service for closed alpha/open beta stage
-  - ⏰ Add activation code verification
   - ⏰ Fix country setup descriptions for XX (nonrepresenting) / ZZ (other)
   - ✅ /setup persists pre-existing values as defaults (so you don't have to fill them all out again to change one thing)
   - ✅ nulling of alt names is properly recorded in action logs table
@@ -51,6 +52,12 @@
   - ✅ Store replays in separate persistent storage and not in SQL tables
   - ⏰ Implement spawning helper processes for replay parsing
   - ⏰ Implement Supabase database functions to offload leaderboard and personal stats chunking
+
+
+## PRE-BETA
+
+- Account config:
+  - ⏰ Add activation code verification
 - Localization:
   - ⏰ Add support for koKR and other languages
   - ⏰ Replace 1 million hardcoded formatted strings...sobbing
@@ -60,3 +67,5 @@
   - ⏰ Add an interface to allow admins to view conflicts in matches and resolve with 1 click
 - Command timeouts:
   - ⏰ Check that everyone lasts as long as it needs to
+
+## PRE-RELEASE

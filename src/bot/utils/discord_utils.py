@@ -213,6 +213,47 @@ def get_rank_emote(rank: str) -> str:
         return f":{rank}:"
 
 
+def get_game_emote(game: str) -> str:
+    """
+    Get the Discord emote for a game from emotes.json.
+    
+    Args:
+        game: Either 'brood_war' or 'starcraft_2'
+    
+    Returns:
+        The Discord custom emote markdown or a fallback emoji.
+    """
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    emotes_path = os.path.join(project_root, "data", "misc", "emotes.json")
+    
+    # Map input to emote name
+    emote_name_map = {
+        'brood_war': 'brood_war_logo',
+        'starcraft_2': 'starcraft_2_logo',
+        'bw': 'brood_war_logo',
+        'sc2': 'starcraft_2_logo'
+    }
+    
+    emote_name = emote_name_map.get(game.lower())
+    if not emote_name:
+        return "🎮"
+    
+    try:
+        with open(emotes_path, 'r', encoding='utf-8') as f:
+            emotes_data = json.load(f)
+        
+        # Find the emote for the game
+        for emote in emotes_data:
+            if emote.get("name") == emote_name:
+                return emote.get("markdown", "🎮")
+        
+        # Fallback to generic game emoji if not found
+        return "🎮"
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        # Fallback to generic game emoji if file not found or invalid
+        return "🎮"
+
+
 def get_current_unix_timestamp() -> int:
     """Get the current Unix epoch timestamp as an integer."""
     return int(time.time())

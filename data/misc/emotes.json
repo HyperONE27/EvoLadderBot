@@ -1,5 +1,13 @@
 [
     {
+        "name": "brood_war_logo",
+        "markdown": "<:s1:1429361391256735784>"
+    },
+    {
+        "name": "starcraft_2_logo",
+        "markdown": "<:s2:1429360993452163192>"
+    },
+    {
         "name": "bw_terran",
         "markdown": "<:t1:1425037568638058629>"
     },
@@ -25,11 +33,11 @@
     },
     {
         "name": "flag_xx",
-        "markdown": "<:x_:1425037165414322186>"
+        "markdown": "<:xx:1425037165414322186>"
     },
     {
         "name": "flag_zz",
-        "markdown": "<:z_:1425037183403823114>"
+        "markdown": "<:zz:1425037183403823114>"
     },
     {
         "name": "s_rank",

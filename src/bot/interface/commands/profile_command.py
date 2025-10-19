@@ -1,0 +1,234 @@
+import discord
+from discord import app_commands
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
+from src.backend.services.user_info_service import UserInfoService
+from src.backend.services.countries_service import CountriesService
+from src.backend.services.regions_service import RegionsService
+from src.backend.services.races_service import RacesService
+from src.backend.db.db_reader_writer import DatabaseReader
+from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote, get_flag_emote, get_game_emote
+from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
+
+
+guard_service = CommandGuardService()
+user_info_service = UserInfoService()
+countries_service = CountriesService()
+regions_service = RegionsService()
+races_service = RacesService()
+db_reader = DatabaseReader()
+
+
+# API Call / Data Handling
+async def profile_command(interaction: discord.Interaction):
+    """Handle the /profile slash command"""
+    try:
+        player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+    except CommandGuardError as exc:
+        error_embed = create_command_guard_error_embed(exc)
+        await send_ephemeral_response(interaction, embed=error_embed)
+        return
+    
+    # Get player data
+    player_data = user_info_service.get_player(interaction.user.id)
+    if not player_data:
+        error_embed = discord.Embed(
+            title="❌ Profile Not Found",
+            description=f"No profile found for {interaction.user.mention}",
+            color=discord.Color.red()
+        )
+        await send_ephemeral_response(interaction, embed=error_embed)
+        return
+    
+    # Get MMR data for all races
+    mmr_data = db_reader.get_all_player_mmrs_1v1(interaction.user.id)
+    
+    # Create profile embed
+    embed = create_profile_embed(interaction.user, player_data, mmr_data)
+    
+    await send_ephemeral_response(interaction, embed=embed)
+
+
+def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) -> discord.Embed:
+    """Create an embed displaying player profile information."""
+    
+    # Determine embed color based on setup status
+    if player_data.get('completed_setup'):
+        color = discord.Color.green()
+        status_icon = "✅"
+    else:
+        color = discord.Color.orange()
+        status_icon = "⚠️"
+    
+    embed = discord.Embed(
+        title=f"{status_icon} Player Profile: {player_data.get('player_name', user.name)}",
+        color=color
+    )
+    
+    # Set thumbnail to user avatar
+    if user.display_avatar:
+        embed.set_thumbnail(url=user.display_avatar.url)
+    
+    # Basic Information
+    basic_info_parts = [
+        f"- **User ID:** {user.mention}",
+        f"- **Player Name:** {player_data.get('player_name', 'Not set')}",
+        f"- **BattleTag:** {player_data.get('battletag', 'Not set')}"
+    ]
+    
+    # Alternative IDs if they exist
+    alt_ids = []
+    if player_data.get('alt_player_name_1'):
+        alt_ids.append(player_data['alt_player_name_1'])
+    if player_data.get('alt_player_name_2'):
+        alt_ids.append(player_data['alt_player_name_2'])
+    
+    if alt_ids:
+        basic_info_parts.append(f"- **Alt IDs:** {', '.join(alt_ids)}")
+    
+    basic_info = "\n".join(basic_info_parts)
+    embed.add_field(name="📋 Basic Information", value=basic_info, inline=False)
+    
+    # Add spacing between sections
+    embed.add_field(name="\n\n", value="\n\n", inline=False)
+    
+    # Location Information
+    location_parts = []
+    if player_data.get('country'):
+        country = countries_service.get_country_by_code(player_data['country'])
+        if country:
+            country_name = country.get('name', player_data['country'])
+            country_emote = get_flag_emote(player_data['country'])
+            location_parts.append(f"- **Citizenship / Nationality:** {country_emote} {country_name}")
+    
+    if player_data.get('region'):
+        region_name = regions_service.get_region_name(player_data['region'])
+        if region_name:
+            location_parts.append(f"- **Region of Residence:** {region_name}")
+    
+    if location_parts:
+        location_info = "\n".join(location_parts)
+        embed.add_field(name="🌍 Location", value=location_info, inline=False)
+        # Add spacing between sections
+        embed.add_field(name="\n\n", value="\n\n", inline=False)
+    
+    # MMR Information
+    if mmr_data:
+        # Get the canonical race order
+        race_order = races_service.get_race_order()
+        
+        # Sort MMR data by race order
+        def race_sort_key(mmr_entry):
+            race_code = mmr_entry['race']
+            try:
+                return race_order.index(race_code)
+            except ValueError:
+                return len(race_order)  # Put unknown races at the end
+        
+        sorted_mmr_data = sorted(mmr_data, key=race_sort_key)
+        
+        # Separate BW and SC2 races (already in correct order)
+        bw_mmrs = [m for m in sorted_mmr_data if m['race'].startswith('bw_')]
+        sc2_mmrs = [m for m in sorted_mmr_data if m['race'].startswith('sc2_')]
+        
+        # BW MMRs
+        if bw_mmrs:
+            bw_text = ""
+            for mmr_entry in bw_mmrs:
+                race_code = mmr_entry['race']
+                race_name = races_service.get_race_name(race_code)
+                race_emote = get_race_emote(race_code)
+                
+                mmr_value = int(mmr_entry['mmr'])
+                games_played = mmr_entry.get('games_played', 0)
+                games_won = mmr_entry.get('games_won', 0)
+                games_lost = mmr_entry.get('games_lost', 0)
+                games_drawn = mmr_entry.get('games_drawn', 0)
+                
+                bw_text += f"- {race_emote} **{race_name}:** {mmr_value} MMR"
+                
+                # Win/Loss record
+                if games_played > 0:
+                    win_rate = (games_won / games_played * 100) if games_played > 0 else 0
+                    bw_text += f" • {games_won}W-{games_lost}L-{games_drawn}D ({win_rate:.1f}%)"
+                
+                bw_text += "\n"
+            
+            bw_emote = get_game_emote('brood_war')
+            embed.add_field(name=f"{bw_emote} Brood War MMR", value=bw_text.strip(), inline=False)
+        
+        # SC2 MMRs
+        if sc2_mmrs:
+            # Add spacing if BW MMRs exist
+            if bw_mmrs:
+                embed.add_field(name="\n\n", value="\n\n", inline=False)
+            sc2_text = ""
+            for mmr_entry in sc2_mmrs:
+                race_code = mmr_entry['race']
+                race_name = races_service.get_race_name(race_code)
+                race_emote = get_race_emote(race_code)
+                
+                mmr_value = int(mmr_entry['mmr'])
+                games_played = mmr_entry.get('games_played', 0)
+                games_won = mmr_entry.get('games_won', 0)
+                games_lost = mmr_entry.get('games_lost', 0)
+                games_drawn = mmr_entry.get('games_drawn', 0)
+                
+                sc2_text += f"- {race_emote} **{race_name}:** {mmr_value} MMR"
+                
+                # Win/Loss record
+                if games_played > 0:
+                    win_rate = (games_won / games_played * 100) if games_played > 0 else 0
+                    sc2_text += f" • {games_won}W-{games_lost}L-{games_drawn}D ({win_rate:.1f}%)"
+                
+                sc2_text += "\n"
+            
+            sc2_emote = get_game_emote('starcraft_2')
+            embed.add_field(name=f"{sc2_emote} StarCraft II MMR", value=sc2_text.strip(), inline=False)
+    else:
+        embed.add_field(
+            name="🎮 MMR Information",
+            value="No ranked games played yet. Join the queue to start your MMR journey!",
+            inline=False
+        )
+    
+    # Add spacing between sections
+    embed.add_field(name="\n\n", value="\n\n", inline=False)
+    
+    # Setup Status
+    status_parts = []
+    
+    if player_data.get('accepted_tos'):
+        status_parts.append("- ✅ Terms of Service accepted")
+    else:
+        status_parts.append("- ❌ Terms of Service not accepted")
+    
+    if player_data.get('completed_setup'):
+        status_parts.append("- ✅ Setup completed")
+    else:
+        status_parts.append("- ⚠️ Setup incomplete")
+    
+    # Remaining aborts
+    remaining_aborts = player_data.get('remaining_aborts', 3)
+    status_parts.append(f"- 🚫 {remaining_aborts}/3 match aborts remaining")
+    
+    status_text = "\n".join(status_parts)
+    embed.add_field(name="📊 Account Status", value=status_text, inline=False)
+    
+    # Footer
+    embed.set_footer(text=f"Discord ID: {user.name} • {user.id}")
+    
+    return embed
+
+
+# Register Command
+def register_profile_command(tree: app_commands.CommandTree):
+    """Register the profile command"""
+    @tree.command(
+        name="profile",
+        description="View your player profile"
+    )
+    async def profile(interaction: discord.Interaction):
+        await profile_command(interaction)
+    
+    return profile
+
