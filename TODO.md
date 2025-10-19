@@ -41,13 +41,14 @@
 - Replays:
   - ✅ Replays are now redirected to storage instead of being stored directly in tables
   - ✅ Tables now store replay paths
-  - ⏰ Move replays to a dedicated table and add pointer logic between tables
-  - ⏰ Parse replays for basic info: players, player races, observers, map, timestamp, length, etc.
-  - ⏰ Send a message to the user with this information when they upload a replay
-  - ⏰ Update the MatchFoundViewEmbed with this information
+  - ❓ Move replays to a dedicated table and add pointer logic between tables
+  - ✅ Parse replays for basic info: players, player races, observers, map, timestamp, length, etc.
+  - ✅ Send a message to the user with this information when they upload a replay
+  - ❌ Update the MatchFoundViewEmbed with this information
+    - ✅ Send a new embed message with this information
 - Scaling
   - ⏰ Migrate to PostgreSQL
-  - ⏰ Store replays in separate persistent storage and not in SQL tables
+  - ✅ Store replays in separate persistent storage and not in SQL tables
   - ⏰ Implement spawning helper processes for replay parsing
   - ⏰ Implement Supabase database functions to offload leaderboard and personal stats chunking
 - Localization:
