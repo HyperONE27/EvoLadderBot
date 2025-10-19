@@ -424,43 +424,39 @@ class DatabaseWriter:
         Returns:
             The ID of the newly created log entry.
         """
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Log the action
-            cursor.execute(
-                """
-                INSERT INTO player_action_logs (
-                    discord_uid, player_name, setting_name,
-                    old_value, new_value, changed_by
-                )
-                VALUES (:discord_uid, :player_name, :setting_name, :old_value, :new_value, :changed_by)
-                """,
-                {
-                    "discord_uid": discord_uid,
-                    "player_name": player_name,
-                    "setting_name": setting_name,
-                    "old_value": old_value,
-                    "new_value": new_value,
-                    "changed_by": changed_by
-                }
+        # Log the action
+        log_id = self.adapter.execute_insert(
+            """
+            INSERT INTO player_action_logs (
+                discord_uid, player_name, setting_name,
+                old_value, new_value, changed_by
             )
-            
-            # Update the updated_at timestamp in players table
-            cursor.execute(
-                """
-                UPDATE players 
-                SET updated_at = :updated_at
-                WHERE discord_uid = :discord_uid
-                """,
-                {
-                    "updated_at": get_timestamp(),
-                    "discord_uid": discord_uid
-                }
-            )
-            
-            conn.commit()
-            return cursor.lastrowid
+            VALUES (:discord_uid, :player_name, :setting_name, :old_value, :new_value, :changed_by)
+            """,
+            {
+                "discord_uid": discord_uid,
+                "player_name": player_name,
+                "setting_name": setting_name,
+                "old_value": old_value,
+                "new_value": new_value,
+                "changed_by": changed_by
+            }
+        )
+        
+        # Update the updated_at timestamp in players table
+        self.adapter.execute_write(
+            """
+            UPDATE players 
+            SET updated_at = :updated_at
+            WHERE discord_uid = :discord_uid
+            """,
+            {
+                "updated_at": get_timestamp(),
+                "discord_uid": discord_uid
+            }
+        )
+        
+        return log_id
     
     
     # ========== MMRs 1v1 Table ==========
@@ -482,38 +478,35 @@ class DatabaseWriter:
         Returns:
             True if successful.
         """
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO mmrs_1v1 (
-                    discord_uid, player_name, race, mmr,
-                    games_played, games_won, games_lost, games_drawn, last_played
-                )
-                VALUES (:discord_uid, :player_name, :race, :mmr, :games_played, :games_won, :games_lost, :games_drawn, :last_played)
-                ON CONFLICT(discord_uid, race) DO UPDATE SET
-                    player_name = excluded.player_name,
-                    mmr = excluded.mmr,
-                    games_played = excluded.games_played,
-                    games_won = excluded.games_won,
-                    games_lost = excluded.games_lost,
-                    games_drawn = excluded.games_drawn,
-                    last_played = excluded.last_played
-                """,
-                {
-                    "discord_uid": discord_uid,
-                    "player_name": player_name,
-                    "race": race,
-                    "mmr": mmr,
-                    "games_played": games_played,
-                    "games_won": games_won,
-                    "games_lost": games_lost,
-                    "games_drawn": games_drawn,
-                    "last_played": get_timestamp()
-                }
+        self.adapter.execute_write(
+            """
+            INSERT INTO mmrs_1v1 (
+                discord_uid, player_name, race, mmr,
+                games_played, games_won, games_lost, games_drawn, last_played
             )
-            conn.commit()
-            return True
+            VALUES (:discord_uid, :player_name, :race, :mmr, :games_played, :games_won, :games_lost, :games_drawn, :last_played)
+            ON CONFLICT(discord_uid, race) DO UPDATE SET
+                player_name = excluded.player_name,
+                mmr = excluded.mmr,
+                games_played = excluded.games_played,
+                games_won = excluded.games_won,
+                games_lost = excluded.games_lost,
+                games_drawn = excluded.games_drawn,
+                last_played = excluded.last_played
+            """,
+            {
+                "discord_uid": discord_uid,
+                "player_name": player_name,
+                "race": race,
+                "mmr": mmr,
+                "games_played": games_played,
+                "games_won": games_won,
+                "games_lost": games_lost,
+                "games_drawn": games_drawn,
+                "last_played": get_timestamp()
+            }
+        )
+        return True
     
     def update_mmr_after_match(
         self,
@@ -538,63 +531,62 @@ class DatabaseWriter:
         Returns:
             True if successful
         """
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Get current stats
-            cursor.execute(
-                "SELECT games_played, games_won, games_lost, games_drawn FROM mmrs_1v1 WHERE discord_uid = :discord_uid AND race = :race",
-                {"discord_uid": discord_uid, "race": race}
+        # Get current stats
+        results = self.adapter.execute_query(
+            "SELECT games_played, games_won, games_lost, games_drawn FROM mmrs_1v1 WHERE discord_uid = :discord_uid AND race = :race",
+            {"discord_uid": discord_uid, "race": race}
+        )
+        
+        if results:
+            result = results[0]
+            games_played = result["games_played"]
+            games_won = result["games_won"]
+            games_lost = result["games_lost"]
+            games_drawn = result["games_drawn"]
+            # Increment stats
+            games_played += 1
+            if won:
+                games_won += 1
+            elif lost:
+                games_lost += 1
+            elif drawn:
+                games_drawn += 1
+        else:
+            # No existing record, start with 1 game
+            games_played = 1
+            games_won = 1 if won else 0
+            games_lost = 1 if lost else 0
+            games_drawn = 1 if drawn else 0
+        
+        # Update or create the record
+        self.adapter.execute_write(
+            """
+            INSERT INTO mmrs_1v1 (
+                discord_uid, player_name, race, mmr,
+                games_played, games_won, games_lost, games_drawn, last_played
             )
-            result = cursor.fetchone()
-            
-            if result:
-                games_played, games_won, games_lost, games_drawn = result
-                # Increment stats
-                games_played += 1
-                if won:
-                    games_won += 1
-                elif lost:
-                    games_lost += 1
-                elif drawn:
-                    games_drawn += 1
-            else:
-                # No existing record, start with 1 game
-                games_played = 1
-                games_won = 1 if won else 0
-                games_lost = 1 if lost else 0
-                games_drawn = 1 if drawn else 0
-            
-            # Update or create the record
-            cursor.execute(
-                """
-                INSERT INTO mmrs_1v1 (
-                    discord_uid, player_name, race, mmr,
-                    games_played, games_won, games_lost, games_drawn, last_played
-                )
-                VALUES (:discord_uid, :player_name, :race, :mmr, :games_played, :games_won, :games_lost, :games_drawn, :last_played)
-                ON CONFLICT(discord_uid, race) DO UPDATE SET
-                    mmr = excluded.mmr,
-                    games_played = excluded.games_played,
-                    games_won = excluded.games_won,
-                    games_lost = excluded.games_lost,
-                    games_drawn = excluded.games_drawn,
-                    last_played = excluded.last_played
-                """,
-                {
-                    "discord_uid": discord_uid,
-                    "player_name": f"Player{discord_uid}",
-                    "race": race,
-                    "mmr": new_mmr,
-                    "games_played": games_played,
-                    "games_won": games_won,
-                    "games_lost": games_lost,
-                    "games_drawn": games_drawn,
-                    "last_played": get_timestamp()
-                }
-            )
-            conn.commit()
-            return True
+            VALUES (:discord_uid, :player_name, :race, :mmr, :games_played, :games_won, :games_lost, :games_drawn, :last_played)
+            ON CONFLICT(discord_uid, race) DO UPDATE SET
+                mmr = excluded.mmr,
+                games_played = excluded.games_played,
+                games_won = excluded.games_won,
+                games_lost = excluded.games_lost,
+                games_drawn = excluded.games_drawn,
+                last_played = excluded.last_played
+            """,
+            {
+                "discord_uid": discord_uid,
+                "player_name": f"Player{discord_uid}",
+                "race": race,
+                "mmr": new_mmr,
+                "games_played": games_played,
+                "games_won": games_won,
+                "games_lost": games_lost,
+                "games_drawn": games_drawn,
+                "last_played": get_timestamp()
+            }
+        )
+        return True
     
     # ========== Matches 1v1 Table ==========
     
@@ -627,37 +619,33 @@ class DatabaseWriter:
         Returns:
             The ID of the newly created match.
         """
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO matches_1v1 (
-                    player_1_discord_uid, player_2_discord_uid,
-                    player_1_race, player_2_race,
-                    player_1_mmr, player_2_mmr,
-                    mmr_change, map_played, server_used
-                )
-                VALUES (
-                    :player_1_discord_uid, :player_2_discord_uid,
-                    :player_1_race, :player_2_race,
-                    :player_1_mmr, :player_2_mmr,
-                    :mmr_change, :map_played, :server_used
-                )
-                """,
-                {
-                    "player_1_discord_uid": player_1_discord_uid,
-                    "player_2_discord_uid": player_2_discord_uid,
-                    "player_1_race": player_1_race,
-                    "player_2_race": player_2_race,
-                    "player_1_mmr": player_1_mmr,
-                    "player_2_mmr": player_2_mmr,
-                    "mmr_change": mmr_change,
-                    "map_played": map_played,
-                    "server_used": server_used
-                }
+        return self.adapter.execute_insert(
+            """
+            INSERT INTO matches_1v1 (
+                player_1_discord_uid, player_2_discord_uid,
+                player_1_race, player_2_race,
+                player_1_mmr, player_2_mmr,
+                mmr_change, map_played, server_used
             )
-            conn.commit()
-            return cursor.lastrowid
+            VALUES (
+                :player_1_discord_uid, :player_2_discord_uid,
+                :player_1_race, :player_2_race,
+                :player_1_mmr, :player_2_mmr,
+                :mmr_change, :map_played, :server_used
+            )
+            """,
+            {
+                "player_1_discord_uid": player_1_discord_uid,
+                "player_2_discord_uid": player_2_discord_uid,
+                "player_1_race": player_1_race,
+                "player_2_race": player_2_race,
+                "player_1_mmr": player_1_mmr,
+                "player_2_mmr": player_2_mmr,
+                "mmr_change": mmr_change,
+                "map_played": map_played,
+                "server_used": server_used
+            }
+        )
     
     # ========== Preferences 1v1 Table ==========
     
@@ -678,71 +666,70 @@ class DatabaseWriter:
         Returns:
             True if the update was successful, False otherwise.
         """
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Get match details to determine which player is which
-            cursor.execute(
-                "SELECT player_1_discord_uid, player_2_discord_uid FROM matches_1v1 WHERE id = :match_id",
-                {"match_id": match_id}
-            )
-            match_data = cursor.fetchone()
-            if not match_data:
-                return False
-            
-            player_1_uid, player_2_uid = match_data
-            
-            # Determine which report column to update
-            if player_discord_uid == player_1_uid:
-                column = "player_1_report"
-                other_column = "player_2_report"
-            elif player_discord_uid == player_2_uid:
-                column = "player_2_report"
-                other_column = "player_1_report"
+        # Get match details to determine which player is which
+        match_results = self.adapter.execute_query(
+            "SELECT player_1_discord_uid, player_2_discord_uid FROM matches_1v1 WHERE id = :match_id",
+            {"match_id": match_id}
+        )
+        if not match_results:
+            return False
+        
+        match_data = match_results[0]
+        player_1_uid = match_data["player_1_discord_uid"]
+        player_2_uid = match_data["player_2_discord_uid"]
+        
+        # Determine which report column to update
+        if player_discord_uid == player_1_uid:
+            column = "player_1_report"
+            other_column = "player_2_report"
+        elif player_discord_uid == player_2_uid:
+            column = "player_2_report"
+            other_column = "player_1_report"
+        else:
+            return False  # Player not in this match
+        
+        if report_value == -1:
+            # An abort overrides other pending state. Initiator gets -3, other player -1.
+            if column == "player_1_report":
+                self.adapter.execute_write(
+                    """
+                    UPDATE matches_1v1
+                    SET player_1_report = -3,
+                        player_2_report = CASE WHEN player_2_report = -3 THEN -3 ELSE -1 END,
+                        match_result = -1
+                    WHERE id = :match_id
+                    """,
+                    {"match_id": match_id}
+                )
             else:
-                return False  # Player not in this match
-            
-            if report_value == -1:
-                # An abort overrides other pending state. Initiator gets -3, other player -1.
-                if column == "player_1_report":
-                    cursor.execute(
-                        """
-                        UPDATE matches_1v1
-                        SET player_1_report = -3,
-                            player_2_report = CASE WHEN player_2_report = -3 THEN -3 ELSE -1 END,
-                            match_result = -1
-                        WHERE id = :match_id
-                        """,
-                        {"match_id": match_id}
-                    )
-                else:
-                    cursor.execute(
-                        """
-                        UPDATE matches_1v1
-                        SET player_2_report = -3,
-                            player_1_report = CASE WHEN player_1_report = -3 THEN -3 ELSE -1 END,
-                            match_result = -1
-                        WHERE id = :match_id
-                        """,
-                        {"match_id": match_id}
-                    )
-                conn.commit()
-                return True
-            
-            # Update the appropriate report column
-            cursor.execute(
-                f"UPDATE matches_1v1 SET {column} = :report_value WHERE id = :match_id",
-                {"report_value": report_value, "match_id": match_id}
-            )
-            
-            # Check if both players have reported and calculate match_result
-            cursor.execute(
-                "SELECT player_1_report, player_2_report FROM matches_1v1 WHERE id = :match_id",
-                {"match_id": match_id}
-            )
-            reports = cursor.fetchone()
-            if reports and reports[0] is not None and reports[1] is not None:
-                p1_report, p2_report = reports
+                self.adapter.execute_write(
+                    """
+                    UPDATE matches_1v1
+                    SET player_2_report = -3,
+                        player_1_report = CASE WHEN player_1_report = -3 THEN -3 ELSE -1 END,
+                        match_result = -1
+                    WHERE id = :match_id
+                    """,
+                    {"match_id": match_id}
+                )
+            return True
+        
+        # Update the appropriate report column
+        rowcount = self.adapter.execute_write(
+            f"UPDATE matches_1v1 SET {column} = :report_value WHERE id = :match_id",
+            {"report_value": report_value, "match_id": match_id}
+        )
+        
+        # Check if both players have reported and calculate match_result
+        reports_results = self.adapter.execute_query(
+            "SELECT player_1_report, player_2_report FROM matches_1v1 WHERE id = :match_id",
+            {"match_id": match_id}
+        )
+        if reports_results:
+            reports = reports_results[0]
+            if reports["player_1_report"] is not None and reports["player_2_report"] is not None:
+                p1_report = reports["player_1_report"]
+                p2_report = reports["player_2_report"]
                 if p1_report == p2_report:
                     # Reports match
                     match_result = p1_report
@@ -751,13 +738,12 @@ class DatabaseWriter:
                     match_result = -2
             
                 # Update match_result
-                cursor.execute(
+                self.adapter.execute_write(
                     "UPDATE matches_1v1 SET match_result = :match_result WHERE id = :match_id",
                     {"match_result": match_result, "match_id": match_id}
                 )
-            
-            conn.commit()
-            return cursor.rowcount > 0
+        
+        return rowcount > 0
     
     def update_match_replay_1v1(
         self,

@@ -35,7 +35,7 @@
   - ✅ Edit and add rank emotes
 - Account config:
   - ⏰ Update Terms of Service for closed alpha/open beta stage
-  - ⏰ Fix country setup descriptions for XX (nonrepresenting) / ZZ (other)
+  - ✅ Fix country setup descriptions for XX (nonrepresenting) / ZZ (other)
   - ✅ /setup persists pre-existing values as defaults (so you don't have to fill them all out again to change one thing)
   - ✅ nulling of alt names is properly recorded in action logs table
   - ✅ Add a /profile page to view one's own MMRs and settings
@@ -51,7 +51,8 @@
     - ✅ Send a new embed message with this information
 - Scaling
   - ✅ Define PostgreSQL schema
-  - ⏰ Full migrate to PostgreSQL
+  - ✅ Full migrate to PostgreSQL
+    - ✅ Hybrid architecture with SQLAlchemy adapter allows local testing with SQLite and remote host testing with PostgresSQL
   - ✅ Store replays in separate persistent storage and not in SQL tables
   - ✅ Implement spawning helper processes for replay parsing (multiprocessing with ProcessPoolExecutor)
     - ✅ Created parse_replay_data_blocking() worker function
