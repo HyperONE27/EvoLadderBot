@@ -821,18 +821,15 @@ class DatabaseWriter:
         Returns:
             True if the update was successful, False otherwise.
         """
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                UPDATE matches_1v1 
-                SET mmr_change = :mmr_change
-                WHERE id = :match_id
-                """,
-                {"mmr_change": mmr_change, "match_id": match_id}
-            )
-            conn.commit()
-            return cursor.rowcount > 0
+        rowcount = self.adapter.execute_write(
+            """
+            UPDATE matches_1v1 
+            SET mmr_change = :mmr_change
+            WHERE id = :match_id
+            """,
+            {"mmr_change": mmr_change, "match_id": match_id}
+        )
+        return rowcount > 0
 
     def update_preferences_1v1(
         self,
@@ -851,50 +848,46 @@ class DatabaseWriter:
         Returns:
             True if successful.
         """
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Build dynamic update
-            updates = []
-            params = {"discord_uid": discord_uid}
-            
-            if last_chosen_races is not None:
-                updates.append("last_chosen_races = :last_chosen_races")
-                params["last_chosen_races"] = last_chosen_races
-            
-            if last_chosen_vetoes is not None:
-                updates.append("last_chosen_vetoes = :last_chosen_vetoes")
-                params["last_chosen_vetoes"] = last_chosen_vetoes
-            
-            if not updates:
-                return False
-            
-            # Try to update first
-            update_query = f"""
-                UPDATE preferences_1v1
-                SET {', '.join(updates)}
-                WHERE discord_uid = :discord_uid
-            """
-            cursor.execute(update_query, params)
-            
-            # If no rows were updated, insert
-            if cursor.rowcount == 0:
-                cursor.execute(
-                    """
-                    INSERT INTO preferences_1v1 (
-                        discord_uid, last_chosen_races, last_chosen_vetoes
-                    )
-                    VALUES (:discord_uid, :last_chosen_races, :last_chosen_vetoes)
-                    """,
-                    {
-                        "discord_uid": discord_uid,
-                        "last_chosen_races": last_chosen_races,
-                        "last_chosen_vetoes": last_chosen_vetoes
-                    }
+        # Build dynamic update
+        updates = []
+        params = {"discord_uid": discord_uid}
+        
+        if last_chosen_races is not None:
+            updates.append("last_chosen_races = :last_chosen_races")
+            params["last_chosen_races"] = last_chosen_races
+        
+        if last_chosen_vetoes is not None:
+            updates.append("last_chosen_vetoes = :last_chosen_vetoes")
+            params["last_chosen_vetoes"] = last_chosen_vetoes
+        
+        if not updates:
+            return False
+        
+        # Try to update first
+        update_query = f"""
+            UPDATE preferences_1v1
+            SET {', '.join(updates)}
+            WHERE discord_uid = :discord_uid
+        """
+        rowcount = self.adapter.execute_write(update_query, params)
+        
+        # If no rows were updated, insert
+        if rowcount == 0:
+            self.adapter.execute_insert(
+                """
+                INSERT INTO preferences_1v1 (
+                    discord_uid, last_chosen_races, last_chosen_vetoes
                 )
-            
-            conn.commit()
-            return True
+                VALUES (:discord_uid, :last_chosen_races, :last_chosen_vetoes)
+                """,
+                {
+                    "discord_uid": discord_uid,
+                    "last_chosen_races": last_chosen_races,
+                    "last_chosen_vetoes": last_chosen_vetoes
+                }
+            )
+        
+        return True
 
     def abort_match_1v1(self, match_id: int, player_discord_uid: int, abort_timer_seconds: int) -> bool:
         """
@@ -910,85 +903,81 @@ class DatabaseWriter:
         Returns:
             True if the match was successfully aborted by this operation, False otherwise.
         """
-        with self.db.get_connection() as conn:
-            try:
-                cursor = conn.cursor()
-                
-                # First, get the player UIDs for the match
-                cursor.execute(
-                    "SELECT player_1_discord_uid, player_2_discord_uid FROM matches_1v1 WHERE id = :match_id",
-                    {"match_id": match_id}
-                )
-                match_players = cursor.fetchone()
-                
-                if not match_players:
-                    return False
-                
-                # Determine which player report column to update
-                if player_discord_uid == match_players["player_1_discord_uid"]:
-                    report_column = "player_1_report"
-                    other_column = "player_2_report"
-                elif player_discord_uid == match_players["player_2_discord_uid"]:
-                    report_column = "player_2_report"
-                    other_column = "player_1_report"
-                else:
-                    return False  # Player not in this match
-                
-                # Atomically update the match result and both player reports.
-                if report_column == "player_1_report":
-                    update_query = """
-                        UPDATE matches_1v1
-                        SET 
-                            match_result = -1,
-                            player_1_report = -3,
-                            player_2_report = CASE WHEN player_2_report = -3 THEN -3 ELSE COALESCE(player_2_report, -1) END
-                        WHERE 
-                            id = :match_id 
-                            AND match_result IS NULL
-                            AND (strftime('%s', 'now') - strftime('%s', played_at)) < :abort_timer_seconds
-                    """
-                else:
-                    update_query = """
-                        UPDATE matches_1v1
-                        SET 
-                            match_result = -1,
-                            player_2_report = -3,
-                            player_1_report = CASE WHEN player_1_report = -3 THEN -3 ELSE COALESCE(player_1_report, -1) END
-                        WHERE 
-                            id = :match_id 
-                            AND match_result IS NULL
-                            AND (strftime('%s', 'now') - strftime('%s', played_at)) < :abort_timer_seconds
-                    """
-                cursor.execute(update_query, {"match_id": match_id, "abort_timer_seconds": abort_timer_seconds})
-                
-                conn.commit()
-                
-                # If any row was changed, the abort was successful
-                return cursor.rowcount > 0
-                
-            except Exception as e:
-                print(f"Error aborting match {match_id}: {e}")
-                conn.rollback()
+        try:
+            # First, get the player UIDs for the match
+            match_results = self.adapter.execute_query(
+                "SELECT player_1_discord_uid, player_2_discord_uid FROM matches_1v1 WHERE id = :match_id",
+                {"match_id": match_id}
+            )
+            
+            if not match_results:
                 return False
+            
+            match_players = match_results[0]
+            
+            # Determine which player report column to update
+            if player_discord_uid == match_players["player_1_discord_uid"]:
+                report_column = "player_1_report"
+                other_column = "player_2_report"
+            elif player_discord_uid == match_players["player_2_discord_uid"]:
+                report_column = "player_2_report"
+                other_column = "player_1_report"
+            else:
+                return False  # Player not in this match
+            
+            # Atomically update the match result and both player reports.
+            if report_column == "player_1_report":
+                update_query = """
+                    UPDATE matches_1v1
+                    SET 
+                        match_result = -1,
+                        player_1_report = -3,
+                        player_2_report = CASE WHEN player_2_report = -3 THEN -3 ELSE COALESCE(player_2_report, -1) END
+                    WHERE 
+                        id = :match_id 
+                        AND match_result IS NULL
+                        AND (strftime('%s', 'now') - strftime('%s', played_at)) < :abort_timer_seconds
+                """
+            else:
+                update_query = """
+                    UPDATE matches_1v1
+                    SET 
+                        match_result = -1,
+                        player_2_report = -3,
+                        player_1_report = CASE WHEN player_1_report = -3 THEN -3 ELSE COALESCE(player_1_report, -1) END
+                    WHERE 
+                        id = :match_id 
+                        AND match_result IS NULL
+                        AND (strftime('%s', 'now') - strftime('%s', played_at)) < :abort_timer_seconds
+                """
+            
+            rowcount = self.adapter.execute_write(update_query, {"match_id": match_id, "abort_timer_seconds": abort_timer_seconds})
+            
+            # If any row was changed, the abort was successful
+            return rowcount > 0
+            
+        except Exception as e:
+            print(f"Error aborting match {match_id}: {e}")
+            return False
 
     def insert_command_call(self, discord_uid: int, player_name: str, command: str) -> bool:
         """
         Logs a command call to the command_calls table.
         """
         try:
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO command_calls (discord_uid, player_name, command)
-                    VALUES (:discord_uid, :player_name, :command)
-                """, {
+            self.adapter.execute_insert(
+                """
+                INSERT INTO command_calls (discord_uid, player_name, command)
+                VALUES (:discord_uid, :player_name, :command)
+                """,
+                {
                     "discord_uid": discord_uid,
                     "player_name": player_name,
                     "command": command
-                })
-                conn.commit()
-                return True
-        except sqlite3.Error as e:
+                }
+            )
+            return True
+        except Exception as e:
             print(f"Database error in insert_command_call: {e}")
             return False
 
@@ -1003,21 +992,21 @@ class DatabaseWriter:
             True if the insertion was successful, False otherwise.
         """
         try:
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO replays (
-                        replay_path, replay_hash, replay_date, player_1_name, player_2_name,
-                        player_1_race, player_2_race, result, player_1_handle, player_2_handle,
-                        observers, map_name, duration
-                    ) VALUES (
-                        :replay_path, :replay_hash, :replay_date, :player_1_name, :player_2_name,
-                        :player_1_race, :player_2_race, :result, :player_1_handle, :player_2_handle,
-                        :observers, :map_name, :duration
-                    )
-                """, replay_data)
-                conn.commit()
-                return True
-        except sqlite3.Error as e:
+            self.adapter.execute_insert(
+                """
+                INSERT INTO replays (
+                    replay_path, replay_hash, replay_date, player_1_name, player_2_name,
+                    player_1_race, player_2_race, result, player_1_handle, player_2_handle,
+                    observers, map_name, duration
+                ) VALUES (
+                    :replay_path, :replay_hash, :replay_date, :player_1_name, :player_2_name,
+                    :player_1_race, :player_2_race, :result, :player_1_handle, :player_2_handle,
+                    :observers, :map_name, :duration
+                )
+                """,
+                replay_data
+            )
+            return True
+        except Exception as e:
             print(f"Database error in insert_replay: {e}")
             return False
