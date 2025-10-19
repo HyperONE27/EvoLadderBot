@@ -754,6 +754,7 @@ class DatabaseWriter:
     ) -> bool:
         """
         Update the replay data for a specific match and player.
+        Optimized to use a single UPDATE with conditional CASE statement.
         
         Args:
             match_id: The ID of the match to update.
@@ -765,28 +766,37 @@ class DatabaseWriter:
             True if the update was successful, False otherwise.
         """
         try:
-            # First, determine if the player is player_1 or player_2
-            result = self.adapter.execute_query(
-                "SELECT player_1_discord_uid FROM matches_1v1 WHERE id = :match_id",
-                {"match_id": match_id}
+            # Single UPDATE with conditional logic - no extra SELECT needed
+            # Updates the correct player's replay based on their discord_uid
+            self.adapter.execute_write(
+                """
+                UPDATE matches_1v1
+                SET 
+                    player_1_replay_path = CASE 
+                        WHEN player_1_discord_uid = :player_discord_uid THEN :replay_path 
+                        ELSE player_1_replay_path 
+                    END,
+                    player_1_replay_time = CASE 
+                        WHEN player_1_discord_uid = :player_discord_uid THEN :replay_time 
+                        ELSE player_1_replay_time 
+                    END,
+                    player_2_replay_path = CASE 
+                        WHEN player_2_discord_uid = :player_discord_uid THEN :replay_path 
+                        ELSE player_2_replay_path 
+                    END,
+                    player_2_replay_time = CASE 
+                        WHEN player_2_discord_uid = :player_discord_uid THEN :replay_time 
+                        ELSE player_2_replay_time 
+                    END
+                WHERE id = :match_id
+                """,
+                {
+                    "match_id": match_id,
+                    "player_discord_uid": player_discord_uid,
+                    "replay_path": replay_path,
+                    "replay_time": replay_time
+                }
             )
-            
-            if not result:
-                return False
-            
-            if result[0]["player_1_discord_uid"] == player_discord_uid:
-                # Player is player_1
-                self.adapter.execute_write(
-                    "UPDATE matches_1v1 SET player_1_replay_path = :replay_path, player_1_replay_time = :replay_time WHERE id = :match_id",
-                    {"replay_path": replay_path, "replay_time": replay_time, "match_id": match_id}
-                )
-            else:
-                # Player is player_2
-                self.adapter.execute_write(
-                    "UPDATE matches_1v1 SET player_2_replay_path = :replay_path, player_2_replay_time = :replay_time WHERE id = :match_id",
-                    {"replay_path": replay_path, "replay_time": replay_time, "match_id": match_id}
-                )
-            
             return True
         except Exception as e:
             print(f"Database error in update_match_replay_1v1: {e}")
@@ -825,6 +835,7 @@ class DatabaseWriter:
     ) -> bool:
         """
         Update or create 1v1 preferences for a player.
+        Uses native database UPSERT for optimal performance (single round-trip).
         
         Args:
             discord_uid: Player's Discord UID.
@@ -849,30 +860,34 @@ class DatabaseWriter:
         if not updates:
             return False
         
-        # Try to update first
-        update_query = f"""
-            UPDATE preferences_1v1
-            SET {', '.join(updates)}
-            WHERE discord_uid = :discord_uid
-        """
-        rowcount = self.adapter.execute_write(update_query, params)
-        
-        # If no rows were updated, insert
-        if rowcount == 0:
-            self.adapter.execute_insert(
-                """
-                INSERT INTO preferences_1v1 (
-                    discord_uid, last_chosen_races, last_chosen_vetoes
-                )
+        # Use native UPSERT (INSERT ... ON CONFLICT DO UPDATE)
+        # Single database operation - much faster than UPDATE + INSERT
+        if self.db.db_type == "postgresql":
+            # PostgreSQL native UPSERT
+            upsert_query = """
+                INSERT INTO preferences_1v1 (discord_uid, last_chosen_races, last_chosen_vetoes)
                 VALUES (:discord_uid, :last_chosen_races, :last_chosen_vetoes)
-                """,
-                {
-                    "discord_uid": discord_uid,
-                    "last_chosen_races": last_chosen_races,
-                    "last_chosen_vetoes": last_chosen_vetoes
-                }
-            )
+                ON CONFLICT (discord_uid) DO UPDATE SET
+                    last_chosen_races = COALESCE(EXCLUDED.last_chosen_races, preferences_1v1.last_chosen_races),
+                    last_chosen_vetoes = COALESCE(EXCLUDED.last_chosen_vetoes, preferences_1v1.last_chosen_vetoes)
+            """
+        else:
+            # SQLite UPSERT syntax
+            upsert_query = """
+                INSERT INTO preferences_1v1 (discord_uid, last_chosen_races, last_chosen_vetoes)
+                VALUES (:discord_uid, :last_chosen_races, :last_chosen_vetoes)
+                ON CONFLICT(discord_uid) DO UPDATE SET
+                    last_chosen_races = COALESCE(EXCLUDED.last_chosen_races, preferences_1v1.last_chosen_races),
+                    last_chosen_vetoes = COALESCE(EXCLUDED.last_chosen_vetoes, preferences_1v1.last_chosen_vetoes)
+            """
         
+        # Fill in None values for params that weren't provided
+        if "last_chosen_races" not in params:
+            params["last_chosen_races"] = None
+        if "last_chosen_vetoes" not in params:
+            params["last_chosen_vetoes"] = None
+        
+        self.adapter.execute_write(upsert_query, params)
         return True
 
     def abort_match_1v1(self, match_id: int, player_discord_uid: int, abort_timer_seconds: int) -> bool:

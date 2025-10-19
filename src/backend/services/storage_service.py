@@ -54,8 +54,9 @@ class StorageService:
             print(f"[Storage] ERROR: File too large: {len(file_data)} bytes (max {max_size})")
             return None
         
-        # Path in bucket: {match_id}/player_{discord_uid}.SC2Replay
-        file_path = f"{match_id}/player_{player_discord_uid}.SC2Replay"
+        # Path in bucket: {match_id}/{hash}_{timestamp}.SC2Replay
+        # Use the provided filename which already follows the naming scheme
+        file_path = f"{match_id}/{filename}"
         
         try:
             # Upload to Supabase Storage
