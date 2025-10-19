@@ -60,19 +60,37 @@ class StorageService:
         try:
             # Upload to Supabase Storage
             print(f"[Storage] Uploading replay to: {file_path}")
-            response = self.supabase.storage.from_(self.bucket_name).upload(
-                path=file_path,
-                file=file_data,
-                file_options={
-                    "content-type": "application/octet-stream",
-                    "upsert": True  # Overwrite if exists (player re-uploading)
-                }
-            )
+            
+            # Attempt upload
+            try:
+                response = self.supabase.storage.from_(self.bucket_name).upload(
+                    path=file_path,
+                    file=file_data,
+                    file_options={"content-type": "application/octet-stream"}
+                )
+            except Exception as upload_error:
+                # If file already exists (409 Duplicate), remove and retry
+                error_str = str(upload_error)
+                if "409" in error_str or "Duplicate" in error_str or "already exists" in error_str:
+                    print(f"[Storage] File exists, removing and re-uploading...")
+                    try:
+                        self.supabase.storage.from_(self.bucket_name).remove([file_path])
+                    except:
+                        pass  # Ignore errors during removal
+                    
+                    # Retry upload
+                    response = self.supabase.storage.from_(self.bucket_name).upload(
+                        path=file_path,
+                        file=file_data,
+                        file_options={"content-type": "application/octet-stream"}
+                    )
+                else:
+                    raise  # Re-raise if it's a different error
             
             # Get public URL
             public_url = self.supabase.storage.from_(self.bucket_name).get_public_url(file_path)
             
-            print(f"[Storage] ✓ Upload successful: {public_url}")
+            print(f"[Storage] Upload successful: {public_url}")
             return public_url
             
         except Exception as e:

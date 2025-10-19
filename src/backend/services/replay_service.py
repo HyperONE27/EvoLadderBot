@@ -411,10 +411,10 @@ class ReplayService:
                 )
                 
                 if public_url:
-                    print(f"[Replay] ✓ Upload successful: {public_url}")
+                    print(f"[Replay] Upload successful: {public_url}")
                     return public_url
                 else:
-                    print(f"[Replay] ✗ Supabase upload failed, falling back to local storage")
+                    print(f"[Replay] Supabase upload failed, falling back to local storage")
                     
             except Exception as e:
                 print(f"[Replay] ERROR during Supabase upload: {e}")
