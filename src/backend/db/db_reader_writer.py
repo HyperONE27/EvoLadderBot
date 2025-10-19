@@ -146,31 +146,27 @@ class DatabaseReader:
         Returns:
             List of player MMR records sorted by MMR descending.
         """
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            query = """
-                SELECT m.*, p.country, p.player_name
-                FROM mmrs_1v1 m
-                LEFT JOIN players p ON m.discord_uid = p.discord_uid
-                WHERE 1=1
-            """
-            params = {}
-            
-            if race:
-                query += " AND m.race = :race"
-                params["race"] = race
-            
-            if country:
-                query += " AND p.country = :country"
-                params["country"] = country
-            
-            query += " ORDER BY m.mmr DESC LIMIT :limit OFFSET :offset"
-            params["limit"] = limit
-            params["offset"] = offset
-            
-            cursor.execute(query, params)
-            return [dict(row) for row in cursor.fetchall()]
+        query = """
+            SELECT m.*, p.country, p.player_name
+            FROM mmrs_1v1 m
+            LEFT JOIN players p ON m.discord_uid = p.discord_uid
+            WHERE 1=1
+        """
+        params = {}
+        
+        if race:
+            query += " AND m.race = :race"
+            params["race"] = race
+        
+        if country:
+            query += " AND p.country = :country"
+            params["country"] = country
+        
+        query += " ORDER BY m.mmr DESC LIMIT :limit OFFSET :offset"
+        params["limit"] = limit
+        params["offset"] = offset
+        
+        return self.adapter.execute_query(query, params)
     
     def count_leaderboard_1v1(
         self,
@@ -178,27 +174,24 @@ class DatabaseReader:
         country: Optional[str] = None
     ) -> int:
         """Count total entries in 1v1 leaderboard with filters."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            query = """
-                SELECT COUNT(*)
-                FROM mmrs_1v1 m
-                LEFT JOIN players p ON m.discord_uid = p.discord_uid
-                WHERE 1=1
-            """
-            params = {}
-            
-            if race:
-                query += " AND m.race = :race"
-                params["race"] = race
-            
-            if country:
-                query += " AND p.country = :country"
-                params["country"] = country
-            
-            cursor.execute(query, params)
-            return cursor.fetchone()[0]
+        query = """
+            SELECT COUNT(*) as count
+            FROM mmrs_1v1 m
+            LEFT JOIN players p ON m.discord_uid = p.discord_uid
+            WHERE 1=1
+        """
+        params = {}
+        
+        if race:
+            query += " AND m.race = :race"
+            params["race"] = race
+        
+        if country:
+            query += " AND p.country = :country"
+            params["country"] = country
+        
+        results = self.adapter.execute_query(query, params)
+        return results[0]["count"] if results else 0
     
     # ========== Matches 1v1 Table ==========
     
@@ -208,15 +201,12 @@ class DatabaseReader:
         limit: int = 50
     ) -> List[Dict[str, Any]]:
         """Get recent matches for a player."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM matches_1v1 "
-                "WHERE player_1_discord_uid = :discord_uid OR player_2_discord_uid = :discord_uid "
-                "ORDER BY played_at DESC LIMIT :limit",
-                {"discord_uid": discord_uid, "limit": limit}
-            )
-            return [dict(row) for row in cursor.fetchall()]
+        return self.adapter.execute_query(
+            "SELECT * FROM matches_1v1 "
+            "WHERE player_1_discord_uid = :discord_uid OR player_2_discord_uid = :discord_uid "
+            "ORDER BY played_at DESC LIMIT :limit",
+            {"discord_uid": discord_uid, "limit": limit}
+        )
     
     def get_match_1v1(self, match_id: int) -> Optional[Dict[str, Any]]:
         """Get a specific 1v1 match by ID."""
@@ -273,27 +263,23 @@ class DatabaseWriter:
         Returns:
             The ID of the newly created player.
         """
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO players (
-                    discord_uid, discord_username, player_name, battletag, country, region, activation_code
-                )
-                VALUES (:discord_uid, :discord_username, :player_name, :battletag, :country, :region, :activation_code)
-                """,
-                {
-                    "discord_uid": discord_uid,
-                    "discord_username": discord_username,
-                    "player_name": player_name,
-                    "battletag": battletag,
-                    "country": country,
-                    "region": region,
-                    "activation_code": activation_code
-                }
+        return self.adapter.execute_insert(
+            """
+            INSERT INTO players (
+                discord_uid, discord_username, player_name, battletag, country, region, activation_code
             )
-            conn.commit()
-            return cursor.lastrowid
+            VALUES (:discord_uid, :discord_username, :player_name, :battletag, :country, :region, :activation_code)
+            """,
+            {
+                "discord_uid": discord_uid,
+                "discord_username": discord_username,
+                "player_name": player_name,
+                "battletag": battletag,
+                "country": country,
+                "region": region,
+                "activation_code": activation_code
+            }
+        )
     
     def update_player(
         self,
@@ -320,78 +306,74 @@ class DatabaseWriter:
         Returns:
             True if the player was updated, False otherwise.
         """
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Build dynamic update query
-            updates = []
-            params = {}
-            
-            if discord_username is not None:
-                updates.append("discord_username = :discord_username")
-                params["discord_username"] = discord_username
-            
-            if player_name is not None:
-                updates.append("player_name = :player_name")
-                params["player_name"] = player_name
-            
-            if battletag is not None:
-                updates.append("battletag = :battletag")
-                params["battletag"] = battletag
-            
-            if alt_player_name_1 is not None:
-                updates.append("alt_player_name_1 = :alt_player_name_1")
-                # Convert empty string to None for proper NULL storage
-                params["alt_player_name_1"] = alt_player_name_1 if alt_player_name_1.strip() else None
-            
-            if alt_player_name_2 is not None:
-                updates.append("alt_player_name_2 = :alt_player_name_2")
-                # Convert empty string to None for proper NULL storage
-                params["alt_player_name_2"] = alt_player_name_2 if alt_player_name_2.strip() else None
-            
-            if country is not None:
-                updates.append("country = :country")
-                params["country"] = country
-            
-            if region is not None:
-                updates.append("region = :region")
-                params["region"] = region
-            
-            if accepted_tos is not None:
-                updates.append("accepted_tos = :accepted_tos")
-                params["accepted_tos"] = accepted_tos
-                # Only set accepted_tos_date if it's currently NULL (can't be overwritten)
-                if accepted_tos:
-                    updates.append("accepted_tos_date = COALESCE(accepted_tos_date, :accepted_tos_date)")
-                    params["accepted_tos_date"] = get_timestamp()
-            
-            if completed_setup is not None:
-                updates.append("completed_setup = :completed_setup")
-                params["completed_setup"] = completed_setup
-                # Only set completed_setup_date if it's currently NULL (can't be overwritten)
-                if completed_setup:
-                    updates.append("completed_setup_date = COALESCE(completed_setup_date, :completed_setup_date)")
-                    params["completed_setup_date"] = get_timestamp()
-            
-            if activation_code is not None:
-                updates.append("activation_code = :activation_code")
-                params["activation_code"] = activation_code
-            
-            if not updates:
-                return False
-            
-            # Always update the updated_at timestamp
-            updates.append("updated_at = :updated_at")
-            params["updated_at"] = get_timestamp()
-            
-            # Add discord_uid to params
-            params["discord_uid"] = discord_uid
-            
-            query = f"UPDATE players SET {', '.join(updates)} WHERE discord_uid = :discord_uid"
-            cursor.execute(query, params)
-            conn.commit()
-            
-            return cursor.rowcount > 0
+        # Build dynamic update query
+        updates = []
+        params = {}
+        
+        if discord_username is not None:
+            updates.append("discord_username = :discord_username")
+            params["discord_username"] = discord_username
+        
+        if player_name is not None:
+            updates.append("player_name = :player_name")
+            params["player_name"] = player_name
+        
+        if battletag is not None:
+            updates.append("battletag = :battletag")
+            params["battletag"] = battletag
+        
+        if alt_player_name_1 is not None:
+            updates.append("alt_player_name_1 = :alt_player_name_1")
+            # Convert empty string to None for proper NULL storage
+            params["alt_player_name_1"] = alt_player_name_1 if alt_player_name_1.strip() else None
+        
+        if alt_player_name_2 is not None:
+            updates.append("alt_player_name_2 = :alt_player_name_2")
+            # Convert empty string to None for proper NULL storage
+            params["alt_player_name_2"] = alt_player_name_2 if alt_player_name_2.strip() else None
+        
+        if country is not None:
+            updates.append("country = :country")
+            params["country"] = country
+        
+        if region is not None:
+            updates.append("region = :region")
+            params["region"] = region
+        
+        if accepted_tos is not None:
+            updates.append("accepted_tos = :accepted_tos")
+            params["accepted_tos"] = accepted_tos
+            # Only set accepted_tos_date if it's currently NULL (can't be overwritten)
+            if accepted_tos:
+                updates.append("accepted_tos_date = COALESCE(accepted_tos_date, :accepted_tos_date)")
+                params["accepted_tos_date"] = get_timestamp()
+        
+        if completed_setup is not None:
+            updates.append("completed_setup = :completed_setup")
+            params["completed_setup"] = completed_setup
+            # Only set completed_setup_date if it's currently NULL (can't be overwritten)
+            if completed_setup:
+                updates.append("completed_setup_date = COALESCE(completed_setup_date, :completed_setup_date)")
+                params["completed_setup_date"] = get_timestamp()
+        
+        if activation_code is not None:
+            updates.append("activation_code = :activation_code")
+            params["activation_code"] = activation_code
+        
+        if not updates:
+            return False
+        
+        # Always update the updated_at timestamp
+        updates.append("updated_at = :updated_at")
+        params["updated_at"] = get_timestamp()
+        
+        # Add discord_uid to params
+        params["discord_uid"] = discord_uid
+        
+        query = f"UPDATE players SET {', '.join(updates)} WHERE discord_uid = :discord_uid"
+        rowcount = self.adapter.execute_write(query, params)
+        
+        return rowcount > 0
     
     def update_player_activation_code(
         self,
@@ -407,17 +389,15 @@ class DatabaseWriter:
     
     def update_player_remaining_aborts(self, discord_uid: int, remaining_aborts: int) -> bool:
         """Update player's remaining aborts count."""
-        with self.db.get_connection() as conn:
-            try:
-                conn.execute(
-                    "UPDATE players SET remaining_aborts = ? WHERE discord_uid = ?",
-                    (remaining_aborts, discord_uid)
-                )
-                conn.commit()
-                return True
-            except Exception as e:
-                print(f"Error updating remaining aborts for player {discord_uid}: {e}")
-                return False
+        try:
+            rowcount = self.adapter.execute_write(
+                "UPDATE players SET remaining_aborts = :remaining_aborts WHERE discord_uid = :discord_uid",
+                {"remaining_aborts": remaining_aborts, "discord_uid": discord_uid}
+            )
+            return rowcount > 0
+        except Exception as e:
+            print(f"Error updating remaining aborts for player {discord_uid}: {e}")
+            return False
     
     def accept_terms_of_service(self, discord_uid: int) -> bool:
         """Mark player as having accepted terms of service."""
@@ -799,32 +779,30 @@ class DatabaseWriter:
             True if the update was successful, False otherwise.
         """
         try:
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                
-                # First, determine if the player is player_1 or player_2
-                cursor.execute("SELECT player_1_discord_uid FROM matches_1v1 WHERE id = ?", (match_id,))
-                result = cursor.fetchone()
-                
-                if result is None:
-                    return False
-                
-                if result[0] == player_discord_uid:
-                    # Player is player_1
-                    cursor.execute(
-                        "UPDATE matches_1v1 SET player_1_replay_path = ?, player_1_replay_time = ? WHERE id = ?",
-                        (replay_path, replay_time, match_id)
-                    )
-                else:
-                    # Player is player_2
-                    cursor.execute(
-                        "UPDATE matches_1v1 SET player_2_replay_path = ?, player_2_replay_time = ? WHERE id = ?",
-                        (replay_path, replay_time, match_id)
-                    )
-                
-                conn.commit()
-                return True
-        except sqlite3.Error as e:
+            # First, determine if the player is player_1 or player_2
+            result = self.adapter.execute_query(
+                "SELECT player_1_discord_uid FROM matches_1v1 WHERE id = :match_id",
+                {"match_id": match_id}
+            )
+            
+            if not result:
+                return False
+            
+            if result[0]["player_1_discord_uid"] == player_discord_uid:
+                # Player is player_1
+                self.adapter.execute_write(
+                    "UPDATE matches_1v1 SET player_1_replay_path = :replay_path, player_1_replay_time = :replay_time WHERE id = :match_id",
+                    {"replay_path": replay_path, "replay_time": replay_time, "match_id": match_id}
+                )
+            else:
+                # Player is player_2
+                self.adapter.execute_write(
+                    "UPDATE matches_1v1 SET player_2_replay_path = :replay_path, player_2_replay_time = :replay_time WHERE id = :match_id",
+                    {"replay_path": replay_path, "replay_time": replay_time, "match_id": match_id}
+                )
+            
+            return True
+        except Exception as e:
             print(f"Database error in update_match_replay_1v1: {e}")
             return False
     
