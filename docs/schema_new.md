@@ -37,6 +37,14 @@ CREATE TABLE player_action_logs (
     changed_by              TEXT DEFAULT 'player'                     -- options include "player", "admin", "system"
 )
 
+CREATE TABLE command_calls (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_uid             INTEGER NOT NULL,
+    player_name             TEXT NOT NULL,
+    command                 TEXT NOT NULL,
+    called_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+
 CREATE TABLE replays (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
     replay_path             TEXT NOT NULL,

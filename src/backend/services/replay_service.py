@@ -15,6 +15,11 @@ from src.bot.utils.discord_utils import get_current_unix_timestamp
 import io
 
 
+class ReplayParseError(Exception):
+    """Custom exception for replay parsing errors."""
+    pass
+
+
 @dataclass
 class ReplayRaw:
     """Raw replay data."""
@@ -85,7 +90,7 @@ class ReplayService:
             )
         except Exception as e:
             print(f"Error processing replay: {e}")
-            return None
+            raise ReplayParseError(e)
 
     def store_upload(self, match_id: int, uploader_id: int, replay_bytes: bytes) -> dict:
         """Saves a replay file and updates the database."""
@@ -94,8 +99,6 @@ class ReplayService:
             
             # Parse the replay to get the data for the replays table
             parsed_replay = self.parse_replay(replay_bytes, is_bytes=True)
-            if not parsed_replay:
-                raise Exception("Failed to parse replay.")
 
             db_writer = DatabaseWriter()
 
@@ -115,11 +118,15 @@ class ReplayService:
 
             return {
                 "success": success,
-                "unix_epoch": get_current_unix_timestamp() if success else None
+                "unix_epoch": get_current_unix_timestamp() if success else None,
+                "replay_data": asdict(parsed_replay) if parsed_replay else None
             }
+        except ReplayParseError as e:
+            print(f"Replay parse error during store_upload: {e}")
+            return {"success": False, "error": str(e)}
         except Exception as e:
             print(f"Error storing replay upload: {e}")
-            return {"success": False, "unix_epoch": None}
+            return {"success": False, "error": "An unexpected error occurred while storing the replay."}
 
     def _calculate_replay_hash(self, replay_bytes: bytes) -> str:
         """Calculates an 80-bit blake2b hash of the replay."""
@@ -226,9 +233,9 @@ class ReplayService:
                 if event.name == 'PlayerLeaveEvent':
                     # Ensure player is not an observer
                     if event.player and not event.player.is_observer:
-                        return (event.second / 1.4)     # Faster is 1.4 times Normal
+                        return int(round(event.second / 1.4))     # Faster is 1.4 times Normal
         else:
-            return int(replay.game_length.seconds)
+            return int(round(replay.game_length.seconds))
 
 if __name__ == "__main__":
     replay_service = ReplayService()

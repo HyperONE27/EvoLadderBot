@@ -1,6 +1,136 @@
 {
     "maps": {
-        "season_0": [
+        "season_alpha": [
+            {
+                "name": "Incorporeal LE",
+                "short_name": "Incorporeal",
+                "am_link": "battlenet:://starcraft/map/1/366697",
+                "eu_link": "battlenet:://starcraft/map/2/258344",
+                "as_link": "battlenet:://starcraft/map/3/183708"
+            },
+            {
+                "name": "Last Fantasy LE",
+                "short_name": "Last Fantasy",
+                "am_link": "battlenet:://starcraft/map/1/366698",
+                "eu_link": "battlenet:://starcraft/map/2/258345",
+                "as_link": "battlenet:://starcraft/map/3/183709"
+            },
+            {
+                "name": "Ley Lines",
+                "short_name": "Ley Lines",
+                "am_link": "battlenet:://starcraft/map/1/362987",
+                "eu_link": "battlenet:://starcraft/map/2/255691",
+                "as_link": "battlenet:://starcraft/map/3/177856"
+            },
+            {
+                "name": "Magannatha LE",
+                "short_name": "Magannatha",
+                "am_link": "battlenet:://starcraft/map/1/366699",
+                "eu_link": "battlenet:://starcraft/map/2/258346",
+                "as_link": "battlenet:://starcraft/map/3/183710"
+            },
+            {
+                "name": "Persephone LE",
+                "short_name": "Persephone",
+                "am_link": "battlenet:://starcraft/map/1/366700",
+                "eu_link": "battlenet:://starcraft/map/2/258347",
+                "as_link": "battlenet:://starcraft/map/3/183711"
+            },
+            {
+                "name": "Pylon LE",
+                "short_name": "Pylon",
+                "am_link": "battlenet:://starcraft/map/1/366701",
+                "eu_link": "battlenet:://starcraft/map/2/258348",
+                "as_link": "battlenet:://starcraft/map/3/183712"
+            },
+            {
+                "name": "Tokamak LE",
+                "short_name": "Tokamak",
+                "am_link": "battlenet:://starcraft/map/1/366702",
+                "eu_link": "battlenet:://starcraft/map/2/258349",
+                "as_link": "battlenet:://starcraft/map/3/183713"
+            },
+            {
+                "name": "Torches LE",
+                "short_name": "Torches",
+                "am_link": "battlenet:://starcraft/map/1/366703",
+                "eu_link": "battlenet:://starcraft/map/2/258350",
+                "as_link": "battlenet:://starcraft/map/3/183714"
+            },
+            {
+                "name": "Ultralove",
+                "short_name": "Ultralove",
+                "am_link": "battlenet:://starcraft/map/1/362995",
+                "eu_link": "battlenet:://starcraft/map/2/255699",
+                "as_link": "battlenet:://starcraft/map/3/177864"
+            }
+        ],
+        "season_beta": [
+            {
+                "name": "",
+                "short_name": "",
+                "am_link": "",
+                "eu_link": "",
+                "as_link": ""
+            },
+            {
+                "name": "",
+                "short_name": "",
+                "am_link": "",
+                "eu_link": "",
+                "as_link": ""
+            },
+            {
+                "name": "",
+                "short_name": "",
+                "am_link": "",
+                "eu_link": "",
+                "as_link": ""
+            },
+            {
+                "name": "",
+                "short_name": "",
+                "am_link": "",
+                "eu_link": "",
+                "as_link": ""
+            },
+            {
+                "name": "",
+                "short_name": "",
+                "am_link": "",
+                "eu_link": "",
+                "as_link": ""
+            },
+            {
+                "name": "",
+                "short_name": "",
+                "am_link": "",
+                "eu_link": "",
+                "as_link": ""
+            },
+            {
+                "name": "",
+                "short_name": "",
+                "am_link": "",
+                "eu_link": "",
+                "as_link": ""
+            },
+            {
+                "name": "",
+                "short_name": "",
+                "am_link": "",
+                "eu_link": "",
+                "as_link": ""
+            },
+            {
+                "name": "",
+                "short_name": "",
+                "am_link": "",
+                "eu_link": "",
+                "as_link": ""
+            }
+        ],
+        "season_1": [
             {
                 "name": "[SC:Evo] Death Valley (데스밸리)",
                 "short_name": "Death Valley",
@@ -72,71 +202,6 @@
                 "am_link": "battlenet:://starcraft/map/1/367512",
                 "eu_link": "battlenet:://starcraft/map/2/258908",
                 "as_link": "battlenet:://starcraft/map/3/184704"
-            }
-        ],
-        "season_1": [
-            {
-                "name": "",
-                "short_name": "",
-                "am_link": "",
-                "eu_link": "",
-                "as_link": ""
-            },
-            {
-                "name": "",
-                "short_name": "",
-                "am_link": "",
-                "eu_link": "",
-                "as_link": ""
-            },
-            {
-                "name": "",
-                "short_name": "",
-                "am_link": "",
-                "eu_link": "",
-                "as_link": ""
-            },
-            {
-                "name": "",
-                "short_name": "",
-                "am_link": "",
-                "eu_link": "",
-                "as_link": ""
-            },
-            {
-                "name": "",
-                "short_name": "",
-                "am_link": "",
-                "eu_link": "",
-                "as_link": ""
-            },
-            {
-                "name": "",
-                "short_name": "",
-                "am_link": "",
-                "eu_link": "",
-                "as_link": ""
-            },
-            {
-                "name": "",
-                "short_name": "",
-                "am_link": "",
-                "eu_link": "",
-                "as_link": ""
-            },
-            {
-                "name": "",
-                "short_name": "",
-                "am_link": "",
-                "eu_link": "",
-                "as_link": ""
-            },
-            {
-                "name": "",
-                "short_name": "",
-                "am_link": "",
-                "eu_link": "",
-                "as_link": ""
             }
         ]
     }

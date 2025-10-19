@@ -23,6 +23,7 @@ import logging
 import time
 from src.backend.services.match_completion_service import match_completion_service
 from contextlib import suppress
+from src.bot.interface.components.replay_details_embed import ReplayDetailsEmbed
 
 
 class QueueSearchingViewManager:
@@ -1163,13 +1164,13 @@ class MatchFoundView(discord.ui.View):
 
         abort_embed = discord.Embed(
             title=f"🛑 Match #{self.match_result.match_id} Aborted",
-            description=f"**{p1_flag} {p1_race_emote} {p1_name} ({p1_current_mmr})** vs **{p2_flag} {p2_race_emote} {p2_name} ({p2_current_mmr})**",
+            description=f"**{p1_flag} {p1_race_emote} {p1_name} ({int(p1_current_mmr)})** vs **{p2_flag} {p2_race_emote} {p2_name} ({int(p2_current_mmr)})**",
             color=discord.Color.red()
         )
 
         abort_embed.add_field(
             name="**MMR Changes:**",
-            value=f"- {p1_name}: `+0 ({p1_current_mmr})`\n- {p2_name}: `+0 ({p2_current_mmr})`",
+            value=f"- {p1_name}: `+0 ({int(p1_current_mmr)})`\n- {p2_name}: `+0 ({int(p2_current_mmr)})`",
             inline=False
         )
         
@@ -1605,6 +1606,12 @@ async def on_message(message: discord.Message):
             match_view.match_result.replay_uploaded = "Yes"
             match_view.match_result.replay_upload_time = unix_epoch
             
+            # Send replay details embed as a new message
+            replay_data = result.get("replay_data")
+            if replay_data:
+                replay_embed = ReplayDetailsEmbed.get_success_embed(replay_data)
+                await message.channel.send(embed=replay_embed)
+            
             # Update all views for the match
             match_views = await match_found_view_manager.get_views_by_match_id(match_view.match_result.match_id)
             for _, view in match_views:
@@ -1619,7 +1626,23 @@ async def on_message(message: discord.Message):
             
             print(f"✅ Replay file stored for match {match_view.match_result.match_id} (player: {message.author.id})")
         else:
-            print(f"❌ Failed to store replay for match {match_view.match_result.match_id}")
+            # Handle failure, including parsing errors
+            error_message = result.get("error")
+            if error_message:
+                # Send the red error embed
+                error_embed = ReplayDetailsEmbed.get_error_embed(error_message)
+                await message.channel.send(embed=error_embed)
+
+                # Update the match view to show "Replay Invalid"
+                match_view.match_result.replay_uploaded = "Replay Invalid"
+                match_view._update_dropdown_states()
+                if match_view.last_interaction:
+                    with suppress(discord.NotFound, discord.InteractionResponded):
+                        await match_view.last_interaction.edit_original_response(
+                            embed=match_view.get_embed(), view=match_view
+                        )
+            
+            print(f"❌ Failed to store replay for match {match_view.match_result.match_id}: {error_message}")
 
     except Exception as e:
         print(f"❌ Error processing replay file: {e}")

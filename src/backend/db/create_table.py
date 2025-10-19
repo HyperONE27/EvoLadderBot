@@ -30,6 +30,7 @@ def create_database(db_path: str = "evoladder.db") -> None:
     cursor.execute("DROP TABLE IF EXISTS player_action_logs")
     cursor.execute("DROP TABLE IF EXISTS players")
     cursor.execute("DROP TABLE IF EXISTS replays")
+    cursor.execute("DROP TABLE IF EXISTS command_calls")
     
     # Create players table
     cursor.execute("""
@@ -67,6 +68,16 @@ def create_database(db_path: str = "evoladder.db") -> None:
         )
     """)
     
+    cursor.execute("""
+        CREATE TABLE command_calls (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            discord_uid             INTEGER NOT NULL,
+            player_name             TEXT NOT NULL,
+            command                 TEXT NOT NULL,
+            called_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # Create mmrs_1v1 table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS mmrs_1v1 (

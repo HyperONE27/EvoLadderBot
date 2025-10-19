@@ -1021,6 +1021,27 @@ class DatabaseWriter:
                 conn.rollback()
                 return False
 
+    def insert_command_call(self, discord_uid: int, player_name: str, command: str) -> bool:
+        """
+        Logs a command call to the command_calls table.
+        """
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO command_calls (discord_uid, player_name, command)
+                    VALUES (:discord_uid, :player_name, :command)
+                """, {
+                    "discord_uid": discord_uid,
+                    "player_name": player_name,
+                    "command": command
+                })
+                conn.commit()
+                return True
+        except sqlite3.Error as e:
+            print(f"Database error in insert_command_call: {e}")
+            return False
+
     def insert_replay(self, replay_data: Dict[str, Any]) -> bool:
         """
         Insert a new replay record into the replays table.

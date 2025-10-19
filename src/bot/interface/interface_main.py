@@ -14,10 +14,30 @@ from src.bot.interface.commands.setcountry_command import register_setcountry_co
 from src.bot.interface.commands.setup_command import register_setup_command
 from src.bot.interface.commands.termsofservice_command import register_termsofservice_command
 from src.backend.services.matchmaking_service import matchmaker
+from src.backend.db.db_reader_writer import DatabaseWriter
 
 
 intents = discord.Intents.default()
-bot = commands.Bot(command_prefix="!", intents=intents)
+intents.messages = True
+intents.message_content = True
+
+
+class EvoLadderBot(commands.Bot):
+    async def on_interaction(self, interaction: discord.Interaction):
+        """A global listener for all interactions to log command calls."""
+        if interaction.type == discord.InteractionType.application_command:
+            command_name = interaction.command.name if interaction.command else "unknown"
+            user = interaction.user
+            # We instantiate the writer here to ensure it's fresh for each event
+            db_writer = DatabaseWriter()
+            db_writer.insert_command_call(
+                discord_uid=user.id,
+                player_name=user.name,
+                command=command_name
+            )
+        
+bot = EvoLadderBot(command_prefix="!", intents=intents)
+
 
 @bot.event
 async def on_ready():
