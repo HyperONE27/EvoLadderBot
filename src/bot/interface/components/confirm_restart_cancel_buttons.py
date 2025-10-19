@@ -36,21 +36,25 @@ class RestartButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         if isinstance(self.reset_target, discord.ui.View):
+            # Defer to prevent timeout
+            await interaction.response.defer()
+            
             # Check if the view has a get_embed method to get the proper embed
             if hasattr(self.reset_target, 'get_embed'):
                 embed = self.reset_target.get_embed()
-                await interaction.response.edit_message(
+                await interaction.edit_original_response(
                     content="",
                     embed=embed,
                     view=self.reset_target
                 )
             else:
-                await interaction.response.edit_message(
+                await interaction.edit_original_response(
                     content="",
                     embed=None,
                     view=self.reset_target
                 )
         elif isinstance(self.reset_target, discord.ui.Modal):
+            # Modals must be sent immediately, no deferral
             await interaction.response.send_modal(self.reset_target)
         else:
             await send_ephemeral_response(
@@ -75,10 +79,13 @@ class CancelButton(discord.ui.Button):
         self.show_fields = show_fields
 
     async def callback(self, interaction: discord.Interaction):
+        # Defer to prevent timeout
+        await interaction.response.defer()
+        
         # Always use the cancel embed for consistency
         cancel_view = create_cancel_embed()
         
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content="",
             embed=cancel_view.embed,
             view=cancel_view
