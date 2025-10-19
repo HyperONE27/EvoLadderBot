@@ -325,8 +325,9 @@ class ReplayService:
             if parsed_dict.get("error"):
                 return {"success": False, "error": parsed_dict["error"]}
             
-            # Save the replay file
-            replay_path = self.save_replay(replay_bytes)
+            # Save the replay file (uploads to Supabase Storage, falls back to local)
+            # Pass match_id and uploader_id for Supabase storage path
+            replay_url = self.save_replay(replay_bytes, match_id=match_id, player_discord_uid=uploader_id)
             
             db_writer = DatabaseWriter()
 
@@ -344,18 +345,18 @@ class ReplayService:
                 "observers": json.dumps(parsed_dict["observers"]),  # Convert list to JSON
                 "map_name": parsed_dict["map_name"],
                 "duration": parsed_dict["duration"],
-                "replay_path": replay_path
+                "replay_path": replay_url  # Store URL (Supabase) or path (local fallback)
             }
             
             # Insert into replays table
             db_writer.insert_replay(replay_data)
 
-            # Update match record
+            # Update match record with replay URL/path
             sql_timestamp = get_timestamp()
             success = db_writer.update_match_replay_1v1(
                 match_id,
                 uploader_id,
-                replay_path,
+                replay_url,  # Store URL (Supabase) or path (local fallback)
                 sql_timestamp
             )
 
@@ -380,18 +381,52 @@ class ReplayService:
         timestamp = int(datetime.now(timezone.utc).timestamp())
         return f"{replay_hash}_{timestamp}.SC2Replay"
 
-    def save_replay(self, replay_bytes: bytes) -> str:
-        """Saves a replay file and returns its new path."""
+    def save_replay(self, replay_bytes: bytes, match_id: int = None, player_discord_uid: int = None) -> str:
+        """
+        Saves a replay file to Supabase Storage and returns its URL.
+        Falls back to local storage if Supabase upload fails.
+        
+        Args:
+            replay_bytes: The replay file bytes
+            match_id: Optional match ID for Supabase storage path
+            player_discord_uid: Optional player Discord UID for Supabase storage path
+            
+        Returns:
+            URL to replay file (Supabase URL if successful, local path as fallback)
+        """
         replay_hash = self._calculate_replay_hash(replay_bytes)
         filename = self._generate_filename(replay_hash)
+        
+        # Try Supabase Storage first if match_id and player_discord_uid are provided
+        if match_id is not None and player_discord_uid is not None:
+            try:
+                from src.backend.services.storage_service import storage_service
+                
+                print(f"[Replay] Uploading to Supabase Storage (match: {match_id}, player: {player_discord_uid})...")
+                public_url = storage_service.upload_replay(
+                    match_id=match_id,
+                    player_discord_uid=player_discord_uid,
+                    file_data=replay_bytes,
+                    filename=filename
+                )
+                
+                if public_url:
+                    print(f"[Replay] ✓ Upload successful: {public_url}")
+                    return public_url
+                else:
+                    print(f"[Replay] ✗ Supabase upload failed, falling back to local storage")
+                    
+            except Exception as e:
+                print(f"[Replay] ERROR during Supabase upload: {e}")
+                print(f"[Replay] Falling back to local storage")
+        
+        # Fallback: Save to local disk
         filepath = os.path.join(self.replay_dir, filename)
-
-        print(f"Renaming replay to: {filename}")
-        print(f"Saving replay to: {filepath}")
-
+        print(f"[Replay] Saving to local disk: {filepath}")
+        
         with open(filepath, "wb") as f:
             f.write(replay_bytes)
-
+        
         return filepath
 
     def _load_replay(self, replay_bytes: bytes):
