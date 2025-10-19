@@ -38,7 +38,7 @@
   - ⏰ Fix country setup descriptions for XX (nonrepresenting) / ZZ (other)
   - ✅ /setup persists pre-existing values as defaults (so you don't have to fill them all out again to change one thing)
   - ✅ nulling of alt names is properly recorded in action logs table
-  - ⏰ Add a /profile page to view one's own MMRs and settings
+  - ✅ Add a /profile page to view one's own MMRs and settings
 - Replays:
   - ✅ Replays are now redirected to storage instead of being stored directly in tables
   - ✅ Tables now store replay paths
