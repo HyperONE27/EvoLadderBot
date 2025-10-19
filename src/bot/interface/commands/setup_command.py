@@ -8,7 +8,7 @@ from src.backend.services.regions_service import RegionsService
 from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from src.backend.services.user_info_service import UserInfoService, get_user_info, log_user_action
 from src.backend.services.validation_service import ValidationService
-from src.bot.utils.discord_utils import send_ephemeral_response
+from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote
 from src.bot.interface.components.confirm_embed import ConfirmEmbedView
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
@@ -106,6 +106,17 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         self.add_item(self.alt_id_2)
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Capture current input values for restart functionality
+        current_input = {
+            'player_name': self.user_id.value,
+            'battletag': self.battle_tag.value,
+            'alt_player_name_1': self.alt_id_1.value.strip() if self.alt_id_1.value else '',
+            'alt_player_name_2': self.alt_id_2.value.strip() if self.alt_id_2.value else '',
+            # Preserve country/region from existing data if present
+            'country': self.existing_data.get('country', ''),
+            'region': self.existing_data.get('region', '')
+        }
+        
         # Validate user ID
         is_valid, error = validation_service.validate_user_id(self.user_id.value)
         if not is_valid:
@@ -117,7 +128,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
             await send_ephemeral_response(
                 interaction,
                 embed=error_embed,
-                view=ErrorView(error, self.existing_data)
+                view=ErrorView(error, current_input)
             )
             return
 
@@ -132,7 +143,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
             await send_ephemeral_response(
                 interaction,
                 embed=error_embed,
-                view=ErrorView(error, self.existing_data)
+                view=ErrorView(error, current_input)
             )
             return
 
@@ -151,7 +162,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
                 await send_ephemeral_response(
                     interaction,
                     embed=error_embed,
-                    view=ErrorView(error, self.existing_data)
+                    view=ErrorView(error, current_input)
                 )
                 return
             alt_ids_list.append(self.alt_id_1.value.strip())
@@ -168,7 +179,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
                 await send_ephemeral_response(
                     interaction,
                     embed=error_embed,
-                    view=ErrorView(error, self.existing_data)
+                    view=ErrorView(error, current_input)
                 )
                 return
             alt_ids_list.append(self.alt_id_2.value.strip())
@@ -184,7 +195,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
             await send_ephemeral_response(
                 interaction,
                 embed=error_embed,
-                view=ErrorView("Duplicate IDs detected", self.existing_data)
+                view=ErrorView("Duplicate IDs detected", current_input)
             )
             return
 
@@ -249,7 +260,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         # Create initial blue embed
         initial_embed = discord.Embed(
             title="⚙️ Setup - Country & Region Selection",
-            description="Please select your country and region.\n\n(Due to Discord UI limitations, we list only 49 countries here. If your country is not listed, please select \"Other\" at the bottom of Page 2, then set it up later with `/setcountry`.)",
+            description=f"Please select your country and region.\n\n**Due to Discord UI limitations, we list only 49 countries here.**\n- If your country is not listed, please select \"Other\" at the bottom of Page 2, then select your exact country later with `/setcountry`.\n- If you are not a citizen of, or are choosing not to represent, any particular nation, please select \"Other\" at the bottom of Page 2, then select \"Non-representing\" as your country later with `/setcountry`.",
             color=discord.Color.blue()
         )
         
@@ -285,8 +296,9 @@ class CountryPage1Select(discord.ui.Select):
         page_countries = countries[:25]
         options = [
             discord.SelectOption(
-                label=country['name'], 
+                label=country['name'],
                 value=country['code'],
+                emoji=get_flag_emote(country['code']),
                 default=(country['code'] == selected_country)
             )
             for country in page_countries
@@ -321,8 +333,9 @@ class CountryPage2Select(discord.ui.Select):
         page_countries = countries[25:50] if len(countries) > 25 else []
         options = [
             discord.SelectOption(
-                label=country['name'], 
+                label=country['name'],
                 value=country['code'],
+                emoji=get_flag_emote(country['code']),
                 default=(country['code'] == selected_country)
             )
             for country in page_countries
@@ -407,10 +420,20 @@ class UnifiedSetupView(discord.ui.View):
         self.add_item(self.country_page2_select)
         self.add_item(self.region_select)
         
+        # Prepare existing data for restart button
+        existing_data = {
+            'player_name': self.user_id,
+            'battletag': self.battle_tag,
+            'alt_player_name_1': self.alt_ids[0] if len(self.alt_ids) > 0 else '',
+            'alt_player_name_2': self.alt_ids[1] if len(self.alt_ids) > 1 else '',
+            'country': self.selected_country['code'] if self.selected_country else '',
+            'region': self.selected_region['code'] if self.selected_region else ''
+        }
+        
         # Add action buttons using the unified approach
         buttons = ConfirmRestartCancelButtons.create_buttons(
             confirm_callback=self.confirm_callback,
-            reset_target=SetupModal(),
+            reset_target=SetupModal(existing_data=existing_data),
             confirm_label="Confirm",
             restart_label="Restart", 
             cancel_label="Cancel",
@@ -451,25 +474,25 @@ class UnifiedSetupView(discord.ui.View):
         
         if self.selected_country and self.selected_region:
             embed.description = (
-                "**Selected:**\n"
-                f"- Country of citizenship/nationality: `{self.selected_country['name']}`\n"
-                f"- Region of residency: `{self.selected_region['name']}`\n\n"
+                f"**Selected:**\n"
+                f"- Country of citizenship/nationality: {get_flag_emote(self.selected_country['code'])} {self.selected_country['name']}\n"
+                f"- Region of residency: {self.selected_region['name']}\n\n"
                 "Click Confirm to proceed."
             )
         elif self.selected_country:
             embed.description = (
-                "**Selected:**\n"
-                f"- Country of citizenship/nationality: `{self.selected_country['name']}`\n\n"
+                f"**Selected:**\n"
+                f"- Country of citizenship/nationality: {get_flag_emote(self.selected_country['code'])} {self.selected_country['name']}\n\n"
                 "Please select your region of residency."
             )
         elif self.selected_region:
             embed.description = (
-                "**Selected:**\n"
-                f"- Region of residency: `{self.selected_region['name']}`\n\n"
-                "Please select your country of citizenship/nationality.\n\n(Due to Discord UI limitations, we list only 49 countries here. If your country is not listed, please select \"Other\" at the bottom of Page 2, then set it up later with `/setcountry`.)"
+                f"**Selected:**\n"
+                f"- Region of residency: {self.selected_region['name']}\n\n"
+                f"Please select your country and region.\n\n**Due to Discord UI limitations, we list only 49 countries here.**\n- If your country is not listed, please select \"Other\" at the bottom of Page 2, then select your exact country later with `/setcountry`.\n- If you are not a citizen of, or are choosing not to represent, any particular nation, please select \"Other\" at the bottom of Page 2, then select \"Non-representing\" as your country later with `/setcountry`."
             )
         else:
-            embed.description = "Please select your country and region.\n\n(Due to Discord UI limitations, we list only 49 countries here. If your country is not listed, please select \"Other\" at the bottom of Page 2, then set it up later with `/setcountry`.)"
+            embed.description =f"Please select your country and region.\n\n**Due to Discord UI limitations, we list only 49 countries here.**\n- If your country is not listed, please select \"Other\" at the bottom of Page 2, then select your exact country later with `/setcountry`.\n- If you are not a citizen of, or are choosing not to represent, any particular nation, please select \"Other\" at the bottom of Page 2, then select \"Non-representing\" as your country later with `/setcountry`."
         
         return embed
 
@@ -543,6 +566,16 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
     else:
         fields.append((":id: **Alternative IDs**", "None"))
     
+    # Prepare existing data for restart button
+    existing_data = {
+        'player_name': user_id,
+        'battletag': battle_tag,
+        'alt_player_name_1': alt_ids[0] if len(alt_ids) > 0 else '',
+        'alt_player_name_2': alt_ids[1] if len(alt_ids) > 1 else '',
+        'country': country['code'],
+        'region': region['code']
+    }
+    
     # Define confirmation callback
     async def confirm_callback(interaction: discord.Interaction):
         user_info = get_user_info(interaction)
@@ -598,5 +631,5 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
         fields=fields,
         mode="preview",
         confirm_callback=confirm_callback,
-        reset_target=SetupModal()
+        reset_target=SetupModal(existing_data=existing_data)
     )

@@ -5,7 +5,7 @@
 - Matchmaking:
   - ⏰ Fill out the full cross-table for 16 regions
   - ⏰ Get the matchmaker to correctly assign server based on the cross-table
-  - ✅ Add more information/clean up existing information on the match found embed
+  - ✅ Add more information/clean up existing information on the match found embed
   - ✅ Matchmaker now assigns matches in waves occurring every 45 seconds, up from 5, trading time for fairer matches
   - ✅ Expanding MMR window for matchmaking scales dynamically with active player count and proportion of active player count 
   - ✅ 99 race conditions on the wall, 99 race conditions, take one down, pass it around, 157 race conditions on the wall...
@@ -16,29 +16,31 @@
     - Low MMR players just want to not fight the game
     - Tune the matchmaker to prefer low ping at lower MMR at expense of MMR fairness? Default to strict MMR fairness higher up??? Is this fair?
 - Match reporting:
-  - ✅ Make the match reporting pipeline more robust
-  - ✅ Fix race conditions resulting in the first player to report match result not getting any updates
-  - ✅ Add replay uploading and storage to the database (no automatic parsing for now)
-  - ✅ Fix some lag associated with both players receiving confirmation of match results
-  - ✅ Fix the main embed being overwritten with an error embed when players report disagreeing match results
+  - ✅ Make the match reporting pipeline more robust
+  - ✅ Fix race conditions resulting in the first player to report match result not getting any updates
+  - ✅ Add replay uploading and storage to the database (no automatic parsing for now)
+  - ✅ Fix some lag associated with both players receiving confirmation of match results
+  - ✅ Fix the main embed being overwritten with an error embed when players report disagreeing match results
   - ✅ Add an option to abort 3 matches a month. Aborting matches causes no MMR change.
     - ✅ Exceeding this count and throwing games/smurfing will result in bans.
   - ✅ Fix the display of remaining abortions to players
   - ✅ Match completion on backend is properly abstracted away from frontend
   - ✅ Consolidated management of MatchFoundView locks into a single class
 - MMR:
-  - ✅ MMR is now ELO-like rather than classic ELO spec-compliant (divisor = 500 rather than 400; 100-point gap predicts a 62-38 win chance instead of 64-36)
-  - ✅ MMR is now integer-based rather than float-based
-  - ✅ MMR curve now more closely resembles that of Brood War
+  - ✅ MMR is now ELO-like rather than classic ELO spec-compliant (divisor = 500 rather than 400; 100-point gap predicts a 62-38 win chance instead of 64-36)
+  - ✅ MMR is now integer-based rather than float-based
+  - ✅ MMR curve now more closely resembles that of Brood War
 - Leaderboards:
   - ⏰ Add dynamic rank calculations (S/A/B/C/D/E/F) to leaderboard and player profiles
   - ✅ Edit and add rank emotes
 - Account config:
-  - ⏰ Update Terms of Service for closed alpha/open beta stage
-  - ⏰ Fix country setup descriptions for XX (nonrepresenting) / ZZ (other)
+  - ⏰ Update Terms of Service for closed alpha/open beta stage
+  - ⏰ Fix country setup descriptions for XX (nonrepresenting) / ZZ (other)
   - ✅ /setup persists pre-existing values as defaults (so you don't have to fill them all out again to change one thing)
   - ✅ nulling of alt names is properly recorded in action logs table
   - ✅ Add a /profile page to view one's own MMRs and settings
+  - ✅ Add flag emojis to country dropdowns in /setup (including XX and ZZ custom emotes)
+  - ✅ Add flag emojis to /setcountry confirmation embeds
 - Replays:
   - ✅ Replays are now redirected to storage instead of being stored directly in tables
   - ✅ Tables now store replay paths
@@ -61,18 +63,25 @@
 
 ## PRE-BETA
 
-- Account config:
-  - ⏰ Add activation code verification
 - Admin stuff:
-  - ⏰ Add automatic logging/pinging of admins when a match disagreement arises
-    - ⏰ Send replay data to admins
-  - ⏰ Add an interface to allow admins to view conflicts in matches and resolve with 1 click
+  - ⏰ Add automatic logging/pinging of admins when a match disagreement arises
+    - ⏰ Send replay data to admins
+  - ⏰ Add an interface to allow admins to view conflicts in matches and resolve with 1 click
 - Command timeouts:
   - ⏰ Check that everyone lasts as long as it needs to
+- Gamemodes:
+  - ⏰ Add support for no-party 2v2s
+  - ⏰ Add support for forming parties
+  - ⏰ Add support for party-okay 2v2s
 - Localization:
-  - ⏰ Add support for koKR and other languages
+  - ⏰ Add support for koKR and other languages
   - ⏰ Replace 1 million hardcoded formatted strings...sobbing
 - Scaling:
   - ⏰ Implement Supabase database functions to offload leaderboard and personal stats chunking
 
 ## PRE-RELEASE
+
+- Account config:
+  - ⏰ Create Paddle payment page
+  - ⏰ Wire up Paddle 
+  - ⏰ Add columns to `players` table for managing subscription status

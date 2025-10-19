@@ -4,7 +4,7 @@ import os
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from src.backend.services.user_info_service import UserInfoService, get_user_info, log_user_action
-from src.bot.utils.discord_utils import send_ephemeral_response
+from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote
 from src.bot.interface.components.confirm_embed import ConfirmEmbedView
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
@@ -91,13 +91,16 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
         # Log the action using utility function
         log_user_action(user_info, "set country", f"to {country['name']} ({country_code})")
         
-        # Show post-confirmation view
+        # Show post-confirmation view with flag emoji
+        flag_emoji = get_flag_emote(country_code)
         post_confirm_view = ConfirmEmbedView(
             title="Country Updated",
-            description=f"Your country has been successfully set to **{country['name']}** ({country_code})",
-            fields=[
-                (":map: **Selected Country**", f"{country['name']} ({country_code})")
-            ],
+            description=(
+                f"Your country has been successfully updated.\n\n"
+                f":map: **Selected Country**\n"
+                f"{flag_emoji} {country['name']} `({country_code})`"
+            ),
+            fields=[],
             mode="post_confirmation"
         )
         await interaction.response.edit_message(embed=post_confirm_view.embed, view=post_confirm_view)
@@ -121,7 +124,8 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
             self.add_item(ConfirmButton(confirm_callback, "Confirm"))
             self.add_item(CancelButton(CountryCancelView(), "Cancel"))
     
-    # Create the embed
+    # Create the embed with flag emoji
+    flag_emoji = get_flag_emote(country_code)
     embed = discord.Embed(
         title="🔍 Preview Country Selection",
         description="Please review your country selection before confirming:",
@@ -129,7 +133,7 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
     )
     embed.add_field(
         name=":map: **Country of Citizenship/Nationality**",
-        value=f"{country['name']}",
+        value=f"{flag_emoji} {country['name']} `({country_code})`",
         inline=False
     )
     
