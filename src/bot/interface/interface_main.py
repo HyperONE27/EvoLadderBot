@@ -2,6 +2,7 @@ import asyncio
 import discord
 from discord.ext import commands
 from concurrent.futures import ProcessPoolExecutor
+import sys
 
 from src.bot.config import EVOLADDERBOT_TOKEN, WORKER_PROCESSES
 from src.bot.interface.commands.activate_command import register_activate_command
@@ -13,6 +14,7 @@ from src.bot.interface.commands.setup_command import register_setup_command
 from src.bot.interface.commands.termsofservice_command import register_termsofservice_command
 from src.backend.services.matchmaking_service import matchmaker
 from src.backend.db.db_reader_writer import DatabaseWriter
+from src.backend.db.test_connection_startup import test_database_connection
 
 
 intents = discord.Intents.default()
@@ -66,6 +68,14 @@ def register_commands(bot: commands.Bot):
     register_termsofservice_command(bot.tree)
 
 if __name__ == "__main__":
+    # Test database connection BEFORE starting the bot
+    success, message = test_database_connection()
+    if not success:
+        print(f"\n[FATAL] Database connection test failed: {message}")
+        print("[FATAL] Bot cannot start without a working database connection.")
+        print("[FATAL] Please fix the database configuration and try again.\n")
+        sys.exit(1)
+    
     # Create the process pool for CPU-bound tasks (replay parsing)
     process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
     
