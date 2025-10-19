@@ -145,11 +145,17 @@ async def queue_command(interaction: discord.Interaction):
         await send_ephemeral_response(interaction, embed=error_embed)
         return
 
+    # A channel can only have one active match view
+    is_in_match_view = any(
+        v.match_result.player_1_discord_id == interaction.user.id or v.match_result.player_2_discord_id == interaction.user.id
+        for v in channel_to_match_view_map.values()
+    )
+
     # Prevent multiple queue attempts or queuing while a match is active
-    if await queue_searching_view_manager.has_view(interaction.user.id) or interaction.user.id in match_results:
+    if await queue_searching_view_manager.has_view(interaction.user.id) or is_in_match_view:
         error = ErrorEmbedException(
             title="Queueing Not Allowed",
-            description="You cannot queue more than once, or while a match is active."
+            description="You are already in a queue or an active match."
         )
         error_view = create_error_view_from_exception(error)
         await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
@@ -260,7 +266,7 @@ class JoinQueueButton(discord.ui.Button):
         user_id = user_info["id"]
 
         # Prevent multiple queue attempts or queuing while a match is active
-        if await queue_searching_view_manager.has_view(user_id) or user_id in match_results:
+        if await queue_searching_view_manager.has_view(user_id) or interaction.user.id in match_results:
             error = ErrorEmbedException(
                 title="Queueing Not Allowed",
                 description="You cannot queue more than once, or while a match is active."

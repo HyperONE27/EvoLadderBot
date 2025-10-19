@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import json
+from src.bot import config
+
 from typing import Any, Dict, List, Optional
 
 from src.backend.services.base_config_service import BaseConfigService
 
 
 class MapsService(BaseConfigService):
-    """Service for managing map configuration data."""
+    """Service for map-related data."""
 
     def __init__(self, config_path: str = "data/misc/maps.json") -> None:
         super().__init__(config_path, code_field="short_name", name_field="name")
+        with open("data/misc/maps.json", "r", encoding="utf-8") as f:
+            self.maps_data = json.load(f)["maps"]
 
     # ------------------------------------------------------------------
     # Base overrides
@@ -37,8 +42,9 @@ class MapsService(BaseConfigService):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def get_maps(self) -> List[Dict[str, Any]]:
-        return list(self.get_data())
+    def get_maps(self) -> list:
+        """Get the list of maps for the current season."""
+        return self.maps_data.get(config.CURRENT_SEASON, [])
 
     def get_map_by_short_name(self, short_name: str) -> Optional[Dict[str, Any]]:
         return self.get_by_code(short_name)
@@ -46,14 +52,15 @@ class MapsService(BaseConfigService):
     def get_map_name(self, short_name: str) -> str:
         return self.get_name_by_code(short_name)
 
-    def get_map_short_names(self) -> List[str]:
-        return self.get_codes()
+    def get_map_short_names(self) -> list:
+        """Get the short names of all maps in the current season."""
+        return [map_data["short_name"] for map_data in self.get_maps()]
 
     def get_map_names(self) -> List[str]:
         return self.get_names()
 
-    def get_available_maps(self) -> List[str]:
-        """Get list of available map short names."""
+    def get_available_maps(self) -> list:
+        """Get the short names of all available maps in the current season."""
         return self.get_map_short_names()
 
     def get_map_author(self, short_name: str) -> Optional[str]:
