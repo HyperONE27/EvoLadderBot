@@ -69,23 +69,6 @@ def register_commands(bot: commands.Bot):
     register_termsofservice_command(bot.tree)
 
 if __name__ == "__main__":
-    # Initialize connection pool for PostgreSQL (if using PostgreSQL)
-    from src.backend.db.db_connection import is_postgresql, get_database_connection_string
-    
-    if is_postgresql():
-        print("[Startup] Initializing PostgreSQL connection pool...")
-        try:
-            from src.backend.db.connection_pool import initialize_pool
-            
-            connection_string = get_database_connection_string()
-            # Initialize pool with 2-10 connections
-            initialize_pool(connection_string, minconn=2, maxconn=10)
-            print("[Startup] Connection pool initialized successfully")
-        except Exception as e:
-            print(f"\n[FATAL] Failed to initialize connection pool: {e}")
-            print("[FATAL] Bot cannot start without connection pool.\n")
-            sys.exit(1)
-    
     # Test database connection BEFORE starting the bot
     success, message = test_database_connection()
     if not success:
@@ -121,10 +104,3 @@ if __name__ == "__main__":
         print("[INFO] Shutting down process pool...")
         bot.process_pool.shutdown(wait=True)
         print("[INFO] Process pool shutdown complete")
-        
-        # Close connection pool if using PostgreSQL
-        if is_postgresql():
-            print("[INFO] Closing connection pool...")
-            from src.backend.db.connection_pool import close_pool
-            close_pool()
-            print("[INFO] Connection pool closed")

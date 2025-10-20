@@ -71,11 +71,6 @@ class ConnectionPool:
         try:
             # Borrow connection from pool (reuses existing connection)
             conn = self._pool.getconn()
-            
-            # Reset any previous cursor factory settings
-            # The adapter will set its own cursor factory
-            conn.cursor_factory = None
-            
             yield conn
             conn.commit()
         except Exception:
