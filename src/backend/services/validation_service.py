@@ -8,12 +8,14 @@ from typing import Tuple, Optional, List
 class ValidationService:
     """Service for validating user input data."""
     
-    def validate_user_id(self, user_id: str) -> Tuple[bool, Optional[str]]:
+    def validate_user_id(self, user_id: str, allow_international: bool = False) -> Tuple[bool, Optional[str]]:
         """
-        Validate a user ID
+        Validate a user ID (main name or alt name).
         
         Args:
             user_id: The user ID to validate
+            allow_international: If True, allows international characters (Korean, Chinese, Cyrillic, etc.)
+                                If False, only allows English letters, numbers, underscores, and hyphens
             
         Returns:
             Tuple of (is_valid, error_message)
@@ -29,11 +31,21 @@ class ValidationService:
         if len(user_id) > 12:
             return False, "User ID cannot exceed 12 characters"
         
-        # Check for valid characters (alphanumeric and common gaming characters)
-        if not re.match(r'^[A-Za-z0-9_-]+$', user_id):
-            return False, "User ID can only contain letters, numbers, underscores, and hyphens"
+        # Check for valid characters
+        if allow_international:
+            # Allow international characters: letters from any language, numbers, underscores, hyphens
+            # \p{L} matches any Unicode letter (Korean, Chinese, Cyrillic, etc.)
+            # \p{N} matches any Unicode number
+            # Note: Python's re module doesn't support \p{L}, so we use a broader pattern
+            # This allows any character that is NOT a control character or special symbol
+            if not re.match(r'^[\w\u0080-\uFFFF_-]+$', user_id, re.UNICODE):
+                return False, "User ID contains invalid characters"
+        else:
+            # English-only: only allow ASCII letters, numbers, underscores, and hyphens
+            if not re.match(r'^[A-Za-z0-9_-]+$', user_id):
+                return False, "User ID can only contain English letters, numbers, underscores, and hyphens"
         
-        # Check for reserved words or inappropriate content
+        # Check for reserved words or inappropriate content (case-insensitive for English)
         reserved_words = ['admin', 'moderator', 'mod', 'bot', 'discord', 'null', 'undefined']
         if user_id.lower() in reserved_words:
             return False, "This user ID is reserved and cannot be used"
@@ -80,12 +92,13 @@ class ValidationService:
         
         return True, None
 
-    def validate_alt_ids(self, alt_ids: str) -> Tuple[bool, Optional[str], List[str]]:
+    def validate_alt_ids(self, alt_ids: str, allow_international: bool = True) -> Tuple[bool, Optional[str], List[str]]:
         """
-        Validate alternative IDs
+        Validate alternative IDs.
         
         Args:
             alt_ids: Comma-separated string of alternative IDs
+            allow_international: If True, allows international characters in alt IDs
             
         Returns:
             Tuple of (is_valid, error_message, parsed_ids)
@@ -107,9 +120,9 @@ class ValidationService:
         if len(parsed_ids) > 5:
             return False, "Maximum 5 alternative IDs allowed", []
         
-        # Validate each ID using the existing validate_user_id function
+        # Validate each ID with international character support
         for i, alt_id in enumerate(parsed_ids):
-            is_valid, error = self.validate_user_id(alt_id)
+            is_valid, error = self.validate_user_id(alt_id, allow_international=allow_international)
             if not is_valid:
                 return False, f"Alternative ID #{i+1}: {error}", []
         

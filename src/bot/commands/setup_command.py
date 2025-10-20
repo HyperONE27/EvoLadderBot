@@ -73,7 +73,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         # Create TextInput fields with existing data as defaults
         self.user_id = discord.ui.TextInput(
             label="User ID",
-            placeholder="Enter your user ID (3-12 characters)",
+            placeholder="Enter your user ID (English only, 3-12 characters)",
             default=self.existing_data.get('player_name', ''),
             min_length=3,
             max_length=12,
@@ -91,7 +91,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         
         self.alt_id_1 = discord.ui.TextInput(
             label="Alternative ID 1 (optional)",
-            placeholder="Enter your first alternative ID (3-12 characters)",
+            placeholder="Enter your first alternative ID (any language, 3-12 characters)",
             default=self.existing_data.get('alt_player_name_1', ''),
             min_length=3,
             max_length=12,
@@ -100,7 +100,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         
         self.alt_id_2 = discord.ui.TextInput(
             label="Alternative ID 2 (optional)",
-            placeholder="Enter your second alternative ID (3-12 characters)",
+            placeholder="Enter your second alternative ID (any language, 3-12 characters)",
             default=self.existing_data.get('alt_player_name_2', ''),
             min_length=3,
             max_length=12,
