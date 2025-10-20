@@ -2,17 +2,15 @@
 PostgreSQL database adapter implementation.
 """
 
-import psycopg2
-from psycopg2 import extras
 import re
-from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
+from contextlib import contextmanager
 
-from .base_adapter import BaseAdapter
-from src.backend.db.connection_pool import get_pool
+from src.backend.db.adapters.base_adapter import DatabaseAdapter
+from src.bot.config import DATABASE_URL
 
 
-class PostgreSQLAdapter(BaseAdapter):
+class PostgreSQLAdapter(DatabaseAdapter):
     """
     Database adapter for PostgreSQL.
     
@@ -20,16 +18,20 @@ class PostgreSQLAdapter(BaseAdapter):
     and result conversion.
     """
     
-    def __init__(self):
+    def __init__(self, connection_url: Optional[str] = None):
         """
         Initialize PostgreSQL adapter.
         
         Args:
             connection_url: PostgreSQL connection URL (defaults to config value)
         """
-        # The connection pool is managed by the connection_pool module.
-        # This adapter simply uses the pool.
-        pass
+        self.connection_url = connection_url or DATABASE_URL
+        
+        # Fix postgres:// scheme to postgresql://
+        if self.connection_url.startswith("postgres://"):
+            self.connection_url = self.connection_url.replace(
+                "postgres://", "postgresql://", 1
+            )
     
     def get_connection_string(self) -> str:
         """Get connection string for logging (with masked password)."""
@@ -38,19 +40,27 @@ class PostgreSQLAdapter(BaseAdapter):
     @contextmanager
     def get_connection(self):
         """
-        Gets a connection from the pool.
-
-        This method borrows a connection from the centrally managed pool and ensures
-        it is returned afterwards, even if an error occurs.
+        Get a PostgreSQL database connection.
+        
+        Yields:
+            psycopg2 connection with RealDictCursor
         """
-        pool = get_pool()
-        conn = None
+        import psycopg2
+        import psycopg2.extras
+        
+        conn = psycopg2.connect(
+            self.connection_url,
+            cursor_factory=psycopg2.extras.RealDictCursor
+        )
+        
         try:
-            conn = pool.getconn()
             yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         finally:
-            if conn:
-                pool.putconn(conn)
+            conn.close()
     
     def execute_query(
         self,
@@ -65,15 +75,12 @@ class PostgreSQLAdapter(BaseAdapter):
         converted_query = self.convert_query(query)
         
         with self.get_connection() as conn:
-            with conn.cursor(cursor_factory=extras.RealDictCursor) as cursor:
-                try:
-                    cursor.execute(self.convert_query(query), params or {})
-                    results = cursor.fetchall()
-                    return [dict(row) for row in results]
-                except psycopg2.Error as e:
-                    conn.rollback()
-                    print(f"Error executing query: {e}")
-                    raise
+            cursor = conn.cursor()
+            cursor.execute(converted_query, params)
+            rows = cursor.fetchall()
+            
+            # RealDictCursor returns RealDictRow objects, convert to plain dicts
+            return [dict(row) for row in rows]
     
     def execute_write(
         self,
@@ -87,22 +94,15 @@ class PostgreSQLAdapter(BaseAdapter):
         converted_query = self.convert_query(query)
         
         with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                try:
-                    cursor.execute(self.convert_query(query), params or {})
-                    rowcount = cursor.rowcount
-                    conn.commit()
-                    return rowcount
-                except psycopg2.Error as e:
-                    conn.rollback()
-                    print(f"Error executing write: {e}")
-                    raise
+            cursor = conn.cursor()
+            cursor.execute(converted_query, params)
+            return cursor.rowcount
     
     def execute_insert(
         self,
         query: str,
         params: Optional[Dict[str, Any]] = None
-    ) -> Optional[int]:
+    ) -> int:
         """Execute an INSERT query and return the new row's ID."""
         if params is None:
             params = {}
@@ -110,20 +110,19 @@ class PostgreSQLAdapter(BaseAdapter):
         converted_query = self.convert_query(query)
         
         # Add RETURNING id clause if not present
-        if "RETURNING id" not in query.upper():
-            query += " RETURNING id"
+        if "RETURNING" not in converted_query.upper():
+            converted_query = converted_query.rstrip(";") + " RETURNING id"
         
         with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                try:
-                    cursor.execute(self.convert_query(query), params or {})
-                    inserted_id = cursor.fetchone()[0] if cursor.rowcount > 0 else None
-                    conn.commit()
-                    return inserted_id
-                except psycopg2.Error as e:
-                    conn.rollback()
-                    print(f"Error executing insert: {e}")
-                    raise
+            cursor = conn.cursor()
+            cursor.execute(converted_query, params)
+            result = cursor.fetchone()
+            
+            if result and "id" in result:
+                return result["id"]
+            
+            # Fallback: if no id returned, return 0
+            return 0
     
     def convert_query(self, query: str) -> str:
         """
@@ -143,7 +142,7 @@ class PostgreSQLAdapter(BaseAdapter):
         """
         # Convert :name to %(name)s
         # Use regex to match :word_boundary
-        converted = re.sub(r':([a-zA-Z_][a-zA-Z0-9_]*)', r'%(\1)s', query)
+        converted = re.sub(r':(\w+)', r'%(\1)s', query)
         return converted
     
     def dict_from_row(self, row: Any) -> Dict[str, Any]:

@@ -1,12 +1,17 @@
 import discord
 from discord import app_commands
-from src.backend.services import command_guard_service, user_info_service, countries_service
-from src.backend.services.command_guard_service import CommandGuardError
+from src.backend.services.countries_service import CountriesService
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
+from src.backend.services.user_info_service import UserInfoService, get_user_info, log_user_action
 from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote
 from src.bot.interface.components.confirm_embed import ConfirmEmbedView
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
+
+countries_service = CountriesService()
+user_info_service = UserInfoService()
+guard_service = CommandGuardService()
 
 
 # API Call / Data Handling
@@ -29,10 +34,10 @@ async def country_autocomplete(
 
 
 async def setcountry_command(interaction: discord.Interaction, country_code: str):
-    """Handler for the /setcountry slash command"""
+    """Set or update your country"""
     try:
-        player = command_guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
-        command_guard_service.require_tos_accepted(player)
+        player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        guard_service.require_tos_accepted(player)
     except CommandGuardError as exc:
         error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
@@ -60,7 +65,8 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
             )
             return
     
-    user_info_service.set_country(interaction.user.id, country_code)
+    # Get user information using utility function
+    user_info = get_user_info(interaction)
     
     # Show preview with confirm/cancel options only
     async def confirm_callback(interaction: discord.Interaction):
@@ -68,7 +74,7 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
         await interaction.response.defer()
         
         # Update in backend with user ID
-        success = user_info_service.update_country(interaction.user.id, country_code)
+        success = user_info_service.update_country(user_info["id"], country_code)
         
         if not success:
             error_embed = discord.Embed(
@@ -83,7 +89,6 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
             return
         
         # Log the action using utility function
-        user_info = user_info_service.get_user_info(interaction.user.id)
         log_user_action(user_info, "set country", f"to {country['name']} ({country_code})")
         
         # Show post-confirmation view with flag emoji

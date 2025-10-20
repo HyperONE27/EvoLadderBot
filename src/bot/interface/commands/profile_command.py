@@ -1,24 +1,28 @@
 import discord
 from discord import app_commands
-from src.backend.services import (
-    command_guard_service,
-    user_info_service,
-    countries_service,
-    regions_service,
-    races_service
-)
-from src.backend.services.command_guard_service import CommandGuardError
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
+from src.backend.services.user_info_service import UserInfoService
+from src.backend.services.countries_service import CountriesService
+from src.backend.services.regions_service import RegionsService
+from src.backend.services.races_service import RacesService
 from src.backend.db.db_reader_writer import DatabaseReader
 from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote, get_flag_emote, get_game_emote
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 
+
+guard_service = CommandGuardService()
+user_info_service = UserInfoService()
+countries_service = CountriesService()
+regions_service = RegionsService()
+races_service = RacesService()
 db_reader = DatabaseReader()
+
 
 # API Call / Data Handling
 async def profile_command(interaction: discord.Interaction):
     """Handle the /profile slash command"""
     try:
-        player = command_guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
     except CommandGuardError as exc:
         error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)

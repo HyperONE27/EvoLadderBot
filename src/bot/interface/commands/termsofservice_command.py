@@ -1,42 +1,27 @@
 import discord
 from discord import app_commands
-from src.backend.services import command_guard_service, user_info_service
-from src.backend.services.command_guard_service import CommandGuardError
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
+from src.backend.services.user_info_service import UserInfoService, get_user_info, log_user_action
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.interface.components.confirm_embed import ConfirmEmbedView
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
 
-
-def register_termsofservice_command(tree: app_commands.CommandTree):
-    """Register the termsofservice command.
-
-    Args:
-        tree: The app command tree to register the command to.
-
-    Returns:
-        The registered command.
-    """
-    @tree.command(
-        name="termsofservice",
-        description="Show the terms of service"
-    )
-    async def termsofservice(interaction: discord.Interaction):
-        await termsofservice_command(interaction)
-
-    return termsofservice
+user_info_service = UserInfoService()
+guard_service = CommandGuardService(user_info_service)
 
 
+# API Call / Data Handling
 async def termsofservice_command(interaction: discord.Interaction):
-    """Handle the /termsofservice slash command"""
+    """Show the terms of service"""
     try:
-        player = command_guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
     except CommandGuardError as exc:
         error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
         return
 
-    user_info = user_info_service.get_user_info(interaction)
+    user_info = get_user_info(interaction)
 
     # Create the Terms of Service embed
     embed = discord.Embed(
@@ -114,16 +99,43 @@ async def termsofservice_command(interaction: discord.Interaction):
 
 
     # Log the action
-    user_info_service.log_user_action(user_info, "viewed terms of service")
+    log_user_action(user_info, "viewed terms of service")
 
     # Create confirmation callback
     async def confirm_callback(interaction: discord.Interaction):
-        """Callback for the confirm button"""
+        # Defer to prevent timeout
         await interaction.response.defer()
-        user_info_service.accept_tos(user_info["id"])
         
-        # Disable buttons and show confirmation
-        self.disable_all_components()
+        # Update in backend that user has confirmed the terms of service
+        success = user_info_service.accept_terms_of_service(user_info["id"])
+
+        if not success:
+            error_embed = discord.Embed(
+                title="❌ Error",
+                description="An error occurred while confirming your acceptance. Please try again.",
+                color=discord.Color.red()
+            )
+            await interaction.edit_original_response(
+                embed=error_embed,
+                view=None
+            )
+            return
+
+        # Log the confirmation
+        log_user_action(user_info, "confirmed terms of service")
+
+        # Show post-confirmation view
+        post_confirm_view = ConfirmEmbedView(
+            title="Terms of Service Confirmed",
+            description="Thank you for confirming the EvoLadderBot Terms of Service.",
+            mode="post_confirmation",
+            reset_target=None  # No restart option for TOS
+        )
+        post_confirm_view.embed.set_footer(
+            text="You may now use all EvoLadderBot features.",
+            icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
+        )
+        await interaction.edit_original_response(embed=post_confirm_view.embed, view=post_confirm_view)
 
     # Create custom cancel callback for terms of service
     async def cancel_callback(interaction: discord.Interaction):
@@ -131,7 +143,7 @@ async def termsofservice_command(interaction: discord.Interaction):
         await interaction.response.defer()
         
         # Log the decline
-        user_info_service.log_user_action(user_info, "declined terms of service")
+        log_user_action(user_info, "declined terms of service")
 
         # Create custom decline embed
         decline_embed = discord.Embed(
@@ -148,9 +160,8 @@ async def termsofservice_command(interaction: discord.Interaction):
 
     # Create custom view with only confirm and cancel buttons (no restart)
     class TOSConfirmView(discord.ui.View):
-        def __init__(self, discord_user_id: int) -> None:
+        def __init__(self) -> None:
             super().__init__(timeout=GLOBAL_TIMEOUT)
-            self.discord_user_id = discord_user_id
 
         @discord.ui.button(label="I Accept These Terms", emoji="✅", style=discord.ButtonStyle.success)
         async def accept_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -160,7 +171,7 @@ async def termsofservice_command(interaction: discord.Interaction):
         async def decline_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
             await cancel_callback(interaction)
 
-    confirm_view = TOSConfirmView(interaction.user.id)
+    confirm_view = TOSConfirmView()
 
     # Send the full terms of service first
     await send_ephemeral_response(
@@ -168,3 +179,23 @@ async def termsofservice_command(interaction: discord.Interaction):
         embed=embed,
         view=confirm_view
     )
+
+
+# Register Command
+def register_termsofservice_command(tree: app_commands.CommandTree):
+    """Register the termsofservice command.
+
+    Args:
+        tree: The app command tree to register the command to.
+
+    Returns:
+        The registered command.
+    """
+    @tree.command(
+        name="termsofservice",
+        description="Show the terms of service"
+    )
+    async def termsofservice(interaction: discord.Interaction):
+        await termsofservice_command(interaction)
+
+    return termsofservice

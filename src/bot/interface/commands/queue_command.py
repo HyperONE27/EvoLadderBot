@@ -2,25 +2,24 @@ import asyncio
 import json
 import discord
 from discord import app_commands
-from src.backend.services import (
-    races_service,
-    maps_service,
-    regions_service,
-    command_guard_service,
-    replay_service,
-    mmr_service,
-    match_completion_service,
-    matchmaker
-)
-from src.backend.services.command_guard_service import CommandGuardError
-from src.backend.services.matchmaking_service import Player, QueuePreferences, MatchResult
-from src.backend.services.user_info_service import get_user_info, UserInfoService
-from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader, get_timestamp
+from src.backend.services.races_service import RacesService
+from src.backend.services.maps_service import MapsService
+from src.backend.services.regions_service import RegionsService
 from src.bot.interface.components.error_embed import ErrorEmbedException, create_error_view_from_exception
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.interface.components.cancel_embed import create_cancel_embed
 from functools import partial
 from typing import Callable, Dict, Optional
+from src.backend.services.matchmaking_service import matchmaker, Player, QueuePreferences, MatchResult
+from src.backend.services.user_info_service import get_user_info, UserInfoService
+from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader, get_timestamp
+from src.bot.utils.discord_utils import send_ephemeral_response, get_current_unix_timestamp, format_discord_timestamp, get_flag_emote, get_race_emote
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
+from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
+from src.backend.services.replay_service import ReplayService, ReplayRaw, parse_replay_data_blocking
+from src.backend.services.mmr_service import MMRService
+import logging
+import time
 from src.backend.services.match_completion_service import match_completion_service
 from contextlib import suppress
 from src.bot.interface.components.replay_details_embed import ReplayDetailsEmbed
@@ -107,6 +106,13 @@ match_found_view_manager = MatchFoundViewManager()
 channel_to_match_view_map: Dict[int, "MatchFoundView"] = {}
 
 
+race_service = RacesService()
+maps_service = MapsService()
+db_writer = DatabaseWriter()
+db_reader = DatabaseReader()
+guard_service = CommandGuardService()
+regions_service = RegionsService()
+mmr_service = MMRService()
 user_info_service = UserInfoService()
 
 logger = logging.getLogger(__name__)
@@ -129,26 +135,13 @@ def register_queue_command(tree: app_commands.CommandTree):
 async def queue_command(interaction: discord.Interaction):
     """Handle the /queue slash command"""
     try:
-        player = command_guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
-        command_guard_service.require_tos_accepted(player)
-        command_guard_service.require_setup_completed(player)
+        player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        guard_service.require_queue_access(player)
     except CommandGuardError as exc:
         error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
         return
 
-    user_info_service = UserInfoService()
-    user_info = user_info_service.get_full_user_info(interaction.user.id)
-    
-    if not user_info:
-        error = ErrorEmbedException(
-            title="User Not Found",
-            description="Could not find your user information in the database. Please complete the setup process."
-        )
-        error_view = create_error_view_from_exception(error)
-        await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
-        return
-    
     # A channel can only have one active match view
     is_in_match_view = any(
         v.match_result.player_1_discord_id == interaction.user.id or v.match_result.player_2_discord_id == interaction.user.id
@@ -186,7 +179,6 @@ async def queue_command(interaction: discord.Interaction):
         discord_user_id=interaction.user.id,
         default_races=default_races,
         default_maps=default_maps,
-        original_interaction=interaction
     )
     
     # Use the same embed format as the updated embed
@@ -363,33 +355,26 @@ class CancelQueueSetupButton(discord.ui.Button):
 
 
 class QueueView(discord.ui.View):
-    """Main view for the /queue command"""
+    """Main queue view with race and map veto selections"""
     
-    def __init__(self, user_info: dict, original_interaction: discord.Interaction):
+    def __init__(self, discord_user_id: int, default_races=None, default_maps=None):
         super().__init__(timeout=GLOBAL_TIMEOUT)
-        self.discord_user_id = user_info["id"]
-        self.last_interaction: Optional[discord.Interaction] = None
-        self.heartbeat_task: Optional[asyncio.Task] = None
-        
-        # Initialize services
-        self.db_reader = DatabaseReader()
-        self.db_writer = DatabaseWriter()
-        self.user_info_service = UserInfoService()
-        
-        # Load preferences
-        self._load_preferences()
-        
+        self.discord_user_id = discord_user_id
+        default_races = default_races or []
+        self.selected_bw_race = next((race for race in default_races if race.startswith("bw_")), None)
+        self.selected_sc2_race = next((race for race in default_races if race.startswith("sc2_")), None)
+        self.vetoed_maps = default_maps or []
         self.add_item(JoinQueueButton())
         self.add_item(ClearSelectionsButton())
         self.add_item(CancelQueueSetupButton())
         self.add_item(BroodWarRaceSelect(default_value=self.selected_bw_race))
         self.add_item(StarCraftRaceSelect(default_value=self.selected_sc2_race))
-        self.add_item(MapVetoSelect(default_values=self.vetoed_maps))
+        self.add_item(MapVetoSelect(default_values=default_maps))
 
 
     @classmethod
-    async def create(cls, discord_user_id: int, default_races=None, default_maps=None, original_interaction: discord.Interaction) -> "QueueView":
-        view = cls(original_interaction.user, original_interaction)
+    async def create(cls, discord_user_id: int, default_races=None, default_maps=None) -> "QueueView":
+        view = cls(discord_user_id, default_races=default_races, default_maps=default_maps)
         # Don't persist preferences immediately - only when user makes changes
         return view
 
@@ -411,7 +396,7 @@ class QueueView(discord.ui.View):
 
         def _write_preferences() -> None:
             try:
-                self.db_writer.update_preferences_1v1(
+                db_writer.update_preferences_1v1(
                     discord_uid=self.discord_user_id,
                     last_chosen_races=races_payload,
                     last_chosen_vetoes=vetoes_payload,
@@ -434,8 +419,8 @@ class QueueView(discord.ui.View):
         if selected_codes:
             details = []
             for code in selected_codes:
-                label = races_service.get_race_group_label(code)
-                name = races_service.get_race_name(code)
+                label = race_service.get_race_group_label(code)
+                name = race_service.get_race_name(code)
                 # Get race emote for display
                 race_emote = get_race_emote(code)
                 # Simplify the label (remove BW/SC2 suffix)
@@ -489,7 +474,6 @@ class QueueView(discord.ui.View):
             discord_user_id=self.discord_user_id,
             default_races=self.get_selected_race_codes(),
             default_maps=self.vetoed_maps,
-            original_interaction=interaction
         )
         await interaction.response.edit_message(embed=embed, view=new_view)
 
@@ -863,8 +847,8 @@ class MatchFoundView(discord.ui.View):
         title = f"Match #{self.match_result.match_id}: {p1_flag} {p1_race_emote} {p1_display_name} ({p1_mmr}) vs {p2_flag} {p2_race_emote} {p2_display_name} ({p2_mmr})"
         
         # Get race names for display using races service
-        p1_race_name = races_service.get_race_name(p1_race)
-        p2_race_name = races_service.get_race_name(p2_race)
+        p1_race_name = race_service.get_race_name(p1_race)
+        p2_race_name = race_service.get_race_name(p2_race)
         
         # Get server information with region using regions service
         server_display = regions_service.format_server_with_region(self.match_result.server_choice)
@@ -955,7 +939,8 @@ class MatchFoundView(discord.ui.View):
             
             if p1_mmr_change is not None and p2_mmr_change is not None:
                 # Round MMR changes to integers using MMR service
-                mmr_service = mmr_service
+                from src.backend.services.mmr_service import MMRService
+                mmr_service = MMRService()
                 p1_mmr_rounded = mmr_service.round_mmr_change(p1_mmr_change)
                 p2_mmr_rounded = mmr_service.round_mmr_change(p2_mmr_change)
                 
@@ -1537,7 +1522,7 @@ class BroodWarRaceSelect(discord.ui.Select):
                 description=description,
                 default=value == default_value,
             )
-            for label, value, description in races_service.get_race_dropdown_groups()["brood_war"]
+            for label, value, description in race_service.get_race_dropdown_groups()["brood_war"]
         ]
         super().__init__(
             placeholder="Select your Brood War race (max 1)",
@@ -1562,7 +1547,7 @@ class StarCraftRaceSelect(discord.ui.Select):
                 description=description,
                 default=value == default_value,
             )
-            for label, value, description in races_service.get_race_dropdown_groups()["starcraft2"]
+            for label, value, description in race_service.get_race_dropdown_groups()["starcraft2"]
         ]
         super().__init__(
             placeholder="Select your StarCraft II race (max 1)",
