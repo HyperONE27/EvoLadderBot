@@ -5,10 +5,11 @@ This module verifies the database connection is working and tables exist.
 """
 
 import sqlite3
-from typing import Tuple
+from typing import List, Tuple
 from src.backend.db.db_connection import (
     get_database_type,
     get_database_connection_string,
+    is_postgresql,
 )
 
 

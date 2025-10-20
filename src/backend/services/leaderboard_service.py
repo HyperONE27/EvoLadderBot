@@ -16,6 +16,7 @@ Intended usage:
 """
 
 from typing import Any, Dict, List, Optional
+from functools import lru_cache
 import time
 
 from src.backend.services.countries_service import CountriesService

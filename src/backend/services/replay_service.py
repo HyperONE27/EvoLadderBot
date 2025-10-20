@@ -5,6 +5,7 @@ Replay service.
 from dataclasses import dataclass, asdict
 import json
 import sc2reader
+import xxhash
 from typing import Optional
 import hashlib
 import os

@@ -8,7 +8,7 @@ All SQL queries use named parameters for safety and maintainability.
 Supports both SQLite and PostgreSQL via database adapters.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 
 from src.backend.db.adapters import get_adapter

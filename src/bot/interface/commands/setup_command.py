@@ -1,13 +1,19 @@
 import discord
 from discord import app_commands
+import re
 from typing import Optional
+from src.backend.services.countries_service import CountriesService
+from src.backend.services.regions_service import RegionsService
 from src.backend.services.command_guard_service import (
+    CommandGuardService,
     CommandGuardError,
 )
 from src.backend.services.user_info_service import (
+    UserInfoService,
     get_user_info,
     log_user_action,
 )
+from src.backend.services.validation_service import ValidationService
 from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote
 from src.bot.interface.components.confirm_embed import ConfirmEmbedView
 from src.bot.interface.components.confirm_restart_cancel_buttons import (
