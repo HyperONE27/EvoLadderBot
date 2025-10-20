@@ -70,9 +70,6 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
     
     # Show preview with confirm/cancel options only
     async def confirm_callback(interaction: discord.Interaction):
-        # Defer to prevent timeout
-        await interaction.response.defer()
-        
         # Update in backend with user ID
         success = user_info_service.update_country(user_info["id"], country_code)
         
@@ -82,9 +79,9 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
                 description="An error occurred while updating your country. Please try again.",
                 color=discord.Color.red()
             )
-            await interaction.edit_original_response(
+            await interaction.response.send_message(
                 embed=error_embed,
-                view=None
+                ephemeral=True
             )
             return
         
@@ -103,7 +100,7 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
             fields=[],
             mode="post_confirmation"
         )
-        await interaction.edit_original_response(embed=post_confirm_view.embed, view=post_confirm_view)
+        await interaction.response.send_message(embed=post_confirm_view.embed, view=post_confirm_view, ephemeral=True)
     
     # Create a simple view for the cancel target (just show the command again)
     class CountryCancelView(discord.ui.View):

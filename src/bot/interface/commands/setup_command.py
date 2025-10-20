@@ -573,9 +573,6 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
     
     # Define confirmation callback
     async def confirm_callback(interaction: discord.Interaction):
-        # CRITICAL: Defer immediately to prevent timeout (gives 15 minutes instead of 3 seconds)
-        await interaction.response.defer()
-        
         user_info = get_user_info(interaction)
         
         # Send data to backend
@@ -596,9 +593,9 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
                 description="An error occurred while saving your profile. Please try again.",
                 color=discord.Color.red()
             )
-            await interaction.edit_original_response(
+            await interaction.response.send_message(
                 embed=error_embed,
-                view=None
+                ephemeral=True
             )
             return
         
@@ -617,10 +614,11 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
         )
         
         
-        await interaction.edit_original_response(
+        await interaction.response.send_message(
             content="",
             embed=post_confirm_view.embed,
-            view=post_confirm_view
+            view=post_confirm_view,
+            ephemeral=True
         )
     
     return ConfirmEmbedView(

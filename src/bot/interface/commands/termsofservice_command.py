@@ -104,9 +104,6 @@ async def termsofservice_command(interaction: discord.Interaction):
 
     # Create confirmation callback
     async def confirm_callback(interaction: discord.Interaction):
-        # Defer to prevent timeout
-        await interaction.response.defer()
-        
         # Update in backend that user has confirmed the terms of service
         success = user_info_service.accept_terms_of_service(user_info["id"])
 
@@ -116,9 +113,9 @@ async def termsofservice_command(interaction: discord.Interaction):
                 description="An error occurred while confirming your acceptance. Please try again.",
                 color=discord.Color.red()
             )
-            await interaction.edit_original_response(
+            await interaction.response.send_message(
                 embed=error_embed,
-                view=None
+                ephemeral=True
             )
             return
 
@@ -136,13 +133,10 @@ async def termsofservice_command(interaction: discord.Interaction):
             text="You may now use all EvoLadderBot features.",
             icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
         )
-        await interaction.edit_original_response(embed=post_confirm_view.embed, view=post_confirm_view)
+        await interaction.response.send_message(embed=post_confirm_view.embed, view=post_confirm_view, ephemeral=True)
 
     # Create custom cancel callback for terms of service
     async def cancel_callback(interaction: discord.Interaction):
-        # Defer to prevent timeout
-        await interaction.response.defer()
-        
         # Log the decline
         log_user_action(user_info, "declined terms of service")
 
@@ -157,7 +151,7 @@ async def termsofservice_command(interaction: discord.Interaction):
             icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
         )
 
-        await interaction.edit_original_response(embed=decline_embed, view=None)
+        await interaction.response.send_message(embed=decline_embed, ephemeral=True)
 
     # Create custom view with only confirm and cancel buttons (no restart)
     class TOSConfirmView(discord.ui.View):

@@ -89,9 +89,6 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
 
             # Show preview with confirm/restart/cancel options
             async def confirm_callback(interaction: discord.Interaction):
-                # Defer to prevent timeout
-                await interaction.response.defer()
-                
                 # Process the activation
                 # TODO: Add actual backend processing here
                 
@@ -104,7 +101,7 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
                     reset_target=ActivateModal(),
                     restart_label="🔄 Activate Another"
                 )
-                await interaction.edit_original_response(embed=post_confirm_view.embed, view=post_confirm_view)
+                await interaction.response.send_message(embed=post_confirm_view.embed, view=post_confirm_view, ephemeral=True)
 
             confirm_view = ConfirmEmbedView(
                 title="Preview Activation",
