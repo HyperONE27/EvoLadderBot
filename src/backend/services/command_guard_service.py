@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import Any, Dict
-import discord
 
 from src.backend.services.user_info_service import UserInfoService
 

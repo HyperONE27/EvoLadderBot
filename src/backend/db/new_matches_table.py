@@ -6,9 +6,6 @@ All subsequent database operations should go through db_reader_writer.py.
 """
 
 import sqlite3
-import os
-import json
-from datetime import datetime
 
 
 def create_database(db_path: str = "evoladder.db") -> None:

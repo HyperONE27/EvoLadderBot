@@ -13,8 +13,7 @@ from src.bot.interface.components.confirm_restart_cancel_buttons import (
     ConfirmRestartCancelButtons,
 )
 from src.bot.interface.components.cancel_embed import create_cancel_embed
-from functools import partial
-from typing import Callable, Dict, Optional, List
+from typing import Callable, Dict, Optional
 from src.backend.services.matchmaking_service import (
     matchmaker,
     Player,
@@ -25,7 +24,6 @@ from src.backend.services.user_info_service import get_user_info, UserInfoServic
 from src.backend.db.db_reader_writer import (
     DatabaseWriter,
     DatabaseReader,
-    get_timestamp,
 )
 from src.bot.utils.discord_utils import (
     send_ephemeral_response,
@@ -43,7 +41,6 @@ from src.bot.interface.components.command_guard_embeds import (
 )
 from src.backend.services.replay_service import (
     ReplayService,
-    ReplayRaw,
     parse_replay_data_blocking,
 )
 from src.backend.services.mmr_service import MMRService
@@ -55,12 +52,8 @@ from src.bot.interface.components.replay_details_embed import ReplayDetailsEmbed
 from src.bot.config import GLOBAL_TIMEOUT, ABORT_TIMER_SECONDS
 from src.bot.interface.components.queue_embeds import (
     create_queue_embed,
-    create_match_found_embed,
-    create_match_cancelled_embed,
-    create_match_completed_embed,
 )
 from src.bot.interface.views.queue_view import QueueView, MatchFoundView
-from src.backend.services.matchmaking_service import MatchmakingService
 
 
 # In-memory set to track which users have an active MatchFoundView

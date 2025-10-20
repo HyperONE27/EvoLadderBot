@@ -12,7 +12,7 @@ This module defines the MatchmakerService class, which contains methods for:
 import asyncio
 import random
 import time
-from typing import List, Optional, Dict, Any, Callable, Tuple
+from typing import List, Optional, Dict, Callable, Tuple
 from dataclasses import dataclass
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
 from src.backend.services.regions_service import RegionsService

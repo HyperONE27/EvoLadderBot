@@ -5,7 +5,7 @@ Defines the interface that all database adapters must implement.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from contextlib import contextmanager
 
 

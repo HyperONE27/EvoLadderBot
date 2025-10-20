@@ -6,7 +6,7 @@ and handles the finalization process including notifying both players.
 """
 
 import asyncio
-from typing import Dict, Set, Optional, Callable, List
+from typing import Dict, Optional, Callable, List
 from asyncio import Lock
 from src.backend.db.db_reader_writer import DatabaseReader
 from src.backend.services.leaderboard_service import LeaderboardService

@@ -7,7 +7,6 @@ Switch between them using the DATABASE_TYPE environment variable.
 All environment variables are loaded from src.bot.config to ensure proper initialization order.
 """
 
-from typing import Optional
 from src.bot.config import DATABASE_TYPE, DATABASE_URL, SQLITE_DB_PATH
 
 

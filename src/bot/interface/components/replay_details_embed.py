@@ -1,7 +1,6 @@
 import discord
 from typing import Dict, Any
 
-from src.backend.services.races_service import RacesService
 from src.bot.utils.discord_utils import get_race_emote
 
 

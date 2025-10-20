@@ -1,11 +1,4 @@
 [flake8]
 max-line-length = 100
-exclude =
-    .git,
-    __pycache__,
-    .venv,
-    build,
-    dist,
-    migrations
-# The following ignore list disables noise from Black or harmless style rules
-extend-ignore = E203,E266,E501,W503,F403,F405
+exclude = .git,__pycache__,.venv,build,dist,migrations
+extend-ignore = E203,E266,E501,W503,F403,F405,W291,W391,C812,C813,C815
