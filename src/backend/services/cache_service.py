@@ -266,16 +266,16 @@ class PlayerRecordCache:
     """
     In-memory cache for player records to reduce database hits on guard checks.
     
-    Uses a simple TTL-based cache with a 5-minute expiration.
+    Uses a simple TTL-based cache with a 15-minute expiration.
     Expected impact: 90% reduction in player_lookup queries during active sessions.
     """
     
-    def __init__(self, ttl_seconds: int = 300):
+    def __init__(self, ttl_seconds: int = 900):
         """
         Initialize the player record cache.
         
         Args:
-            ttl_seconds: Time-to-live for cached records (default: 5 minutes)
+            ttl_seconds: Time-to-live for cached records (default: 15 minutes)
         """
         self._cache: Dict[int, Dict] = {}
         self._timestamps: Dict[int, float] = {}
