@@ -1243,6 +1243,7 @@ class MatchAbortButton(discord.ui.Button):
     
     def __init__(self, parent_view):
         self.parent_view = parent_view
+        self.awaiting_confirmation = False  # Track confirmation state
         viewer_id = (
             parent_view.match_result.player_1_discord_id
             if parent_view.is_player1
@@ -1264,6 +1265,22 @@ class MatchAbortButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         player_discord_uid = interaction.user.id
         
+        # If not yet in confirmation state, show confirmation prompt
+        if not self.awaiting_confirmation:
+            remaining_aborts = user_info_service.get_remaining_aborts(player_discord_uid)
+            self.label = f"Confirm Abort ({remaining_aborts} remaining)"
+            self.style = discord.ButtonStyle.danger  # Keep danger style
+            self.awaiting_confirmation = True
+            
+            # Update the view to show the confirmation button
+            async with self.parent_view.edit_lock:
+                await interaction.response.edit_message(
+                    embed=self.parent_view.get_embed(),
+                    view=self.parent_view
+                )
+            return
+        
+        # If already in confirmation state, proceed with abort
         # Atomically abort the match
         success = matchmaker.abort_match(
             self.parent_view.match_result.match_id,
