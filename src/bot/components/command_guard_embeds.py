@@ -6,7 +6,8 @@ from src.backend.services.command_guard_service import (
     CommandGuardError,
     TermsNotAcceptedError,
     SetupIncompleteError,
-    AccountNotActivatedError
+    AccountNotActivatedError,
+    DMOnlyError
 )
 
 def create_command_guard_error_embed(error: CommandGuardError) -> discord.Embed:
@@ -30,6 +31,13 @@ def create_command_guard_error_embed(error: CommandGuardError) -> discord.Embed:
             title="❌ Account Not Activated",
             description="Your account must be activated before using this command.\n\n"
                         "Use /activation to activate your account.",
+            color=discord.Color.red()
+        )
+    elif isinstance(error, DMOnlyError):
+        return discord.Embed(
+            title="❌ DM Only Command",
+            description="This command can only be used in DMs (private messages).\n\n"
+                        "Please send me a DM and try the command again.",
             color=discord.Color.red()
         )
     else:

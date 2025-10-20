@@ -10,7 +10,7 @@ from src.backend.services.app_context import (
     db_reader
 )
 from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote, get_flag_emote, get_game_emote
-from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 
 
 # API Call / Data Handling

@@ -2,9 +2,9 @@ import asyncio
 import json
 import discord
 from discord import app_commands
-from src.bot.interface.components.error_embed import ErrorEmbedException, create_error_view_from_exception
-from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
-from src.bot.interface.components.cancel_embed import create_cancel_embed
+from src.bot.components.error_embed import ErrorEmbedException, create_error_view_from_exception
+from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
+from src.bot.components.cancel_embed import create_cancel_embed
 from functools import partial
 from typing import Callable, Dict, Optional
 from src.backend.services.matchmaking_service import matchmaker, Player, QueuePreferences, MatchResult
@@ -12,7 +12,7 @@ from src.backend.services.user_info_service import get_user_info
 from src.backend.db.db_reader_writer import get_timestamp
 from src.bot.utils.discord_utils import send_ephemeral_response, get_current_unix_timestamp, format_discord_timestamp, get_flag_emote, get_race_emote
 from src.backend.services.command_guard_service import CommandGuardError
-from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.backend.services.replay_service import ReplayRaw, parse_replay_data_blocking
 from src.backend.services.match_completion_service import match_completion_service
 from src.backend.services.app_context import (
@@ -29,7 +29,7 @@ from src.backend.services.app_context import (
 import logging
 import time
 from contextlib import suppress
-from src.bot.interface.components.replay_details_embed import ReplayDetailsEmbed
+from src.bot.components.replay_details_embed import ReplayDetailsEmbed
 from src.bot.config import GLOBAL_TIMEOUT
 
 
@@ -1247,7 +1247,7 @@ class MatchAbortButton(discord.ui.Button):
                     view=self.parent_view
                 )
         else:
-            await interaction.response.send_message("❌ Failed to abort match. It might have been already completed or aborted by the other player.", ephemeral=True)
+            await interaction.response.send_message("❌ Failed to abort match. It might have been already completed or aborted by the other player.")
 
 
 class MatchResultConfirmSelect(discord.ui.Select):
@@ -1346,7 +1346,7 @@ class MatchResultSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         # Check if replay is uploaded before allowing result selection
         if self.parent_view.match_result.replay_uploaded != "Yes":
-            await interaction.response.send_message("❌ Please upload a replay file before reporting match results.", ephemeral=True)
+            await interaction.response.send_message("❌ Please upload a replay file before reporting match results.")
             return
         
         # Store the selected result in parent view and persist it

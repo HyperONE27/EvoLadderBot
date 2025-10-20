@@ -7,8 +7,8 @@ from src.backend.services.app_context import (
     command_guard_service as guard_service
 )
 from src.bot.utils.discord_utils import send_ephemeral_response
-from src.bot.interface.components.confirm_embed import ConfirmEmbedView
-from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.components.confirm_embed import ConfirmEmbedView
+from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
 
 
@@ -114,8 +114,7 @@ async def termsofservice_command(interaction: discord.Interaction):
                 color=discord.Color.red()
             )
             await interaction.response.send_message(
-                embed=error_embed,
-                ephemeral=True
+                embed=error_embed
             )
             return
 
@@ -133,7 +132,7 @@ async def termsofservice_command(interaction: discord.Interaction):
             text="You may now use all EvoLadderBot features.",
             icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
         )
-        await interaction.response.send_message(embed=post_confirm_view.embed, view=post_confirm_view, ephemeral=True)
+        await interaction.response.send_message(embed=post_confirm_view.embed, view=post_confirm_view)
 
     # Create custom cancel callback for terms of service
     async def cancel_callback(interaction: discord.Interaction):
@@ -151,7 +150,7 @@ async def termsofservice_command(interaction: discord.Interaction):
             icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
         )
 
-        await interaction.response.send_message(embed=decline_embed, ephemeral=True)
+        await interaction.response.send_message(embed=decline_embed)
 
     # Create custom view with only confirm and cancel buttons (no restart)
     class TOSConfirmView(discord.ui.View):

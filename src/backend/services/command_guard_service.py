@@ -24,6 +24,10 @@ class SetupIncompleteError(CommandGuardError):
     """Raised when setup is incomplete."""
 
 
+class DMOnlyError(CommandGuardError):
+    """Raised when a command is used outside of DMs."""
+
+
 class CommandGuardService:
     """Centralized helper to perform pre-command checks for slash handlers."""
 
@@ -58,3 +62,8 @@ class CommandGuardService:
         self.require_setup_completed(player)
         if not player.get("activation_code"):
             raise AccountNotActivatedError("Account not activated.")
+    
+    def require_dm(self, interaction: discord.Interaction) -> None:
+        """Require that the command is used in a DM channel."""
+        if not isinstance(interaction.channel, discord.DMChannel):
+            raise DMOnlyError("This command can only be used in DMs.")

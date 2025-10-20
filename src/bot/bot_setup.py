@@ -16,7 +16,9 @@ from src.bot.config import WORKER_PROCESSES, DATABASE_URL
 from src.backend.db.connection_pool import initialize_pool, close_pool
 from src.backend.db.test_connection_startup import test_database_connection
 from src.backend.services.cache_service import static_cache
-from src.backend.services.app_context import db_writer
+from src.backend.services.app_context import db_writer, command_guard_service
+from src.backend.services.command_guard_service import DMOnlyError
+from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 
 
 class EvoLadderBot(commands.Bot):
@@ -27,13 +29,24 @@ class EvoLadderBot(commands.Bot):
         process_pool: ProcessPoolExecutor for CPU-bound tasks (replay parsing)
     """
     
+    # Commands that should only work in DMs
+    DM_ONLY_COMMANDS = {
+        "activate",
+        "setup", 
+        "setcountry",
+        "termsofservice",
+        "profile",
+        "leaderboard",
+        "queue"
+    }
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.process_pool: ProcessPoolExecutor = None
 
     async def on_interaction(self, interaction: discord.Interaction):
         """
-        Global listener for all interactions to log command calls.
+        Global listener for all interactions to log command calls and enforce DM-only rules.
         
         This event fires for every interaction (slash commands, buttons, etc.)
         and logs slash command usage to the database.
@@ -41,6 +54,16 @@ class EvoLadderBot(commands.Bot):
         if interaction.type == discord.InteractionType.application_command:
             command_name = interaction.command.name if interaction.command else "unknown"
             user = interaction.user
+            
+            # Check if this is a DM-only command used outside of DMs
+            if command_name in self.DM_ONLY_COMMANDS:
+                try:
+                    command_guard_service.require_dm(interaction)
+                except DMOnlyError as e:
+                    error_embed = create_command_guard_error_embed(e)
+                    await interaction.response.send_message(embed=error_embed)
+                    return
+            
             # Use the shared db_writer from app_context
             db_writer.insert_command_call(
                 discord_uid=user.id,

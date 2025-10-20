@@ -1,2 +1,2 @@
-worker: python -m src.bot.interface.interface_main
+worker: python -m src.bot.main
 

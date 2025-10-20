@@ -1,7 +1,7 @@
 import discord
 from typing import Optional, Union, Callable
 from src.bot.utils.discord_utils import send_ephemeral_response
-from src.bot.interface.components.cancel_embed import create_cancel_embed
+from src.bot.components.cancel_embed import create_cancel_embed
 
 
 class ConfirmButton(discord.ui.Button):

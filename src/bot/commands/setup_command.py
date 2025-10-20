@@ -12,9 +12,9 @@ from src.backend.services.app_context import (
     command_guard_service as guard_service
 )
 from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote
-from src.bot.interface.components.confirm_embed import ConfirmEmbedView
-from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
-from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.components.confirm_embed import ConfirmEmbedView
+from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
+from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
 
 
@@ -594,8 +594,7 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
                 color=discord.Color.red()
             )
             await interaction.response.send_message(
-                embed=error_embed,
-                ephemeral=True
+                embed=error_embed
             )
             return
         
@@ -617,8 +616,7 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
         await interaction.response.send_message(
             content="",
             embed=post_confirm_view.embed,
-            view=post_confirm_view,
-            ephemeral=True
+            view=post_confirm_view
         )
     
     return ConfirmEmbedView(

@@ -54,16 +54,18 @@
   - ✅ Full migrate to PostgreSQL
     - ✅ Hybrid architecture with SQLAlchemy adapter allows local testing with SQLite and remote host testing with PostgresSQL
   - ✅ Store replays in separate persistent storage and not in SQL tables
-  - ⏰ Optimize the shit out of PostgreSQL queries
-    - ⏰ Bundle queries
-    - ⏰ Change query types
+  - ✅ Optimize the shit out of PostgreSQL queries
+    - ✅ Bundle queries
+    - ✅ Change query types
   - ✅ Implement spawning helper processes for replay parsing (multiprocessing with ProcessPoolExecutor)
     - ✅ Created parse_replay_data_blocking() worker function
     - ✅ Implemented global process pool with configurable workers
     - ✅ Updated on_message() to use run_in_executor()
     - ✅ Comprehensive test suite (6/6 tests passing)
     - ✅ Full documentation and demonstration scripts
-
+  - ✅ Implement service locator pattern for global service instances
+- Activation
+  - ⏰ De-activate the outdated /activation command
 
 ## PRE-BETA
 

@@ -1,15 +1,15 @@
 import asyncio
 import discord
 from discord import app_commands
-from src.bot.interface.components.confirm_embed import ConfirmEmbedView
-from src.bot.interface.components.error_embed import ErrorEmbedException, create_simple_error_view
+from src.bot.components.confirm_embed import ConfirmEmbedView
+from src.bot.components.error_embed import ErrorEmbedException, create_simple_error_view
 from src.backend.services.command_guard_service import CommandGuardError
 from src.backend.services.app_context import (
     user_info_service,
     command_guard_service as guard_service
 )
 from src.bot.utils.discord_utils import send_ephemeral_response
-from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
 
 
@@ -101,7 +101,7 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
                     reset_target=ActivateModal(),
                     restart_label="🔄 Activate Another"
                 )
-                await interaction.response.send_message(embed=post_confirm_view.embed, view=post_confirm_view, ephemeral=True)
+                await interaction.response.send_message(embed=post_confirm_view.embed, view=post_confirm_view)
 
             confirm_view = ConfirmEmbedView(
                 title="Preview Activation",
