@@ -1,7 +1,6 @@
 """
 Discord interaction utilities for centralized ephemerality control.
 """
-
 from typing import Union, Optional
 import discord
 import json
@@ -12,21 +11,21 @@ import time
 def should_be_ephemeral(interaction: discord.Interaction) -> bool:
     """
     Determine if a Discord interaction response should be ephemeral.
-
+    
     Rules:
     - All commands are non-ephemeral in DMs (private messages)
     - All commands are ephemeral in guild channels (servers)
-
+    
     Args:
         interaction: The Discord interaction object
-
+        
     Returns:
         bool: True if the response should be ephemeral, False otherwise
     """
     # If the interaction is in a DM (guild is None), responses should not be ephemeral
     if interaction.guild is None:
         return False
-
+    
     # If the interaction is in a guild channel, responses should be ephemeral
     return True
 
@@ -34,10 +33,10 @@ def should_be_ephemeral(interaction: discord.Interaction) -> bool:
 def get_ephemeral_kwargs(interaction: discord.Interaction) -> dict:
     """
     Get the ephemeral parameter for Discord interaction responses.
-
+    
     Args:
         interaction: The Discord interaction object
-
+        
     Returns:
         dict: Dictionary containing the ephemeral parameter
     """
@@ -49,35 +48,35 @@ def send_ephemeral_response(
     content: Optional[str] = None,
     embed: Optional[discord.Embed] = None,
     view: Optional[discord.ui.View] = None,
-    **kwargs,
+    **kwargs
 ) -> Union[discord.InteractionResponse, discord.WebhookMessage]:
     """
     Send a response with centralized ephemerality control.
-
+    
     Args:
         interaction: The Discord interaction object
         content: Text content to send
         embed: Embed to send
         view: View to send
         **kwargs: Additional arguments for send_message
-
+        
     Returns:
         The response object
     """
     ephemeral_kwargs = get_ephemeral_kwargs(interaction)
-
+    
     # Build the message parameters, only including view if it's not None
     message_params = {
         "content": content,
         "embed": embed,
         "ephemeral": ephemeral_kwargs["ephemeral"],
-        **kwargs,
+        **kwargs
     }
-
+    
     # Only add view parameter if it's not None
     if view is not None:
         message_params["view"] = view
-
+    
     return interaction.response.send_message(**message_params)
 
 
@@ -86,24 +85,27 @@ def edit_ephemeral_response(
     content: Optional[str] = None,
     embed: Optional[discord.Embed] = None,
     view: Optional[discord.ui.View] = None,
-    **kwargs,
+    **kwargs
 ) -> Union[discord.InteractionResponse, discord.WebhookMessage]:
     """
     Edit a response with centralized ephemerality control.
-
+    
     Args:
         interaction: The Discord interaction object
         content: Text content to send
         embed: Embed to send
         view: View to send
         **kwargs: Additional arguments for edit_message
-
+        
     Returns:
         The response object
     """
     ephemeral_kwargs = get_ephemeral_kwargs(interaction)
     return interaction.response.edit_message(
-        content=content, embed=embed, view=view, **kwargs
+        content=content,
+        embed=embed,
+        view=view,
+        **kwargs
     )
 
 
@@ -112,18 +114,18 @@ def followup_ephemeral_response(
     content: Optional[str] = None,
     embed: Optional[discord.Embed] = None,
     view: Optional[discord.ui.View] = None,
-    **kwargs,
+    **kwargs
 ) -> discord.WebhookMessage:
     """
     Send a followup response with centralized ephemerality control.
-
+    
     Args:
         interaction: The Discord interaction object
         content: Text content to send
         embed: Embed to send
         view: View to send
         **kwargs: Additional arguments for followup.send
-
+        
     Returns:
         The followup message object
     """
@@ -133,7 +135,7 @@ def followup_ephemeral_response(
         embed=embed,
         view=view,
         ephemeral=ephemeral_kwargs["ephemeral"],
-        **kwargs,
+        **kwargs
     )
 
 
@@ -146,20 +148,18 @@ def country_to_flag(code: str) -> str:
 def get_race_emote(race: str) -> str:
     """Get the Discord emote for a race from emotes.json."""
     # Get the project root directory
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    )
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
     emotes_path = os.path.join(project_root, "data", "misc", "emotes.json")
-
+    
     try:
-        with open(emotes_path, "r", encoding="utf-8") as f:
+        with open(emotes_path, 'r', encoding='utf-8') as f:
             emotes_data = json.load(f)
-
+        
         # Find the emote for the race
         for emote in emotes_data:
             if emote.get("name") == race:
                 return emote.get("markdown", f":{race}:")
-
+        
         # Fallback to generic format if not found
         return f":{race}:"
     except (FileNotFoundError, json.JSONDecodeError, KeyError):
@@ -171,20 +171,18 @@ def get_flag_emote(country_code: str) -> str:
     """Get the appropriate flag emote for a country code."""
     if country_code in ["XX", "ZZ"]:
         # Use custom emotes for non-representing and other
-        project_root = os.path.dirname(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        )
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         emotes_path = os.path.join(project_root, "data", "misc", "emotes.json")
-
+        
         try:
-            with open(emotes_path, "r", encoding="utf-8") as f:
+            with open(emotes_path, 'r', encoding='utf-8') as f:
                 emotes_data = json.load(f)
-
+            
             # Find the flag emote
             for emote in emotes_data:
                 if emote.get("name") == f"flag_{country_code.lower()}":
                     return emote.get("markdown", f":flag_{country_code.lower()}:")
-
+            
             # Fallback to generic format if not found
             return f":flag_{country_code.lower()}:"
         except (FileNotFoundError, json.JSONDecodeError, KeyError):
@@ -194,23 +192,20 @@ def get_flag_emote(country_code: str) -> str:
         # Use Unicode flag emoji for standard country codes
         return country_to_flag(country_code)
 
-
 def get_rank_emote(rank: str) -> str:
     """Get the Discord emote for a rank from emotes.json."""
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    )
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
     emotes_path = os.path.join(project_root, "data", "misc", "emotes.json")
-
+    
     try:
-        with open(emotes_path, "r", encoding="utf-8") as f:
+        with open(emotes_path, 'r', encoding='utf-8') as f:
             emotes_data = json.load(f)
-
+        
         # Find the emote for the rank
         for emote in emotes_data:
             if emote.get("name") == rank:
                 return emote.get("markdown", f":{rank}:")
-
+        
         # Fallback to generic format if not found
         return f":{rank}:"
     except (FileNotFoundError, json.JSONDecodeError, KeyError):
@@ -221,39 +216,37 @@ def get_rank_emote(rank: str) -> str:
 def get_game_emote(game: str) -> str:
     """
     Get the Discord emote for a game from emotes.json.
-
+    
     Args:
         game: Either 'brood_war' or 'starcraft_2'
-
+    
     Returns:
         The Discord custom emote markdown or a fallback emoji.
     """
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    )
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
     emotes_path = os.path.join(project_root, "data", "misc", "emotes.json")
-
+    
     # Map input to emote name
     emote_name_map = {
-        "brood_war": "brood_war_logo",
-        "starcraft_2": "starcraft_2_logo",
-        "bw": "brood_war_logo",
-        "sc2": "starcraft_2_logo",
+        'brood_war': 'brood_war_logo',
+        'starcraft_2': 'starcraft_2_logo',
+        'bw': 'brood_war_logo',
+        'sc2': 'starcraft_2_logo'
     }
-
+    
     emote_name = emote_name_map.get(game.lower())
     if not emote_name:
         return "🎮"
-
+    
     try:
-        with open(emotes_path, "r", encoding="utf-8") as f:
+        with open(emotes_path, 'r', encoding='utf-8') as f:
             emotes_data = json.load(f)
-
+        
         # Find the emote for the game
         for emote in emotes_data:
             if emote.get("name") == emote_name:
                 return emote.get("markdown", "🎮")
-
+        
         # Fallback to generic game emoji if not found
         return "🎮"
     except (FileNotFoundError, json.JSONDecodeError, KeyError):

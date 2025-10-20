@@ -19,14 +19,15 @@ from src.backend.services.service_instances import (
 )
 
 __all__ = [
-    "user_info_service",
-    "command_guard_service",
-    "countries_service",
-    "regions_service",
-    "races_service",
-    "maps_service",
-    "leaderboard_service",
-    "mmr_service",
-    "validation_service",
-    "replay_service",
+    'user_info_service',
+    'command_guard_service',
+    'countries_service',
+    'regions_service',
+    'races_service',
+    'maps_service',
+    'leaderboard_service',
+    'mmr_service',
+    'validation_service',
+    'replay_service',
 ]
+

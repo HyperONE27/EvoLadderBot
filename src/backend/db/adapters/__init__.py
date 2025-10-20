@@ -5,25 +5,36 @@ This module provides a unified interface for database operations,
 allowing transparent switching between SQLite and PostgreSQL.
 """
 
+from typing import Optional
 from src.backend.db.adapters.base_adapter import DatabaseAdapter
 from src.backend.db.adapters.sqlite_adapter import SQLiteAdapter
 from src.backend.db.adapters.postgresql_adapter import PostgreSQLAdapter
-from src.backend.db.connection_pool import ConnectionPool
-from typing import Optional
 
 
-def get_adapter(db_type: str, pool: Optional[ConnectionPool] = None) -> DatabaseAdapter:
+def get_adapter(db_type: str) -> DatabaseAdapter:
     """
-    Factory function to get the appropriate database adapter.
+    Get the appropriate database adapter based on database type.
+    
+    Args:
+        db_type: Either "sqlite" or "postgresql"
+        
+    Returns:
+        DatabaseAdapter instance for the specified database type
+        
+    Raises:
+        ValueError: If db_type is not recognized
     """
-    if db_type.lower() == "sqlite":
+    db_type = db_type.lower()
+    
+    if db_type == "sqlite":
         return SQLiteAdapter()
-    elif db_type.lower() == "postgresql":
-        if not pool:
-            raise ValueError("ConnectionPool is required for PostgreSQLAdapter")
-        return PostgreSQLAdapter(pool=pool)
+    elif db_type == "postgresql":
+        return PostgreSQLAdapter()
     else:
-        raise ValueError(f"Unsupported database type: {db_type}")
+        raise ValueError(
+            f"Unknown database type: '{db_type}'. "
+            f"Must be 'sqlite' or 'postgresql'."
+        )
 
 
 __all__ = [
@@ -32,3 +43,4 @@ __all__ = [
     "PostgreSQLAdapter",
     "get_adapter",
 ]
+

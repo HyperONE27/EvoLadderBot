@@ -6,13 +6,13 @@ from src.bot.interface.components.cancel_embed import create_cancel_embed
 
 class ConfirmButton(discord.ui.Button):
     """Generic confirm button with customizable callback."""
-
+    
     def __init__(
         self,
         callback: Callable,
         label: str = "Confirm",
         style: discord.ButtonStyle = discord.ButtonStyle.success,
-        row: int = 0,
+        row: int = 0
     ):
         super().__init__(label=label, style=style, emoji="✅", row=row)
         self.callback_func = callback
@@ -22,20 +22,20 @@ class ConfirmButton(discord.ui.Button):
         for item in self.view.children:
             if isinstance(item, discord.ui.Button):
                 item.disabled = True
-
+        
         # Call the actual callback function (which will handle deferral and response)
         await self.callback_func(interaction)
 
 
 class RestartButton(discord.ui.Button):
     """Generic restart button with customizable reset target."""
-
+    
     def __init__(
         self,
         reset_target: Union[discord.ui.View, discord.ui.Modal],
         label: str = "Restart",
         style: discord.ButtonStyle = discord.ButtonStyle.secondary,
-        row: int = 0,
+        row: int = 0
     ):
         super().__init__(label=label, style=style, emoji="🔄", row=row)
         self.reset_target = reset_target
@@ -44,36 +44,41 @@ class RestartButton(discord.ui.Button):
         if isinstance(self.reset_target, discord.ui.View):
             # Defer to prevent timeout
             await interaction.response.defer()
-
+            
             # Check if the view has a get_embed method to get the proper embed
-            if hasattr(self.reset_target, "get_embed"):
+            if hasattr(self.reset_target, 'get_embed'):
                 embed = self.reset_target.get_embed()
                 await interaction.edit_original_response(
-                    content="", embed=embed, view=self.reset_target
+                    content="",
+                    embed=embed,
+                    view=self.reset_target
                 )
             else:
                 await interaction.edit_original_response(
-                    content="", embed=None, view=self.reset_target
+                    content="",
+                    embed=None,
+                    view=self.reset_target
                 )
         elif isinstance(self.reset_target, discord.ui.Modal):
             # Modals must be sent immediately, no deferral
             await interaction.response.send_modal(self.reset_target)
         else:
             await send_ephemeral_response(
-                interaction, content="⚠️ Nothing to restart to."
+                interaction,
+                content="⚠️ Nothing to restart to."
             )
 
 
 class CancelButton(discord.ui.Button):
     """Generic cancel button with customizable behavior."""
-
+    
     def __init__(
         self,
         reset_target: Union[discord.ui.View, discord.ui.Modal],
         label: str = "Cancel",
         style: discord.ButtonStyle = discord.ButtonStyle.danger,
         row: int = 0,
-        show_fields: bool = True,
+        show_fields: bool = True
     ):
         super().__init__(label=label, style=style, emoji="✖️", row=row)
         self.reset_target = reset_target
@@ -82,18 +87,20 @@ class CancelButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         # Defer to prevent timeout
         await interaction.response.defer()
-
+        
         # Always use the cancel embed for consistency
         cancel_view = create_cancel_embed()
-
+        
         await interaction.edit_original_response(
-            content="", embed=cancel_view.embed, view=cancel_view
+            content="",
+            embed=cancel_view.embed,
+            view=cancel_view
         )
 
 
 class ConfirmRestartCancelButtons:
     """Helper class to create sets of confirm, restart, and cancel buttons."""
-
+    
     @staticmethod
     def create_buttons(
         confirm_callback: Optional[Callable] = None,
@@ -105,10 +112,10 @@ class ConfirmRestartCancelButtons:
         row: int = 0,
         include_confirm: bool = True,
         include_restart: bool = True,
-        include_cancel: bool = True,
+        include_cancel: bool = True
     ) -> list[discord.ui.Button]:
         """Create a list of buttons based on provided parameters.
-
+        
         Args:
             confirm_callback: Callback function for confirm button
             reset_target: Target for restart/cancel buttons
@@ -122,18 +129,14 @@ class ConfirmRestartCancelButtons:
             include_cancel: Whether to include cancel button
         """
         buttons = []
-
+        
         if include_confirm and confirm_callback:
             buttons.append(ConfirmButton(confirm_callback, confirm_label, row=row))
-
+        
         if include_restart and reset_target:
             buttons.append(RestartButton(reset_target, restart_label, row=row))
-
+        
         if include_cancel and reset_target:
-            buttons.append(
-                CancelButton(
-                    reset_target, cancel_label, show_fields=show_cancel_fields, row=row
-                )
-            )
-
+            buttons.append(CancelButton(reset_target, cancel_label, show_fields=show_cancel_fields, row=row))
+        
         return buttons

@@ -27,9 +27,7 @@ class MMRService:
     _K_FACTOR: int = 40
     _DIVISOR: int = 500
 
-    def calculate_new_mmr(
-        self, player_one_mmr: int, player_two_mmr: int, result: int
-    ) -> MatchMMROutcome:
+    def calculate_new_mmr(self, player_one_mmr: int, player_two_mmr: int, result: int) -> MatchMMROutcome:
         """Return the updated MMR values for both players.
 
         Args:
@@ -40,9 +38,7 @@ class MMRService:
         Returns:
             MatchMMROutcome tuple with the updated MMR values.
         """
-        expected_one, expected_two = self._calculate_expected_mmr(
-            player_one_mmr, player_two_mmr
-        )
+        expected_one, expected_two = self._calculate_expected_mmr(player_one_mmr, player_two_mmr)
         score_one, score_two = self._calculate_actual_scores(result)
 
         updated_one = self._apply_rating_delta(player_one_mmr, expected_one, score_one)
@@ -55,30 +51,26 @@ class MMRService:
 
         return self._DEFAULT_MMR
 
-    def calculate_mmr_change(
-        self, player_one_mmr: int, player_two_mmr: int, result: int
-    ) -> int:
+    def calculate_mmr_change(self, player_one_mmr: int, player_two_mmr: int, result: int) -> int:
         """Calculate the MMR change for player one.
-
+        
         Args:
             player_one_mmr: Current MMR for player one.
             player_two_mmr: Current MMR for player two.
             result: Match outcome (1 = player one win, 2 = player two win, 0 = draw).
-
+            
         Returns:
             MMR change for player one (positive = gained, negative = lost).
         """
         outcome = self.calculate_new_mmr(player_one_mmr, player_two_mmr, result)
         return outcome.player_one_mmr - player_one_mmr
 
-    def _calculate_expected_mmr(
-        self, player_one_mmr: int, player_two_mmr: int
-    ) -> Tuple[float, float]:
+    def _calculate_expected_mmr(self, player_one_mmr: int, player_two_mmr: int) -> Tuple[float, float]:
         """Return the expected MMR scores for both players."""
 
         difference = (player_two_mmr - player_one_mmr) / self._DIVISOR
-        expected_one = 1.0 / (1.0 + 10.0**difference)
-        expected_two = 1.0 / (1.0 + 10.0**-difference)
+        expected_one = 1.0 / (1.0 + 10.0 ** difference)
+        expected_two = 1.0 / (1.0 + 10.0 ** -difference)
         return expected_one, expected_two
 
     def _calculate_actual_scores(self, result: int) -> Tuple[float, float]:
@@ -96,11 +88,7 @@ class MMRService:
         """Rounds an MMR change to the nearest integer."""
         return round(mmr_change)
 
-    def _apply_rating_delta(
-        self, current_mmr: int, expected_score: float, actual_score: float
-    ) -> int:
+    def _apply_rating_delta(self, current_mmr: int, expected_score: float, actual_score: float) -> int:
         """Apply the MMR delta produced by the probabilistic model."""
 
-        return int(
-            round(current_mmr + self._K_FACTOR * (actual_score - expected_score))
-        )
+        return int(round(current_mmr + self._K_FACTOR * (actual_score - expected_score)))

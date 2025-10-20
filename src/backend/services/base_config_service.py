@@ -206,3 +206,4 @@ class BaseConfigService(ABC):
     @abstractmethod
     def _get_default_data(self) -> Any:
         """Return the default data used when loading fails."""
+

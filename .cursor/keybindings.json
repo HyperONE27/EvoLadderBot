@@ -1,7 +1,0 @@
-[
-    {
-        "key": "ctrl+shift+t",
-        "command": "cursor.runTask",
-        "args": { "label": "full sanity sweep" }
-    }
-]

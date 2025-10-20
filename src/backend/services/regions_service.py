@@ -64,9 +64,7 @@ class RegionsService(BaseConfigService):
 
     def get_residential_regions(self) -> List[Dict[str, Any]]:
         if self._residential_regions_cache is None:
-            self._residential_regions_cache = list(
-                self.get_data()["residential_regions"]
-            )
+            self._residential_regions_cache = list(self.get_data()["residential_regions"])
         return list(self._residential_regions_cache)
 
     def get_game_servers(self) -> List[Dict[str, Any]]:
@@ -129,16 +127,13 @@ class RegionsService(BaseConfigService):
     def get_random_game_server(self) -> str:
         """Get a random game server code from the available servers."""
         import random
-
         servers = self.get_game_servers()
         if not servers:
             return "USW"  # Fallback to a default server
         server = random.choice(servers)
         return server.get("code", "USW")
 
-    def get_region_page_data(
-        self, page: int, page_size: int
-    ) -> Tuple[List[Dict[str, Any]], int]:
+    def get_region_page_data(self, page: int, page_size: int) -> Tuple[List[Dict[str, Any]], int]:
         residential_regions = self.get_residential_regions()
         total_pages = max(1, (len(residential_regions) + page_size - 1) // page_size)
         start_idx = (page - 1) * page_size
@@ -157,9 +152,7 @@ class RegionsService(BaseConfigService):
         return self.get_region_names_for_codes(ordered_codes)
 
     def get_sorted_regions(self) -> List[Dict[str, Any]]:
-        return sorted(
-            self.get_residential_regions(), key=lambda entry: entry.get("name", "")
-        )
+        return sorted(self.get_residential_regions(), key=lambda entry: entry.get("name", ""))
 
     def search_regions(self, query: str, limit: int = 25) -> List[Dict[str, Any]]:
         return self.search_by_name(query, limit=limit)

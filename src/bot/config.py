@@ -19,13 +19,13 @@ load_dotenv()
 def _get_required_env(key: str) -> str:
     """
     Get a required environment variable.
-
+    
     Args:
         key: Environment variable name
-
+        
     Returns:
         The environment variable value
-
+        
     Raises:
         ValueError: If the environment variable is not set
     """
@@ -41,13 +41,13 @@ def _get_required_env(key: str) -> str:
 def _get_required_int_env(key: str) -> int:
     """
     Get a required integer environment variable.
-
+    
     Args:
         key: Environment variable name
-
+        
     Returns:
         The environment variable value as an integer
-
+        
     Raises:
         ValueError: If the environment variable is not set or not a valid integer
     """
@@ -90,12 +90,8 @@ SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "evoladder.db")
 # Supabase Configuration (for storage and additional features)
 SUPABASE_URL = _get_required_env("SUPABASE_URL")
 SUPABASE_KEY = _get_required_env("SUPABASE_KEY")  # Anon key for client-side operations
-SUPABASE_SERVICE_ROLE_KEY = _get_required_env(
-    "SUPABASE_SERVICE_ROLE_KEY"
-)  # Service role for admin operations
-SUPABASE_BUCKET_NAME = os.getenv(
-    "SUPABASE_BUCKET_NAME", "replays"
-)  # Default bucket name
+SUPABASE_SERVICE_ROLE_KEY = _get_required_env("SUPABASE_SERVICE_ROLE_KEY")  # Service role for admin operations
+SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "replays")  # Default bucket name
 
 # =============================================================================
 # APPLICATION CONSTANTS
