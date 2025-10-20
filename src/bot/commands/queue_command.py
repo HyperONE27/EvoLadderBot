@@ -883,7 +883,7 @@ class MatchFoundView(discord.ui.View):
             if p1_info.get('alt_player_name_2'):
                 alt_ids_1.append(p1_info.get('alt_player_name_2'))
             if alt_ids_1:
-                p1_info_line += f"\n  a.k.a. {', '.join(alt_ids_1)}"
+                p1_info_line += f"\n  - a.k.a. {', '.join(alt_ids_1)}"
         
         p2_info_line = f"- Player 2: {p2_flag} {p2_race_emote} {p2_display_name} ({p2_race_name})"
         if p2_info:
@@ -893,7 +893,7 @@ class MatchFoundView(discord.ui.View):
             if p2_info.get('alt_player_name_2'):
                 alt_ids_2.append(p2_info.get('alt_player_name_2'))
             if alt_ids_2:
-                p2_info_line += f"\n  a.k.a. {', '.join(alt_ids_2)}"
+                p2_info_line += f"\n  - a.k.a. {', '.join(alt_ids_2)}"
         
         embed = discord.Embed(
             title=title,
