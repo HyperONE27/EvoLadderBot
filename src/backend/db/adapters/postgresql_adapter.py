@@ -1,5 +1,5 @@
 """
-PostgreSQL database adapter implementation with connection pooling.
+PostgreSQL database adapter implementation.
 """
 
 import re
@@ -12,10 +12,10 @@ from src.bot.config import DATABASE_URL
 
 class PostgreSQLAdapter(DatabaseAdapter):
     """
-    Database adapter for PostgreSQL with connection pooling.
+    Database adapter for PostgreSQL.
     
-    Uses a connection pool to eliminate connection overhead.
-    Handles PostgreSQL-specific query formatting and result conversion.
+    Handles PostgreSQL-specific connection management, query formatting,
+    and result conversion.
     """
     
     def __init__(self, connection_url: Optional[str] = None):
@@ -32,25 +32,6 @@ class PostgreSQLAdapter(DatabaseAdapter):
             self.connection_url = self.connection_url.replace(
                 "postgres://", "postgresql://", 1
             )
-        
-        # Initialize connection pool on first adapter instance
-        self._ensure_pool_initialized()
-    
-    def _ensure_pool_initialized(self):
-        """Ensure the global connection pool is initialized."""
-        try:
-            from src.backend.db.connection_pool import initialize_pool, get_global_pool
-            
-            # Try to get existing pool
-            try:
-                get_global_pool()
-            except RuntimeError:
-                # Pool doesn't exist, initialize it
-                print("[PostgreSQLAdapter] Initializing connection pool...")
-                initialize_pool(self.connection_url, minconn=2, maxconn=10)
-        except Exception as e:
-            print(f"[PostgreSQLAdapter] WARNING: Could not initialize pool: {e}")
-            print("[PostgreSQLAdapter] Will fall back to direct connections")
     
     def get_connection_string(self) -> str:
         """Get connection string for logging (with masked password)."""
@@ -59,10 +40,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
     @contextmanager
     def get_connection(self):
         """
-        Get a PostgreSQL database connection from the pool.
-        
-        Uses connection pooling to eliminate connection overhead.
-        Falls back to direct connection if pool is unavailable.
+        Get a PostgreSQL database connection.
         
         Yields:
             psycopg2 connection with RealDictCursor
@@ -70,42 +48,6 @@ class PostgreSQLAdapter(DatabaseAdapter):
         import psycopg2
         import psycopg2.extras
         
-        # Try to use connection pool first
-        pool_conn = None
-        try:
-            from src.backend.db.connection_pool import get_global_pool
-            
-            pool = get_global_pool()
-            
-            # Borrow connection from pool (fast!)
-            pool_conn = pool._pool.getconn()
-            # Set cursor factory for this connection
-            pool_conn.cursor_factory = psycopg2.extras.RealDictCursor
-            
-            try:
-                yield pool_conn
-                pool_conn.commit()
-            except Exception:
-                pool_conn.rollback()
-                raise
-            finally:
-                # Return connection to pool (doesn't close it!)
-                pool._pool.putconn(pool_conn)
-            return
-            
-        except Exception as pool_error:
-            # Pool not available or error during pool usage, fall back to direct connection
-            if pool_conn:
-                # If we got a connection but had an error, still return it
-                try:
-                    from src.backend.db.connection_pool import get_global_pool
-                    get_global_pool()._pool.putconn(pool_conn)
-                except:
-                    pass
-            
-            print(f"[PostgreSQLAdapter] WARNING: Using direct connection (pool error): {pool_error}")
-        
-        # Fallback: Create direct connection
         conn = psycopg2.connect(
             self.connection_url,
             cursor_factory=psycopg2.extras.RealDictCursor
