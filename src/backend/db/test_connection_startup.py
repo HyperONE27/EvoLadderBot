@@ -11,6 +11,7 @@ from src.backend.db.db_connection import (
     get_database_connection_string,
     is_postgresql
 )
+from src.backend.db.connection_pool import get_connection_from_pool, return_connection_to_pool
 
 
 def test_database_connection() -> Tuple[bool, str]:
@@ -35,12 +36,11 @@ def test_database_connection() -> Tuple[bool, str]:
 
 
 def _test_postgresql_connection(conn_str: str) -> Tuple[bool, str]:
-    """Test PostgreSQL connection."""
+    """Test PostgreSQL connection using the connection pool."""
+    conn = None
     try:
-        import psycopg2
-        
-        print("Testing PostgreSQL connection...")
-        conn = psycopg2.connect(conn_str)
+        print("Testing PostgreSQL connection pool...")
+        conn = get_connection_from_pool()
         cur = conn.cursor()
         
         # Test connection
@@ -89,7 +89,6 @@ def _test_postgresql_connection(conn_str: str) -> Tuple[bool, str]:
         print(f"  Players in database: {player_count}")
         
         cur.close()
-        conn.close()
         
         print(f"\n✓ PostgreSQL connection test PASSED")
         print(f"{'='*70}\n")
@@ -105,6 +104,9 @@ def _test_postgresql_connection(conn_str: str) -> Tuple[bool, str]:
         print(f"\n{msg}")
         print(f"{'='*70}\n")
         return False, msg
+    finally:
+        if conn:
+            return_connection_to_pool(conn)
 
 
 def _test_sqlite_connection(conn_str: str) -> Tuple[bool, str]:

@@ -4,7 +4,7 @@ from discord.ext import commands
 from concurrent.futures import ProcessPoolExecutor
 import sys
 
-from src.bot.config import EVOLADDERBOT_TOKEN, WORKER_PROCESSES
+from src.bot.config import EVOLADDERBOT_TOKEN, WORKER_PROCESSES, is_postgresql
 from src.bot.interface.commands.activate_command import register_activate_command
 from src.bot.interface.commands.leaderboard_command import register_leaderboard_command
 from src.bot.interface.commands.profile_command import register_profile_command
@@ -16,6 +16,8 @@ from src.backend.services.matchmaking_service import matchmaker
 from src.backend.services.cache_service import static_cache
 from src.backend.db.db_reader_writer import DatabaseWriter
 from src.backend.db.test_connection_startup import test_database_connection
+if is_postgresql():
+    from src.backend.db.connection_pool import close_all_connections
 
 
 intents = discord.Intents.default()
@@ -104,3 +106,7 @@ if __name__ == "__main__":
         print("[INFO] Shutting down process pool...")
         bot.process_pool.shutdown(wait=True)
         print("[INFO] Process pool shutdown complete")
+        
+        # Close database connections if using PostgreSQL
+        if is_postgresql():
+            close_all_connections()
