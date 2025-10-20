@@ -4,7 +4,7 @@ from discord.ext import commands
 from concurrent.futures import ProcessPoolExecutor
 import sys
 
-from src.bot.config import EVOLADDERBOT_TOKEN, WORKER_PROCESSES
+from src.bot.config import EVOLADDERBOT_TOKEN, WORKER_PROCESSES, DATABASE_TYPE
 from src.bot.interface.commands.activate_command import register_activate_command
 from src.bot.interface.commands.leaderboard_command import register_leaderboard_command
 from src.bot.interface.commands.profile_command import register_profile_command
@@ -16,6 +16,7 @@ from src.backend.services.matchmaking_service import matchmaker
 from src.backend.services.cache_service import static_cache
 from src.backend.db.db_reader_writer import DatabaseWriter
 from src.backend.db.test_connection_startup import test_database_connection
+from src.backend.db.connection_pool import initialize_pool, close_pool
 
 
 intents = discord.Intents.default()
@@ -69,6 +70,15 @@ def register_commands(bot: commands.Bot):
     register_termsofservice_command(bot.tree)
 
 if __name__ == "__main__":
+    if DATABASE_TYPE.lower() == "postgresql":
+        try:
+            initialize_pool()
+        except Exception as e:
+            print(f"\n[FATAL] Failed to initialize database connection pool: {e}")
+            print("[FATAL] Bot cannot start without a working database connection.")
+            print("[FATAL] Please fix the database configuration and try again.\n")
+            sys.exit(1)
+
     # Test database connection BEFORE starting the bot
     success, message = test_database_connection()
     if not success:
@@ -104,3 +114,7 @@ if __name__ == "__main__":
         print("[INFO] Shutting down process pool...")
         bot.process_pool.shutdown(wait=True)
         print("[INFO] Process pool shutdown complete")
+        
+        # Close the database connection pool
+        if DATABASE_TYPE.lower() == "postgresql":
+            close_pool()

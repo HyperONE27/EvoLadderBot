@@ -3,14 +3,11 @@ import discord
 from discord import app_commands
 from src.bot.interface.components.confirm_embed import ConfirmEmbedView
 from src.bot.interface.components.error_embed import ErrorEmbedException, create_simple_error_view
-from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
-from src.backend.services.user_info_service import UserInfoService
+from src.backend.services import command_guard_service, user_info_service
+from src.backend.services.command_guard_service import CommandGuardError
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
-
-user_info_service = UserInfoService()
-guard_service = CommandGuardService()
 
 
 # API Call / Data Handling
@@ -65,8 +62,8 @@ def register_activate_command(tree: app_commands.CommandTree):
     async def activate(interaction: discord.Interaction):
         print(f"[TERMINAL] /activate started by {interaction.user.id}")
         try:
-            player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
-            guard_service.require_tos_accepted(player)
+            player = command_guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+            command_guard_service.require_tos_accepted(player)
         except CommandGuardError as exc:
             error_embed = create_command_guard_error_embed(exc)
             await send_ephemeral_response(interaction, embed=error_embed)
