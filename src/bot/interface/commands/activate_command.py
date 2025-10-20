@@ -3,11 +3,14 @@ import discord
 from discord import app_commands
 from src.bot.interface.components.confirm_embed import ConfirmEmbedView
 from src.bot.interface.components.error_embed import ErrorEmbedException, create_simple_error_view
-from src.backend.services import command_guard_service as guard_service, user_info_service
-from src.backend.services.command_guard_service import CommandGuardError
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
+from src.backend.services.user_info_service import UserInfoService
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
+
+user_info_service = UserInfoService()
+guard_service = CommandGuardService()
 
 
 # API Call / Data Handling
