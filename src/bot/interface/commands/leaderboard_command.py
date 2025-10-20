@@ -1,12 +1,14 @@
 import discord
 from discord import app_commands
-from src.backend.services.leaderboard_service import LeaderboardService
-from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
+from src.backend.services.command_guard_service import CommandGuardError
+from src.backend.services.leaderboard_service import LeaderboardService  # For type hints
+from src.backend.services.app_context import (
+    command_guard_service as guard_service,
+    leaderboard_service
+)
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
-
-guard_service = CommandGuardService()
 
 
 # Register Command
@@ -33,7 +35,6 @@ async def leaderboard_command(interaction: discord.Interaction):
         await send_ephemeral_response(interaction, embed=error_embed)
         return
     
-    leaderboard_service = LeaderboardService()
     view = LeaderboardView(leaderboard_service)
     
     # Get initial data to set proper button states

@@ -2,25 +2,32 @@ import asyncio
 import json
 import discord
 from discord import app_commands
-from src.backend.services.races_service import RacesService
-from src.backend.services.maps_service import MapsService
-from src.backend.services.regions_service import RegionsService
 from src.bot.interface.components.error_embed import ErrorEmbedException, create_error_view_from_exception
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.interface.components.cancel_embed import create_cancel_embed
 from functools import partial
 from typing import Callable, Dict, Optional
 from src.backend.services.matchmaking_service import matchmaker, Player, QueuePreferences, MatchResult
-from src.backend.services.user_info_service import get_user_info, UserInfoService
-from src.backend.db.db_reader_writer import DatabaseWriter, DatabaseReader, get_timestamp
+from src.backend.services.user_info_service import get_user_info
+from src.backend.db.db_reader_writer import get_timestamp
 from src.bot.utils.discord_utils import send_ephemeral_response, get_current_unix_timestamp, format_discord_timestamp, get_flag_emote, get_race_emote
-from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
+from src.backend.services.command_guard_service import CommandGuardError
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
-from src.backend.services.replay_service import ReplayService, ReplayRaw, parse_replay_data_blocking
-from src.backend.services.mmr_service import MMRService
+from src.backend.services.replay_service import ReplayRaw, parse_replay_data_blocking
+from src.backend.services.match_completion_service import match_completion_service
+from src.backend.services.app_context import (
+    races_service as race_service,
+    maps_service,
+    regions_service,
+    user_info_service,
+    db_writer,
+    db_reader,
+    command_guard_service as guard_service,
+    replay_service,
+    mmr_service
+)
 import logging
 import time
-from src.backend.services.match_completion_service import match_completion_service
 from contextlib import suppress
 from src.bot.interface.components.replay_details_embed import ReplayDetailsEmbed
 from src.bot.config import GLOBAL_TIMEOUT
@@ -104,16 +111,6 @@ class MatchFoundViewManager:
 queue_searching_view_manager = QueueSearchingViewManager()
 match_found_view_manager = MatchFoundViewManager()
 channel_to_match_view_map: Dict[int, "MatchFoundView"] = {}
-
-
-race_service = RacesService()
-maps_service = MapsService()
-db_writer = DatabaseWriter()
-db_reader = DatabaseReader()
-guard_service = CommandGuardService()
-regions_service = RegionsService()
-mmr_service = MMRService()
-user_info_service = UserInfoService()
 
 logger = logging.getLogger(__name__)
 
@@ -939,8 +936,6 @@ class MatchFoundView(discord.ui.View):
             
             if p1_mmr_change is not None and p2_mmr_change is not None:
                 # Round MMR changes to integers using MMR service
-                from src.backend.services.mmr_service import MMRService
-                mmr_service = MMRService()
                 p1_mmr_rounded = mmr_service.round_mmr_change(p1_mmr_change)
                 p2_mmr_rounded = mmr_service.round_mmr_change(p2_mmr_change)
                 
@@ -1581,7 +1576,6 @@ async def on_message(message: discord.Message, bot=None):
         return
     
     # Check if any attachment is an SC2Replay file
-    replay_service = ReplayService()
     replay_attachment = None
     
     for attachment in message.attachments:

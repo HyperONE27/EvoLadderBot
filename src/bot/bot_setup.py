@@ -16,7 +16,7 @@ from src.bot.config import WORKER_PROCESSES, DATABASE_URL
 from src.backend.db.connection_pool import initialize_pool, close_pool
 from src.backend.db.test_connection_startup import test_database_connection
 from src.backend.services.cache_service import static_cache
-from src.backend.db.db_reader_writer import DatabaseWriter
+from src.backend.services.app_context import db_writer
 
 
 class EvoLadderBot(commands.Bot):
@@ -41,8 +41,7 @@ class EvoLadderBot(commands.Bot):
         if interaction.type == discord.InteractionType.application_command:
             command_name = interaction.command.name if interaction.command else "unknown"
             user = interaction.user
-            # Instantiate a fresh writer for this event
-            db_writer = DatabaseWriter()
+            # Use the shared db_writer from app_context
             db_writer.insert_command_call(
                 discord_uid=user.id,
                 player_name=user.name,

@@ -1,17 +1,17 @@
 import discord
 from discord import app_commands
-from src.backend.services.countries_service import CountriesService
-from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
-from src.backend.services.user_info_service import UserInfoService, get_user_info, log_user_action
+from src.backend.services.command_guard_service import CommandGuardError
+from src.backend.services.user_info_service import get_user_info, log_user_action
+from src.backend.services.app_context import (
+    countries_service,
+    user_info_service,
+    command_guard_service as guard_service
+)
 from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote
 from src.bot.interface.components.confirm_embed import ConfirmEmbedView
 from src.bot.interface.components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
-
-countries_service = CountriesService()
-user_info_service = UserInfoService()
-guard_service = CommandGuardService()
 
 
 # API Call / Data Handling
