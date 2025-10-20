@@ -136,7 +136,7 @@ class FlowTracker:
         
         log_prefix = f"{emoji} {label}"
         
-        # Build checkpoint summary
+        # Build checkpoint summary - only show meaningful checkpoints (>0.1ms)
         checkpoint_summary = ""
         if self.checkpoints:
             checkpoint_lines = []
@@ -144,10 +144,13 @@ class FlowTracker:
             
             for cp in self.checkpoints:
                 duration = cp.elapsed_ms - prev_elapsed
-                checkpoint_lines.append(f"  • {cp.name}: {duration:.2f}ms")
+                # Only show checkpoints that took meaningful time
+                if duration > 0.1:
+                    checkpoint_lines.append(f"  • {cp.name}: {duration:.2f}ms")
                 prev_elapsed = cp.elapsed_ms
             
-            checkpoint_summary = "\n" + "\n".join(checkpoint_lines)
+            if checkpoint_lines:
+                checkpoint_summary = "\n" + "\n".join(checkpoint_lines)
         
         # Log the complete flow
         logger.log(

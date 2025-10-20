@@ -82,17 +82,11 @@ class EvoLadderBot(commands.Bot):
             
             flow.checkpoint("command_logged")
             
-            # Continue with command processing
-            await super().on_interaction(interaction)
-            
             # Complete flow tracking
             duration = flow.complete("success")
             
             # Check against performance thresholds
             performance_monitor.check_threshold(f"{command_name}_command", duration)
-        else:
-            # Non-command interactions (buttons, dropdowns, etc.)
-            await super().on_interaction(interaction)
 
 
 def initialize_bot_resources(bot: EvoLadderBot) -> None:

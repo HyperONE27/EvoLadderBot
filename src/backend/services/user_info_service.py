@@ -14,6 +14,7 @@ It contains methods for:
 from typing import Optional, Dict, Any
 import discord
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
+from src.backend.services.cache_service import player_cache
 
 
 # ========== Utility Functions ==========
@@ -342,15 +343,19 @@ class UserInfoService:
         
         success = self.writer.update_player_country(discord_uid, country)
         
-        if success and player:
-            player_name = self._get_player_display_name(player)
-            self.writer.log_player_action(
-                discord_uid=discord_uid,
-                player_name=player_name,
-                setting_name="country",
-                old_value=old_country,
-                new_value=country
-            )
+        if success:
+            # Invalidate cache since player record changed
+            player_cache.invalidate(discord_uid)
+            
+            if player:
+                player_name = self._get_player_display_name(player)
+                self.writer.log_player_action(
+                    discord_uid=discord_uid,
+                    player_name=player_name,
+                    setting_name="country",
+                    old_value=old_country,
+                    new_value=country
+                )
         
         return success
     
@@ -372,6 +377,9 @@ class UserInfoService:
             # Update existing player's activation code
             success = self.writer.update_player_activation_code(discord_uid, activation_code)
             if success:
+                # Invalidate cache since player record changed
+                player_cache.invalidate(discord_uid)
+                
                 player_name = self._get_player_display_name(player)
                 self.writer.log_player_action(
                     discord_uid=discord_uid,
@@ -390,6 +398,8 @@ class UserInfoService:
                 activation_code=activation_code
             )
             if player_id:
+                # Invalidate cache for new player
+                player_cache.invalidate(discord_uid)
                 return {"status": "ok", "message": "Player created with activation code"}
             else:
                 return {"status": "error", "message": "Failed to create player"}
@@ -413,15 +423,19 @@ class UserInfoService:
         
         success = self.writer.accept_terms_of_service(discord_uid)
         
-        if success and player:
-            player_name = self._get_player_display_name(player)
-            self.writer.log_player_action(
-                discord_uid=discord_uid,
-                player_name=player_name,
-                setting_name="accepted_tos",
-                old_value="False",
-                new_value="True"
-            )
+        if success:
+            # Invalidate cache since player record changed
+            player_cache.invalidate(discord_uid)
+            
+            if player:
+                player_name = self._get_player_display_name(player)
+                self.writer.log_player_action(
+                    discord_uid=discord_uid,
+                    player_name=player_name,
+                    setting_name="accepted_tos",
+                    old_value="False",
+                    new_value="True"
+                )
         
         return success
     
@@ -482,6 +496,9 @@ class UserInfoService:
         success = self.writer.complete_setup(discord_uid)
         
         if success:
+            # Invalidate cache since player record changed
+            player_cache.invalidate(discord_uid)
+            
             # Only log if completed_setup actually changed
             if old_player and not old_player.get("completed_setup"):
                 self.writer.log_player_action(
@@ -546,6 +563,9 @@ class UserInfoService:
         success = self.writer.update_player_remaining_aborts(discord_uid, new_aborts)
         
         if success:
+            # Invalidate cache since player record changed
+            player_cache.invalidate(discord_uid)
+            
             # Log the abort usage
             player_name = self._get_player_display_name(player)
             self.writer.log_player_action(
