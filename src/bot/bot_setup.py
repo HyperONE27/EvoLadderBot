@@ -19,6 +19,7 @@ from src.backend.services.cache_service import static_cache
 from src.backend.services.app_context import db_writer, command_guard_service
 from src.backend.services.command_guard_service import DMOnlyError
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
+from src.backend.services.performance_service import FlowTracker, performance_monitor
 
 
 class EvoLadderBot(commands.Bot):
@@ -55,14 +56,22 @@ class EvoLadderBot(commands.Bot):
             command_name = interaction.command.name if interaction.command else "unknown"
             user = interaction.user
             
+            # Start performance tracking for this interaction
+            flow = FlowTracker(f"interaction.{command_name}", user_id=user.id)
+            flow.checkpoint("interaction_start")
+            
             # Check if this is a DM-only command used outside of DMs
             if command_name in self.DM_ONLY_COMMANDS:
                 try:
                     command_guard_service.require_dm(interaction)
                 except DMOnlyError as e:
+                    flow.checkpoint("dm_check_failed")
                     error_embed = create_command_guard_error_embed(e)
                     await interaction.response.send_message(embed=error_embed)
+                    flow.complete("dm_check_failed")
                     return
+            
+            flow.checkpoint("dm_check_passed")
             
             # Use the shared db_writer from app_context
             db_writer.insert_command_call(
@@ -70,6 +79,20 @@ class EvoLadderBot(commands.Bot):
                 player_name=user.name,
                 command=command_name
             )
+            
+            flow.checkpoint("command_logged")
+            
+            # Continue with command processing
+            await super().on_interaction(interaction)
+            
+            # Complete flow tracking
+            duration = flow.complete("success")
+            
+            # Check against performance thresholds
+            performance_monitor.check_threshold(f"{command_name}_command", duration)
+        else:
+            # Non-command interactions (buttons, dropdowns, etc.)
+            await super().on_interaction(interaction)
 
 
 def initialize_bot_resources(bot: EvoLadderBot) -> None:
@@ -118,6 +141,12 @@ def initialize_bot_resources(bot: EvoLadderBot) -> None:
     # 4. Create and Attach Process Pool
     bot.process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
     print(f"[INFO] Initialized Process Pool with {WORKER_PROCESSES} worker process(es)")
+    
+    # 5. Performance monitoring is active
+    print("[INFO] Performance monitoring ACTIVE - All commands will be tracked")
+    print("[INFO] Performance thresholds configured:")
+    for cmd, threshold in performance_monitor.alert_thresholds.items():
+        print(f"  - {cmd}: {threshold}ms")
 
 
 def shutdown_bot_resources(bot: EvoLadderBot) -> None:

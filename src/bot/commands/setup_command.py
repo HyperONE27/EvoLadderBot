@@ -16,25 +16,38 @@ from src.bot.components.confirm_embed import ConfirmEmbedView
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
+from src.backend.services.performance_service import FlowTracker
 
 
 # API Call / Data Handling
 async def setup_command(interaction: discord.Interaction):
     """Handle the /setup slash command"""
+    flow = FlowTracker("setup_command", user_id=interaction.user.id)
+    
     try:
+        # Guard checks
+        flow.checkpoint("guard_checks_start")
         player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
         guard_service.require_tos_accepted(player)
+        flow.checkpoint("guard_checks_complete")
     except CommandGuardError as exc:
+        flow.complete("guard_check_failed")
         error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
         return
     
     # Get existing player data for presets
+    flow.checkpoint("fetch_existing_data_start")
     existing_data = user_info_service.get_player(interaction.user.id)
+    flow.checkpoint("fetch_existing_data_complete")
     
     # Send the modal with existing data as presets
+    flow.checkpoint("send_modal_start")
     modal = SetupModal(existing_data=existing_data)
     await interaction.response.send_modal(modal)
+    flow.checkpoint("send_modal_complete")
+    
+    flow.complete("success")
 
 
 # Register Command

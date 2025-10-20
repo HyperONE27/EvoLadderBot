@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import discord
 from discord.ext import commands
 
@@ -13,6 +14,19 @@ from src.bot.commands.setup_command import register_setup_command
 from src.bot.commands.termsofservice_command import register_termsofservice_command
 from src.backend.services.matchmaking_service import matchmaker
 
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Set specific log levels
+logging.getLogger('discord').setLevel(logging.WARNING)  # Reduce Discord library noise
+logging.getLogger('src.backend.services.performance_service').setLevel(logging.INFO)  # Show performance logs
+
+logger = logging.getLogger(__name__)
 
 intents = discord.Intents.default()
 intents.messages = True

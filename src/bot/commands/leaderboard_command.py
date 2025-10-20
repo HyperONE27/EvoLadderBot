@@ -9,6 +9,7 @@ from src.backend.services.app_context import (
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
+from src.backend.services.performance_service import FlowTracker
 
 
 # Register Command
@@ -27,20 +28,30 @@ def register_leaderboard_command(tree: app_commands.CommandTree):
 # UI Elements
 async def leaderboard_command(interaction: discord.Interaction):
     """Handle the /leaderboard slash command"""
+    flow = FlowTracker("leaderboard_command", user_id=interaction.user.id)
+    
     try:
+        flow.checkpoint("guard_checks_start")
         player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
         guard_service.require_tos_accepted(player)
+        flow.checkpoint("guard_checks_complete")
     except CommandGuardError as exc:
+        flow.complete("guard_check_failed")
         error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
         return
     
+    flow.checkpoint("create_view_start")
     view = LeaderboardView(leaderboard_service)
+    flow.checkpoint("create_view_complete")
     
     # Get initial data to set proper button states
+    flow.checkpoint("fetch_leaderboard_data_start")
     data = await leaderboard_service.get_leaderboard_data(page_size=20)
+    flow.checkpoint("fetch_leaderboard_data_complete")
     
     # Update button states based on data
+    flow.checkpoint("update_button_states_start")
     total_pages = data.get("total_pages", 1)
     current_page = data.get("current_page", 1)
     button_states = leaderboard_service.get_button_states(total_pages)
@@ -55,7 +66,13 @@ async def leaderboard_command(interaction: discord.Interaction):
             view.remove_item(item)
             view.add_item(PageNavigationSelect(total_pages, current_page))
     
+    flow.checkpoint("update_button_states_complete")
+    
+    flow.checkpoint("send_response_start")
     await send_ephemeral_response(interaction, embed=view.get_embed(data), view=view)
+    flow.checkpoint("send_response_complete")
+    
+    flow.complete("success")
 
 
 class CountryFilterPage1Select(discord.ui.Select):

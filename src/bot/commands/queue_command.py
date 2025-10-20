@@ -31,6 +31,7 @@ import time
 from contextlib import suppress
 from src.bot.components.replay_details_embed import ReplayDetailsEmbed
 from src.bot.config import GLOBAL_TIMEOUT
+from src.backend.services.performance_service import FlowTracker
 
 
 class QueueSearchingViewManager:
@@ -131,15 +132,22 @@ def register_queue_command(tree: app_commands.CommandTree):
 # UI Elements
 async def queue_command(interaction: discord.Interaction):
     """Handle the /queue slash command"""
+    flow = FlowTracker("queue_command", user_id=interaction.user.id)
+    
     try:
+        # Guard checks
+        flow.checkpoint("guard_checks_start")
         player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
         guard_service.require_queue_access(player)
+        flow.checkpoint("guard_checks_complete")
     except CommandGuardError as exc:
+        flow.complete("guard_check_failed")
         error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
         return
 
-    # A channel can only have one active match view
+    # Check for existing queue/match
+    flow.checkpoint("check_existing_queue_start")
     is_in_match_view = any(
         v.match_result.player_1_discord_id == interaction.user.id or v.match_result.player_2_discord_id == interaction.user.id
         for v in channel_to_match_view_map.values()
@@ -147,6 +155,7 @@ async def queue_command(interaction: discord.Interaction):
 
     # Prevent multiple queue attempts or queuing while a match is active
     if await queue_searching_view_manager.has_view(interaction.user.id) or is_in_match_view:
+        flow.complete("already_queued")
         error = ErrorEmbedException(
             title="Queueing Not Allowed",
             description="You are already in a queue or an active match."
@@ -155,7 +164,10 @@ async def queue_command(interaction: discord.Interaction):
         await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
         return
     
+    flow.checkpoint("check_existing_queue_complete")
+    
     # Get user's saved preferences from database
+    flow.checkpoint("load_preferences_start")
     user_preferences = db_reader.get_preferences_1v1(interaction.user.id)
     
     if user_preferences:
@@ -172,16 +184,28 @@ async def queue_command(interaction: discord.Interaction):
         default_races = []
         default_maps = []
     
+    flow.checkpoint("load_preferences_complete")
+    
+    # Create view
+    flow.checkpoint("create_view_start")
     view = await QueueView.create(
         discord_user_id=interaction.user.id,
         default_races=default_races,
         default_maps=default_maps,
     )
+    flow.checkpoint("create_view_complete")
     
-    # Use the same embed format as the updated embed
+    # Build embed
+    flow.checkpoint("build_embed_start")
     embed = view.get_embed()
+    flow.checkpoint("build_embed_complete")
     
+    # Send response
+    flow.checkpoint("send_response_start")
     await send_ephemeral_response(interaction, embed=embed, view=view)
+    flow.checkpoint("send_response_complete")
+    
+    flow.complete("success")
 
 
 class MapVetoSelect(discord.ui.Select):

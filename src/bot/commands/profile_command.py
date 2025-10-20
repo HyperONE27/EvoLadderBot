@@ -11,21 +11,30 @@ from src.backend.services.app_context import (
 )
 from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote, get_flag_emote, get_game_emote
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
+from src.backend.services.performance_service import FlowTracker
 
 
 # API Call / Data Handling
 async def profile_command(interaction: discord.Interaction):
     """Handle the /profile slash command"""
+    flow = FlowTracker("profile_command", user_id=interaction.user.id)
+    
     try:
+        # Guard checks
+        flow.checkpoint("guard_checks_start")
         player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        flow.checkpoint("guard_checks_complete")
     except CommandGuardError as exc:
+        flow.complete("guard_check_failed")
         error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
         return
     
     # Get player data
+    flow.checkpoint("fetch_player_data_start")
     player_data = user_info_service.get_player(interaction.user.id)
     if not player_data:
+        flow.complete("player_not_found")
         error_embed = discord.Embed(
             title="❌ Profile Not Found",
             description=f"No profile found for {interaction.user.mention}",
@@ -34,13 +43,24 @@ async def profile_command(interaction: discord.Interaction):
         await send_ephemeral_response(interaction, embed=error_embed)
         return
     
+    flow.checkpoint("fetch_player_data_complete")
+    
     # Get MMR data for all races
+    flow.checkpoint("fetch_mmr_data_start")
     mmr_data = db_reader.get_all_player_mmrs_1v1(interaction.user.id)
+    flow.checkpoint("fetch_mmr_data_complete")
     
     # Create profile embed
+    flow.checkpoint("create_embed_start")
     embed = create_profile_embed(interaction.user, player_data, mmr_data)
+    flow.checkpoint("create_embed_complete")
     
+    # Send response
+    flow.checkpoint("send_response_start")
     await send_ephemeral_response(interaction, embed=embed)
+    flow.checkpoint("send_response_complete")
+    
+    flow.complete("success")
 
 
 def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) -> discord.Embed:
