@@ -50,11 +50,19 @@ class RacesService(BaseConfigService):
         grouped = self.get_races_by_game()
         return {
             "brood_war": [
-                (race.get("name", ""), race.get("code", ""), race.get("description", ""))
+                (
+                    race.get("name", ""),
+                    race.get("code", ""),
+                    race.get("description", ""),
+                )
                 for race in grouped["brood_war"]
             ],
             "starcraft2": [
-                (race.get("name", ""), race.get("code", ""), race.get("description", ""))
+                (
+                    race.get("name", ""),
+                    race.get("code", ""),
+                    race.get("description", ""),
+                )
                 for race in grouped["starcraft2"]
             ],
         }

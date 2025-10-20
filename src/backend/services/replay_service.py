@@ -10,13 +10,15 @@ from typing import Optional
 import hashlib
 import os
 from datetime import datetime, timezone
-from src.backend.db.db_reader_writer import DatabaseWriter, get_timestamp
+from src.backend.db.db_reader_writer import DatabaseWriter, get_timestamp, Database
 from src.bot.utils.discord_utils import get_current_unix_timestamp
 import io
+from .storage_service import StorageService
 
 
 class ReplayParseError(Exception):
     """Custom exception for replay parsing errors."""
+
     pass
 
 
@@ -36,29 +38,34 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
         - On failure: 'error': <error_message> with other fields None or partial
     """
     import time
+
     start_time = time.time()
-    
-    print(f"[Worker Process] Starting replay parse (size: {len(replay_bytes)} bytes)...")
-    
+
+    print(
+        f"[Worker Process] Starting replay parse (size: {len(replay_bytes)} bytes)..."
+    )
+
     try:
         # Load the replay using sc2reader at level 4 for full parsing
         replay = sc2reader.load_replay(io.BytesIO(replay_bytes), load_level=4)
-        
+
         # Validate player count
         if len(replay.players) != 2:
-            error_msg = f"Expected 2 players, but replay has {len(replay.players)} players"
+            error_msg = (
+                f"Expected 2 players, but replay has {len(replay.players)} players"
+            )
             print(f"[Worker Process] Parse failed: {error_msg}")
             return {"error": error_msg}
-        
+
         # Calculate replay hash
         hasher = hashlib.blake2b(digest_size=10)  # 80 bits = 10 bytes
         hasher.update(replay_bytes)
         replay_hash = hasher.hexdigest()
-        
+
         # Extract player information
         player1 = replay.players[0]
         player2 = replay.players[1]
-        
+
         # Fix race names to match database format
         def fix_race(race):
             race_map = {
@@ -67,13 +74,13 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
                 "Protoss": "sc2_protoss",
                 "BW Terran": "bw_terran",
                 "BW Zerg": "bw_zerg",
-                "BW Protoss": "bw_protoss"
+                "BW Protoss": "bw_protoss",
             }
             return race_map.get(race, race)
-        
+
         player_1_race = fix_race(player1.play_race)
         player_2_race = fix_race(player2.play_race)
-        
+
         # Determine winner
         winner = replay.winner
         if winner is None:
@@ -88,7 +95,7 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
                 for p in replay.players:
                     if p.name == winner_name:
                         winner = p
-        
+
         # Convert winner to result int
         if winner is None:
             result = 0  # Draw
@@ -100,15 +107,15 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
                 result = 2
             else:
                 result = 0
-        
+
         # Extract toon handles
         def find_toon_handles(data):
             """Recursively search for toon_handle keys in a dictionary or list."""
             handles = []
-            
+
             def traverse(obj):
                 if isinstance(obj, dict):
-                    if "toon_handle" in obj and obj["toon_handle"] != '':
+                    if "toon_handle" in obj and obj["toon_handle"] != "":
                         handles.append(obj["toon_handle"])
                     for value in obj.values():
                         if isinstance(value, (dict, list)):
@@ -117,36 +124,42 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
                     for item in obj:
                         if isinstance(item, (dict, list)):
                             traverse(item)
-            
+
             traverse(data)
             return handles
-        
+
         toon_handles = find_toon_handles(replay.raw_data)
-        player_1_handle = toon_handles[0] if len(toon_handles) >= 1 else ''
-        player_2_handle = toon_handles[1] if len(toon_handles) >= 2 else ''
-        
+        player_1_handle = toon_handles[0] if len(toon_handles) >= 1 else ""
+        player_2_handle = toon_handles[1] if len(toon_handles) >= 2 else ""
+
         # Get duration
         duration = None
-        if hasattr(replay, 'game_events'):
+        if hasattr(replay, "game_events"):
             for event in replay.game_events:
-                if event.name == 'PlayerLeaveEvent':
+                if event.name == "PlayerLeaveEvent":
                     # Ensure player is not an observer
                     if event.player and not event.player.is_observer:
-                        duration = int(round(event.second / 1.4))  # Faster is 1.4 times Normal
+                        duration = int(
+                            round(event.second / 1.4)
+                        )  # Faster is 1.4 times Normal
                         break
-        
-        if duration is None and hasattr(replay, 'game_length'):
+
+        if duration is None and hasattr(replay, "game_length"):
             duration = int(round(replay.game_length.seconds))
-        
+
         # Get observers
         observers = [o.name for o in replay.observers]
-        
+
         # Get replay date
-        replay_date = replay.date.isoformat() if hasattr(replay, 'date') and replay.date else ''
-        
+        replay_date = (
+            replay.date.isoformat() if hasattr(replay, "date") and replay.date else ""
+        )
+
         elapsed_time = time.time() - start_time
-        print(f"[Worker Process] Parse complete for hash {replay_hash} in {elapsed_time:.3f}s")
-        
+        print(
+            f"[Worker Process] Parse complete for hash {replay_hash} in {elapsed_time:.3f}s"
+        )
+
         return {
             "error": None,
             "replay_hash": replay_hash,
@@ -160,9 +173,9 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
             "player_2_handle": player_2_handle,
             "observers": observers,  # Keep as list, will be JSON-encoded later
             "map_name": replay.map_name,
-            "duration": duration if duration is not None else 0
+            "duration": duration if duration is not None else 0,
         }
-        
+
     except Exception as e:
         elapsed_time = time.time() - start_time
         error_msg = f"sc2reader failed to parse replay: {type(e).__name__}: {str(e)}"
@@ -173,6 +186,7 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
 @dataclass
 class ReplayRaw:
     """Raw replay data."""
+
     replay_bytes: bytes
     replay_path: str
 
@@ -180,6 +194,7 @@ class ReplayRaw:
 @dataclass
 class ReplayParsed:
     """Just the bits of the replay we need."""
+
     replay_hash: str
     replay_date: str
     player_1_name: str
@@ -193,17 +208,23 @@ class ReplayParsed:
     map_name: str
     duration: int
 
+
 class ReplayService:
     """
     Replay service for handling replay file storage and database operations.
-    
+
     Note: CPU-intensive replay parsing is handled by the standalone
     parse_replay_data_blocking() function which runs in worker processes.
     This service handles the fast I/O operations (file storage, database writes).
     """
 
-    def __init__(self, replay_dir="data/replays"):
+    def __init__(
+        self, db: Database, storage_service: StorageService, replay_dir="data/replays"
+    ):
         self.replay_dir = replay_dir
+        self.db = db
+        self.writer = DatabaseWriter(db)
+        self.storage_service = storage_service
         os.makedirs(self.replay_dir, exist_ok=True)
 
     def is_sc2_replay(self, filename: str) -> bool:
@@ -213,7 +234,7 @@ class ReplayService:
     def parse_replay(self, replay_data, is_bytes=False) -> Optional[ReplayParsed]:
         """
         LEGACY METHOD - Use parse_replay_data_blocking() instead for production.
-        
+
         This method performs BLOCKING, CPU-intensive parsing and should only be
         used for testing/debugging purposes. For production use with the Discord bot,
         use parse_replay_data_blocking() via run_in_executor() to avoid blocking
@@ -223,19 +244,27 @@ class ReplayService:
             if is_bytes:
                 replay_bytes = replay_data
             else:
-                with open(replay_data, 'rb') as f:
+                with open(replay_data, "rb") as f:
                     replay_bytes = f.read()
 
             replay = self._load_replay(replay_bytes)
 
             replay_hash = self._calculate_replay_hash(replay_bytes)
-            player_1_name, player_2_name, player_1_race, player_2_race = self._get_player_info(replay)
-            player_1_race, player_2_race = self._fix_race(player_1_race), self._fix_race(player_2_race)
+            player_1_name, player_2_name, player_1_race, player_2_race = (
+                self._get_player_info(replay)
+            )
+            player_1_race, player_2_race = self._fix_race(
+                player_1_race
+            ), self._fix_race(player_2_race)
             result = self._get_winner(replay)
             player_1_handle, player_2_handle = self._get_toon_handles(replay)
             map_name = replay.map_name
             duration = self._get_duration(replay)
-            replay_date = replay.date.isoformat() if hasattr(replay, 'date') and replay.date else ''
+            replay_date = (
+                replay.date.isoformat()
+                if hasattr(replay, "date") and replay.date
+                else ""
+            )
             observers = self._get_observers(replay)
             return ReplayParsed(
                 replay_date=replay_date,
@@ -249,16 +278,18 @@ class ReplayService:
                 player_2_handle=player_2_handle,
                 observers=observers,
                 map_name=map_name,
-                duration=duration
+                duration=duration,
             )
         except Exception as e:
             print(f"Error processing replay: {e}")
             raise ReplayParseError(e)
 
-    def store_upload(self, match_id: int, uploader_id: int, replay_bytes: bytes) -> dict:
+    def store_upload(
+        self, match_id: int, uploader_id: int, replay_bytes: bytes
+    ) -> dict:
         """
         LEGACY METHOD - Use store_upload_from_parsed_dict() instead for production.
-        
+
         This method performs BLOCKING parsing internally and should only be used
         for testing/debugging. For production use, parse the replay in a worker
         process using parse_replay_data_blocking(), then call
@@ -266,57 +297,58 @@ class ReplayService:
         """
         try:
             replay_path = self.save_replay(replay_bytes)
-            
+
             # Parse the replay to get the data for the replays table
             parsed_replay = self.parse_replay(replay_bytes, is_bytes=True)
 
-            db_writer = DatabaseWriter()
-
             # Insert the parsed replay data into the new replays table
             replay_data = asdict(parsed_replay)
-            replay_data['replay_path'] = replay_path  # Add the path to the data
-            replay_data['observers'] = json.dumps(replay_data['observers'])  # Convert list to JSON string
-            db_writer.insert_replay(replay_data)
+            replay_data["replay_path"] = replay_path  # Add the path to the data
+            replay_data["observers"] = json.dumps(
+                replay_data["observers"]
+            )  # Convert list to JSON string
+            self.writer.insert_replay(replay_data)
 
             sql_timestamp = get_timestamp()
-            success = db_writer.update_match_replay_1v1(
-                match_id,
-                uploader_id,
-                replay_path,
-                sql_timestamp
+            success = self.writer.update_match_replay_1v1(
+                match_id, uploader_id, replay_path, sql_timestamp
             )
 
             return {
                 "success": success,
                 "unix_epoch": get_current_unix_timestamp() if success else None,
-                "replay_data": asdict(parsed_replay) if parsed_replay else None
+                "replay_data": asdict(parsed_replay) if parsed_replay else None,
             }
         except ReplayParseError as e:
             print(f"Replay parse error during store_upload: {e}")
             return {"success": False, "error": str(e)}
         except Exception as e:
             print(f"Error storing replay upload: {e}")
-            return {"success": False, "error": "An unexpected error occurred while storing the replay."}
-    
-    def store_upload_from_parsed_dict(self, match_id: int, uploader_id: int, 
-                                       replay_bytes: bytes, parsed_dict: dict) -> dict:
+            return {
+                "success": False,
+                "error": "An unexpected error occurred while storing the replay.",
+            }
+
+    def store_upload_from_parsed_dict(
+        self, match_id: int, uploader_id: int, replay_bytes: bytes, parsed_dict: dict
+    ) -> dict:
         """
         PRIMARY METHOD for production use with multiprocessing.
-        
+
         Saves a replay file and updates the database using pre-parsed replay data.
         This method is designed to work with the output from parse_replay_data_blocking()
         which should be executed in a worker process via run_in_executor().
-        
+
         This method only performs fast I/O operations (file write, database updates)
         and does NOT perform CPU-intensive parsing, making it safe to call in the
         main event loop.
-        
+
         Args:
             match_id: The match ID to associate with this replay
             uploader_id: The Discord user ID of the uploader
             replay_bytes: The raw replay bytes (for saving to disk)
             parsed_dict: The dictionary returned from parse_replay_data_blocking()
-        
+
         Returns:
             A dictionary with success status and replay data
         """
@@ -324,12 +356,12 @@ class ReplayService:
             # Check if parsing failed
             if parsed_dict.get("error"):
                 return {"success": False, "error": parsed_dict["error"]}
-            
+
             # Save the replay file (uploads to Supabase Storage, falls back to local)
             # Pass match_id and uploader_id for Supabase storage path
-            replay_url = self.save_replay(replay_bytes, match_id=match_id, player_discord_uid=uploader_id)
-            
-            db_writer = DatabaseWriter()
+            replay_url = self.save_replay(
+                replay_bytes, match_id=match_id, player_discord_uid=uploader_id
+            )
 
             # Prepare replay data for database insertion
             replay_data = {
@@ -342,33 +374,38 @@ class ReplayService:
                 "result": parsed_dict["result"],
                 "player_1_handle": parsed_dict["player_1_handle"],
                 "player_2_handle": parsed_dict["player_2_handle"],
-                "observers": json.dumps(parsed_dict["observers"]),  # Convert list to JSON
+                "observers": json.dumps(
+                    parsed_dict["observers"]
+                ),  # Convert list to JSON
                 "map_name": parsed_dict["map_name"],
                 "duration": parsed_dict["duration"],
-                "replay_path": replay_url  # Store URL (Supabase) or path (local fallback)
+                "replay_path": replay_url,  # Store URL (Supabase) or path (local fallback)
             }
-            
+
             # Insert into replays table
-            db_writer.insert_replay(replay_data)
+            self.writer.insert_replay(replay_data)
 
             # Update match record with replay URL/path
             sql_timestamp = get_timestamp()
-            success = db_writer.update_match_replay_1v1(
+            success = self.writer.update_match_replay_1v1(
                 match_id,
                 uploader_id,
                 replay_url,  # Store URL (Supabase) or path (local fallback)
-                sql_timestamp
+                sql_timestamp,
             )
 
             return {
                 "success": success,
                 "unix_epoch": get_current_unix_timestamp() if success else None,
-                "replay_data": parsed_dict
+                "replay_data": parsed_dict,
             }
-            
+
         except Exception as e:
             print(f"Error storing replay upload from parsed dict: {e}")
-            return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
+            return {
+                "success": False,
+                "error": f"An unexpected error occurred: {str(e)}",
+            }
 
     def _calculate_replay_hash(self, replay_bytes: bytes) -> str:
         """Calculates an 80-bit blake2b hash of the replay."""
@@ -381,52 +418,56 @@ class ReplayService:
         timestamp = int(datetime.now(timezone.utc).timestamp())
         return f"{replay_hash}_{timestamp}.SC2Replay"
 
-    def save_replay(self, replay_bytes: bytes, match_id: int = None, player_discord_uid: int = None) -> str:
+    def save_replay(
+        self, replay_bytes: bytes, match_id: int = None, player_discord_uid: int = None
+    ) -> str:
         """
         Saves a replay file to Supabase Storage and returns its URL.
         Falls back to local storage if Supabase upload fails.
-        
+
         Args:
             replay_bytes: The replay file bytes
             match_id: Optional match ID for Supabase storage path
             player_discord_uid: Optional player Discord UID for Supabase storage path
-            
+
         Returns:
             URL to replay file (Supabase URL if successful, local path as fallback)
         """
         replay_hash = self._calculate_replay_hash(replay_bytes)
         filename = self._generate_filename(replay_hash)
-        
+
         # Try Supabase Storage first if match_id and player_discord_uid are provided
         if match_id is not None and player_discord_uid is not None:
             try:
-                from src.backend.services.storage_service import storage_service
-                
-                print(f"[Replay] Uploading to Supabase Storage (match: {match_id}, player: {player_discord_uid})...")
-                public_url = storage_service.upload_replay(
+                print(
+                    f"[Replay] Uploading to Supabase Storage (match: {match_id}, player: {player_discord_uid})..."
+                )
+                public_url = self.storage_service.upload_replay(
                     match_id=match_id,
                     player_discord_uid=player_discord_uid,
                     file_data=replay_bytes,
-                    filename=filename
+                    filename=filename,
                 )
-                
+
                 if public_url:
                     print(f"[Replay] Upload successful: {public_url}")
                     return public_url
                 else:
-                    print(f"[Replay] Supabase upload failed, falling back to local storage")
-                    
+                    print(
+                        f"[Replay] Supabase upload failed, falling back to local storage"
+                    )
+
             except Exception as e:
                 print(f"[Replay] ERROR during Supabase upload: {e}")
                 print(f"[Replay] Falling back to local storage")
-        
+
         # Fallback: Save to local disk
         filepath = os.path.join(self.replay_dir, filename)
         print(f"[Replay] Saving to local disk: {filepath}")
-        
+
         with open(filepath, "wb") as f:
             f.write(replay_bytes)
-        
+
         return filepath
 
     def _load_replay(self, replay_bytes: bytes):
@@ -445,7 +486,7 @@ class ReplayService:
             "Protoss": "sc2_protoss",
             "BW Terran": "bw_terran",
             "BW Zerg": "bw_zerg",
-            "BW Protoss": "bw_protoss"
+            "BW Protoss": "bw_protoss",
         }.get(race, race)
 
     def _get_winner(self, replay):
@@ -466,7 +507,7 @@ class ReplayService:
         toon_handles = self._find_toon_handles(replay.raw_data)
         if len(toon_handles) >= 2:
             return toon_handles[0], toon_handles[1]
-        return '', ''
+        return "", ""
 
     def _get_observers(self, replay):
         return [o.name for o in replay.observers]
@@ -487,10 +528,10 @@ class ReplayService:
     def _find_toon_handles(self, data):
         """Recursively search for toon_handle keys in a dictionary or list."""
         handles = []
-        
+
         def traverse(obj):
             if isinstance(obj, dict):
-                if "toon_handle" in obj and obj["toon_handle"] != '':
+                if "toon_handle" in obj and obj["toon_handle"] != "":
                     handles.append(obj["toon_handle"])
                 for value in obj.values():
                     if isinstance(value, (dict, list)):
@@ -499,21 +540,33 @@ class ReplayService:
                 for item in obj:
                     if isinstance(item, (dict, list)):
                         traverse(item)
-        
+
         traverse(data)
         return handles
 
     def _get_duration(self, replay):
-        if hasattr(replay, 'game_events'):
+        if hasattr(replay, "game_events"):
             for event in replay.game_events:
-                if event.name == 'PlayerLeaveEvent':
+                if event.name == "PlayerLeaveEvent":
                     # Ensure player is not an observer
                     if event.player and not event.player.is_observer:
-                        return int(round(event.second / 1.4))     # Faster is 1.4 times Normal
+                        return int(
+                            round(event.second / 1.4)
+                        )  # Faster is 1.4 times Normal
         else:
             return int(round(replay.game_length.seconds))
 
+
 if __name__ == "__main__":
-    replay_service = ReplayService()
-    parsed_replay = replay_service.parse_replay("tests/test_data/test_replay_files/GoldenWall.SC2Replay")
-    print(parsed_replay)
+    # Assuming Database and StorageService are available in the environment
+    # For testing purposes, you might need to mock or instantiate them
+    # from src.backend.db.db_reader_writer import Database
+    # from .storage_service import StorageService
+
+    # db = Database() # Mock or instantiate a dummy Database
+    # storage_service = StorageService() # Mock or instantiate a dummy StorageService
+
+    # replay_service = ReplayService(db=db, storage_service=storage_service)
+    # parsed_replay = replay_service.parse_replay("tests/test_data/test_replay_files/GoldenWall.SC2Replay")
+    # print(parsed_replay)
+    pass  # Keep the main block for now, but it will require external dependencies

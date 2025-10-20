@@ -27,14 +27,18 @@ class SetupIncompleteError(CommandGuardError):
 class CommandGuardService:
     """Centralized helper to perform pre-command checks for slash handlers."""
 
-    def __init__(self, user_service: UserInfoService | None = None) -> None:
-        self.user_service = user_service or UserInfoService()
+    def __init__(self, user_service: UserInfoService) -> None:
+        self.user_service = user_service
 
-    def ensure_player_record(self, discord_user_id: int, discord_username: str) -> Dict[str, Any]:
+    def ensure_player_record(
+        self, discord_user_id: int, discord_username: str
+    ) -> Dict[str, Any]:
         """Ensure the player exists and return the record."""
         return self.user_service.ensure_player_exists(discord_user_id, discord_username)
 
-    def require_player_exists(self, discord_user_id: int, discord_username: str) -> Dict[str, Any]:
+    def require_player_exists(
+        self, discord_user_id: int, discord_username: str
+    ) -> Dict[str, Any]:
         """Alias kept for readability; returns the player record."""
         return self.ensure_player_record(discord_user_id, discord_username)
 

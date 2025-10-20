@@ -1,0 +1,26 @@
+{
+    "version": "0.1.0",
+    "tasks": [
+        {
+            "label": "lint and check imports",
+            "type": "shell",
+            "command": "flake8 src --count --statistics || true"
+        },
+        {
+            "label": "quick syntax check",
+            "type": "shell",
+            "command": "python -m compileall -q . || true"
+        },
+        {
+            "label": "autoformat (black)",
+            "type": "shell",
+            "command": "black src"
+        },
+        {
+            "label": "full sanity sweep",
+            "type": "shell",
+            "command": "black src && flake8 src --count --statistics && python -m compileall -q ."
+        }
+    ]
+}
+  

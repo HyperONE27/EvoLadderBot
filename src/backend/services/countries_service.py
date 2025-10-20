@@ -52,7 +52,9 @@ class CountriesService(BaseConfigService):
 
         return list(self._common_countries_cache)
 
-    def get_country_page_data(self, page: int, page_size: int) -> Tuple[List[Dict[str, Any]], int]:
+    def get_country_page_data(
+        self, page: int, page_size: int
+    ) -> Tuple[List[Dict[str, Any]], int]:
         common_countries = self.get_common_countries()
         total_pages = max(1, (len(common_countries) + page_size - 1) // page_size)
         start_idx = (page - 1) * page_size

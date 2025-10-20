@@ -15,18 +15,19 @@ def create_database(db_path: str = "evoladder.db") -> None:
     """
     Create the SQLite database with all tables from schema.md.
     Drops existing tables and recreates them with mock data.
-    
+
     Args:
         db_path: Path to the SQLite database file.
     """
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     # Drop existing matches_1v1 table if it exists
     cursor.execute("DROP TABLE IF EXISTS matches_1v1")
-    
+
     # Create matches_1v1 table
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE matches_1v1 (
             id                      INTEGER PRIMARY KEY AUTOINCREMENT,
             player_1_discord_uid    INTEGER NOT NULL,
@@ -47,11 +48,12 @@ def create_database(db_path: str = "evoladder.db") -> None:
             player_2_replay_path    TEXT,
             player_2_replay_time    TIMESTAMP          -- stores the timestamp when player_2 uploaded
         )
-    """)
+    """
+    )
 
     conn.commit()
     conn.close()
-    
+
     print("All tables created successfully")
 
 

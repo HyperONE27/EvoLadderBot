@@ -85,7 +85,7 @@ class MapsService(BaseConfigService):
         if not map_data:
             return None
 
-        normalized = (region or "").strip().lower() 
+        normalized = (region or "").strip().lower()
         region_key_map = {
             "americas": "am_link",
             "am": "am_link",
