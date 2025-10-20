@@ -1,11 +1,12 @@
 import discord
 from discord import app_commands
-from src.backend.services.service_instances import command_guard_service, leaderboard_service
-from src.backend.services.command_guard_service import CommandGuardError
 from src.backend.services.leaderboard_service import LeaderboardService
+from src.backend.services.command_guard_service import CommandGuardService, CommandGuardError
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.interface.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
+
+guard_service = CommandGuardService()
 
 
 # Register Command
@@ -25,13 +26,14 @@ def register_leaderboard_command(tree: app_commands.CommandTree):
 async def leaderboard_command(interaction: discord.Interaction):
     """Handle the /leaderboard slash command"""
     try:
-        player = command_guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
-        command_guard_service.require_tos_accepted(player)
+        player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        guard_service.require_tos_accepted(player)
     except CommandGuardError as exc:
         error_embed = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed)
         return
     
+    leaderboard_service = LeaderboardService()
     view = LeaderboardView(leaderboard_service)
     
     # Get initial data to set proper button states
