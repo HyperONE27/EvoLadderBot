@@ -874,6 +874,27 @@ class MatchFoundView(discord.ui.View):
         # Get server information with region using regions service
         server_display = regions_service.format_server_with_region(self.match_result.server_choice)
         
+        # Build player information with alt IDs
+        p1_info_line = f"- Player 1: {p1_flag} {p1_race_emote} {p1_display_name} ({p1_race_name})"
+        if p1_info:
+            alt_ids_1 = []
+            if p1_info.get('alt_player_name_1'):
+                alt_ids_1.append(p1_info.get('alt_player_name_1'))
+            if p1_info.get('alt_player_name_2'):
+                alt_ids_1.append(p1_info.get('alt_player_name_2'))
+            if alt_ids_1:
+                p1_info_line += f"\n  a.k.a. {', '.join(alt_ids_1)}"
+        
+        p2_info_line = f"- Player 2: {p2_flag} {p2_race_emote} {p2_display_name} ({p2_race_name})"
+        if p2_info:
+            alt_ids_2 = []
+            if p2_info.get('alt_player_name_1'):
+                alt_ids_2.append(p2_info.get('alt_player_name_1'))
+            if p2_info.get('alt_player_name_2'):
+                alt_ids_2.append(p2_info.get('alt_player_name_2'))
+            if alt_ids_2:
+                p2_info_line += f"\n  a.k.a. {', '.join(alt_ids_2)}"
+        
         embed = discord.Embed(
             title=title,
             description="",  # Empty description as requested
@@ -883,7 +904,7 @@ class MatchFoundView(discord.ui.View):
         # Player Information section
         embed.add_field(
             name="**Player Information:**",
-            value=f"- Player 1: {p1_flag} {p1_race_emote} {p1_display_name} ({p1_race_name})\n- Player 2: {p2_flag} {p2_race_emote} {p2_display_name} ({p2_race_name})",
+            value=f"{p1_info_line}\n{p2_info_line}",
             inline=False
         )
         

@@ -155,12 +155,15 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
             )
             return
 
-        # Validate alternative IDs
+        # Validate alternative IDs (allow international characters)
         alt_ids_list = []
         
-        # Validate alt_id_1 if provided
+        # Validate alt_id_1 if provided (with international character support)
         if self.alt_id_1.value.strip():
-            is_valid, error = validation_service.validate_user_id(self.alt_id_1.value.strip())
+            is_valid, error = validation_service.validate_user_id(
+                self.alt_id_1.value.strip(),
+                allow_international=True  # Allow Korean, Chinese, Cyrillic, etc.
+            )
             if not is_valid:
                 error_embed = discord.Embed(
                     title="❌ Invalid Alternative ID 1",
@@ -175,9 +178,12 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
                 return
             alt_ids_list.append(self.alt_id_1.value.strip())
         
-        # Validate alt_id_2 if provided
+        # Validate alt_id_2 if provided (with international character support)
         if self.alt_id_2.value.strip():
-            is_valid, error = validation_service.validate_user_id(self.alt_id_2.value.strip())
+            is_valid, error = validation_service.validate_user_id(
+                self.alt_id_2.value.strip(),
+                allow_international=True  # Allow Korean, Chinese, Cyrillic, etc.
+            )
             if not is_valid:
                 error_embed = discord.Embed(
                     title="❌ Invalid Alternative ID 2",
