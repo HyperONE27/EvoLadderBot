@@ -8,6 +8,7 @@ from contextlib import contextmanager
 
 from src.backend.db.adapters.base_adapter import DatabaseAdapter
 from src.bot.config import DATABASE_URL
+from src.backend.db.connection_pool import get_connection as get_pooled_connection
 
 
 class PostgreSQLAdapter(DatabaseAdapter):
@@ -40,27 +41,19 @@ class PostgreSQLAdapter(DatabaseAdapter):
     @contextmanager
     def get_connection(self):
         """
-        Get a PostgreSQL database connection.
+        Get a PostgreSQL database connection from the pool.
+        
+        This method now uses connection pooling for better performance.
+        The connection is automatically returned to the pool after use.
+        Connections from the pool are pre-configured with RealDictCursor.
         
         Yields:
             psycopg2 connection with RealDictCursor
         """
-        import psycopg2
-        import psycopg2.extras
-        
-        conn = psycopg2.connect(
-            self.connection_url,
-            cursor_factory=psycopg2.extras.RealDictCursor
-        )
-        
-        try:
+        # Simply delegate to the pooled connection manager
+        # The pool handles all connection lifecycle management
+        with get_pooled_connection() as conn:
             yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
     
     def execute_query(
         self,

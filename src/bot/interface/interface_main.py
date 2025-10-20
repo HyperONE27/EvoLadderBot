@@ -1,10 +1,9 @@
 import asyncio
 import discord
 from discord.ext import commands
-from concurrent.futures import ProcessPoolExecutor
-import sys
 
-from src.bot.config import EVOLADDERBOT_TOKEN, WORKER_PROCESSES
+from src.bot.config import EVOLADDERBOT_TOKEN
+from src.bot.bot_setup import EvoLadderBot, initialize_bot_resources, shutdown_bot_resources
 from src.bot.interface.commands.activate_command import register_activate_command
 from src.bot.interface.commands.leaderboard_command import register_leaderboard_command
 from src.bot.interface.commands.profile_command import register_profile_command
@@ -13,30 +12,12 @@ from src.bot.interface.commands.setcountry_command import register_setcountry_co
 from src.bot.interface.commands.setup_command import register_setup_command
 from src.bot.interface.commands.termsofservice_command import register_termsofservice_command
 from src.backend.services.matchmaking_service import matchmaker
-from src.backend.services.cache_service import static_cache
-from src.backend.db.db_reader_writer import DatabaseWriter
-from src.backend.db.test_connection_startup import test_database_connection
 
 
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
 
-
-class EvoLadderBot(commands.Bot):
-    async def on_interaction(self, interaction: discord.Interaction):
-        """A global listener for all interactions to log command calls."""
-        if interaction.type == discord.InteractionType.application_command:
-            command_name = interaction.command.name if interaction.command else "unknown"
-            user = interaction.user
-            # We instantiate the writer here to ensure it's fresh for each event
-            db_writer = DatabaseWriter()
-            db_writer.insert_command_call(
-                discord_uid=user.id,
-                player_name=user.name,
-                command=command_name
-            )
-        
 bot = EvoLadderBot(command_prefix="!", intents=intents)
 
 
@@ -69,38 +50,12 @@ def register_commands(bot: commands.Bot):
     register_termsofservice_command(bot.tree)
 
 if __name__ == "__main__":
-    # Test database connection BEFORE starting the bot
-    success, message = test_database_connection()
-    if not success:
-        print(f"\n[FATAL] Database connection test failed: {message}")
-        print("[FATAL] Bot cannot start without a working database connection.")
-        print("[FATAL] Please fix the database configuration and try again.\n")
-        sys.exit(1)
-    
-    # Initialize static data cache (maps, races, regions, countries)
-    print("[Startup] Initializing static data cache...")
-    try:
-        static_cache.initialize()
-    except Exception as e:
-        print(f"\n[FATAL] Failed to initialize static data cache: {e}")
-        print("[FATAL] Bot cannot start without static data.")
-        print("[FATAL] Please check that data/misc/*.json files exist.\n")
-        sys.exit(1)
-    
-    # Create the process pool for CPU-bound tasks (replay parsing)
-    process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
-    
-    # Attach the pool to the bot instance for global access
-    bot.process_pool = process_pool
-    
-    print(f"[INFO] Initialized Process Pool with {WORKER_PROCESSES} worker process(es)")
-    print(f"[DEBUG] Process pool created with max_workers={WORKER_PROCESSES}")
+    # Initialize all bot resources (database pool, cache, process pool)
+    initialize_bot_resources(bot)
     
     try:
         # Run the bot
         bot.run(EVOLADDERBOT_TOKEN)
     finally:
-        # Ensure the process pool is shut down gracefully
-        print("[INFO] Shutting down process pool...")
-        bot.process_pool.shutdown(wait=True)
-        print("[INFO] Process pool shutdown complete")
+        # Gracefully shut down all resources
+        shutdown_bot_resources(bot)

@@ -84,6 +84,22 @@ class UserInfoService:
         self.reader = DatabaseReader()
         self.writer = DatabaseWriter()
     
+    def _get_player_display_name(self, player: Dict[str, Any]) -> str:
+        """
+        Get the best available display name for a player for logging.
+        
+        Args:
+            player: Player data dictionary
+            
+        Returns:
+            Display name (player_name > discord_username > "Unknown")
+        """
+        if not player:
+            return "Unknown"
+        return (player.get("player_name") 
+                or player.get("discord_username") 
+                or "Unknown")
+    
     def get_player(self, discord_uid: int) -> Optional[Dict[str, Any]]:
         """
         Get player information by Discord UID.
@@ -327,10 +343,7 @@ class UserInfoService:
         success = self.writer.update_player_country(discord_uid, country)
         
         if success and player:
-            # Use player_name if available, otherwise use discord_username, fallback to "Unknown"
-            player_name = (player.get("player_name") 
-                          or player.get("discord_username") 
-                          or "Unknown")
+            player_name = self._get_player_display_name(player)
             self.writer.log_player_action(
                 discord_uid=discord_uid,
                 player_name=player_name,
@@ -359,10 +372,7 @@ class UserInfoService:
             # Update existing player's activation code
             success = self.writer.update_player_activation_code(discord_uid, activation_code)
             if success:
-                # Use player_name if available, otherwise use discord_username, fallback to "Unknown"
-                player_name = (player.get("player_name") 
-                              or player.get("discord_username") 
-                              or "Unknown")
+                player_name = self._get_player_display_name(player)
                 self.writer.log_player_action(
                     discord_uid=discord_uid,
                     player_name=player_name,
@@ -404,10 +414,7 @@ class UserInfoService:
         success = self.writer.accept_terms_of_service(discord_uid)
         
         if success and player:
-            # Use player_name if available, otherwise use discord_username, fallback to "Unknown"
-            player_name = (player.get("player_name") 
-                          or player.get("discord_username") 
-                          or "Unknown")
+            player_name = self._get_player_display_name(player)
             self.writer.log_player_action(
                 discord_uid=discord_uid,
                 player_name=player_name,
@@ -540,9 +547,7 @@ class UserInfoService:
         
         if success:
             # Log the abort usage
-            player_name = (player.get("player_name") 
-                          or player.get("discord_username") 
-                          or "Unknown")
+            player_name = self._get_player_display_name(player)
             self.writer.log_player_action(
                 discord_uid=discord_uid,
                 player_name=player_name,
