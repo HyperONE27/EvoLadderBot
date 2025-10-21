@@ -60,7 +60,7 @@ class DatabaseReader:
         return results[0] if results else None
     
     def get_player_by_activation_code(self, activation_code: str) -> Optional[Dict[str, Any]]:
-        """Get player by activation code."""
+        """DISABLED: Get player by activation code. Activation system is obsolete."""
         results = self.adapter.execute_query(
             "SELECT * FROM players WHERE activation_code = :activation_code",
             {"activation_code": activation_code}
@@ -380,7 +380,7 @@ class DatabaseWriter:
         discord_uid: int,
         activation_code: str
     ) -> bool:
-        """Update player's activation code."""
+        """DISABLED: Update player's activation code. Activation system is obsolete."""
         return self.update_player(discord_uid, activation_code=activation_code)
     
     def update_player_country(self, discord_uid: int, country: str) -> bool:

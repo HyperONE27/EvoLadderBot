@@ -6,7 +6,7 @@ from discord.ext import commands
 
 from src.backend.services.matchmaking_service import matchmaker
 from src.bot.bot_setup import EvoLadderBot, initialize_bot_resources, shutdown_bot_resources
-from src.bot.commands.activate_command import register_activate_command
+# from src.bot.commands.activate_command import register_activate_command  # DISABLED: Obsolete command
 from src.bot.commands.leaderboard_command import register_leaderboard_command
 from src.bot.commands.profile_command import register_profile_command
 from src.bot.commands.prune_command import register_prune_command
@@ -61,7 +61,7 @@ async def on_message(message):
     await handle_replay_message(message, bot)
 
 def register_commands(bot: commands.Bot):
-    register_activate_command(bot.tree)
+    # register_activate_command(bot.tree)  # DISABLED: Obsolete command
     register_leaderboard_command(bot.tree)
     register_profile_command(bot.tree)
     register_prune_command(bot.tree)

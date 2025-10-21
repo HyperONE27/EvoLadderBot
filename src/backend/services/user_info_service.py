@@ -361,7 +361,10 @@ class UserInfoService:
     
     def submit_activation_code(self, discord_uid: int, activation_code: str) -> Dict[str, Any]:
         """
-        Submit an activation code for a player.
+        DISABLED: Submit an activation code for a player.
+        
+        This method is obsolete and should not be used.
+        The activation system has been disabled.
         
         Args:
             discord_uid: Discord user ID.
@@ -370,6 +373,8 @@ class UserInfoService:
         Returns:
             Dictionary with status and message.
         """
+        # Return error since activation is disabled
+        return {"status": "error", "message": "Activation system is disabled"}
         # Check if player exists
         player = self.get_player(discord_uid)
         

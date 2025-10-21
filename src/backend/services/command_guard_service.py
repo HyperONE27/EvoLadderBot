@@ -72,17 +72,20 @@ class CommandGuardService:
             raise SetupIncompleteError("Profile setup not completed.")
 
     def require_account_activated(self, player: Dict[str, Any]) -> None:
+        """DISABLED: Activation requirement removed - command is obsolete."""
         self.require_tos_accepted(player)
         self.require_setup_completed(player)
-        if not player.get("activation_code"):
-            raise AccountNotActivatedError("Account not activated.")
+        # Activation check disabled - command is obsolete
+        # if not player.get("activation_code"):
+        #     raise AccountNotActivatedError("Account not activated.")
 
     def require_queue_access(self, player: Dict[str, Any]) -> None:
-        """Require TOS acceptance, setup completion, and activation for queue access."""
+        """Require TOS acceptance and setup completion for queue access."""
         self.require_tos_accepted(player)
         self.require_setup_completed(player)
-        if not player.get("activation_code"):
-            raise AccountNotActivatedError("Account not activated.")
+        # Activation check disabled - command is obsolete
+        # if not player.get("activation_code"):
+        #     raise AccountNotActivatedError("Account not activated.")
     
     def require_dm(self, interaction: discord.Interaction) -> None:
         """Require that the command is used in a DM channel."""

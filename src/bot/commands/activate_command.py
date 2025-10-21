@@ -1,3 +1,6 @@
+# DISABLED: This command is obsolete and has been disabled
+# The activation system is no longer used in the application
+
 import asyncio
 import discord
 from discord import app_commands
@@ -57,8 +60,10 @@ def submit_activation_code(user_id: int, code: str) -> dict:
     return {"status": "ok", "code": code}
 
 
-# Register Command
+# Register Command - DISABLED
 def register_activate_command(tree: app_commands.CommandTree):
+    """DISABLED: This command is obsolete and should not be registered."""
+    return  # Early return to disable the command
     @tree.command(
         name="activate",
         description="Enter your activation code for ladder access"
