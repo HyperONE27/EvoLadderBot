@@ -125,6 +125,9 @@ class Matchmaker:
 		# System for tracking effective population
 		self.recent_activity: Dict[int, float] = {}
 		self.last_prune_time: float = time.time()
+		
+		# Track last matchmaking time for accurate timer display
+		self.last_match_time: float = time.time()
 
 	async def add_player(self, player: Player) -> None:
 		"""Add a player to the matchmaking pool with MMR lookup."""
@@ -654,6 +657,7 @@ class Matchmaker:
 
 			# Update last match time
 			last_match_time = time.time()
+			self.last_match_time = last_match_time
 
 			# Prune stale activity data periodically
 			if current_time - self.last_prune_time > self.PRUNE_INTERVAL_SECONDS:
@@ -837,6 +841,24 @@ class Matchmaker:
 		"""Check if a player is in the queue."""
 		async with self.lock:
 			return any(p.discord_user_id == discord_user_id for p in self.players)
+
+	def get_next_matchmaking_time(self) -> int:
+		"""
+		Get the Unix timestamp of the next matchmaking wave.
+		
+		Returns:
+			int: Unix timestamp of the next matchmaking wave
+		"""
+		current_time = time.time()
+		time_since_last_match = current_time - self.last_match_time
+		
+		if time_since_last_match >= self.MATCH_INTERVAL_SECONDS:
+			# Next wave is immediate
+			return int(current_time)
+		else:
+			# Calculate when the next wave will be
+			time_until_next = self.MATCH_INTERVAL_SECONDS - time_since_last_match
+			return int(current_time + time_until_next)
 
 
 # Global matchmaker instance

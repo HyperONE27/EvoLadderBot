@@ -548,7 +548,7 @@ class QueueSearchingView(discord.ui.View):
 
     def build_searching_embed(self) -> discord.Embed:
         stats = matchmaker.get_queue_snapshot()
-        next_wave_epoch = int(time.time() - (time.time() % matchmaker.MATCH_INTERVAL_SECONDS) + matchmaker.MATCH_INTERVAL_SECONDS)
+        next_wave_epoch = matchmaker.get_next_matchmaking_time()
         embed = discord.Embed(
             title="🔍 Searching...",
             description=(
