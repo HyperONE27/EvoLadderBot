@@ -15,13 +15,16 @@ Intended usage:
     data = await leaderboard.get_leaderboard_data()
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from functools import lru_cache
 import time
 
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.races_service import RacesService
 from src.backend.db.db_reader_writer import DatabaseReader
+
+if TYPE_CHECKING:
+    from src.backend.services.ranking_service import RankingService
 
 
 # Global cache for leaderboard data with timestamp
@@ -41,11 +44,15 @@ class LeaderboardService:
         country_service: Optional[CountriesService] = None,
         race_service: Optional[RacesService] = None,
         db_reader: Optional[DatabaseReader] = None,
+        ranking_service: Optional["RankingService"] = None,
     ) -> None:
         # Services
         self.country_service = country_service or CountriesService()
         self.race_service = race_service or RacesService()
         self.db_reader = db_reader or DatabaseReader()
+        
+        # Ranking service (will be set after initialization if not provided)
+        self._ranking_service = ranking_service
         
         # Filter state
         self.current_page: int = 1
@@ -54,6 +61,14 @@ class LeaderboardService:
         self.best_race_only: bool = False
         self.country_page1_selection: List[str] = []
         self.country_page2_selection: List[str] = []
+    
+    @property
+    def ranking_service(self) -> "RankingService":
+        """Get ranking service, lazily importing if not provided during init."""
+        if self._ranking_service is None:
+            from src.backend.services.app_context import ranking_service
+            self._ranking_service = ranking_service
+        return self._ranking_service
     
     def update_country_filter(self, page1_selection: List[str], page2_selection: List[str]) -> None:
         """Update country filter from both page selections."""
@@ -124,6 +139,10 @@ class LeaderboardService:
         _leaderboard_cache["timestamp"] = current_time
         print(f"[Leaderboard Cache] Updated - Cached {len(all_players)} players")
         
+        # Refresh rankings when cache is refreshed
+        print("[Leaderboard Cache] Refreshing rankings...")
+        self.ranking_service.refresh_rankings()
+        
         return all_players
     
     async def get_leaderboard_data(self, page_size: int = 20) -> Dict[str, Any]:
@@ -141,15 +160,24 @@ class LeaderboardService:
         # Get data from database (with caching)
         all_players = self._get_cached_leaderboard_data()
         
-        # Convert database format to expected format
+        # Convert database format to expected format and add rank information
         formatted_players = []
         for player in all_players:
+            discord_uid = player.get("discord_uid")
+            race = player.get("race", "Unknown")
+            
+            # Get rank from ranking service
+            rank = "u_rank"  # Default to unranked
+            if discord_uid is not None and race != "Unknown":
+                rank = self.ranking_service.get_rank(discord_uid, race)
+            
             formatted_players.append({
                 "player_id": player.get("player_name", "Unknown"),
                 "mmr": player.get("mmr", 0),
-                "race": player.get("race", "Unknown"),
+                "race": race,
                 "country": player.get("country", "Unknown"),
-                "discord_uid": player.get("discord_uid")
+                "discord_uid": discord_uid,
+                "rank": rank
             })
         
         # Apply filters
@@ -260,7 +288,8 @@ class LeaderboardService:
                 "mmr": mmr_display,
                 "race": self.race_service.format_race_name(player.get('race', 'Unknown')),
                 "race_code": player.get('race', 'Unknown'),  # Include race code for emotes
-                "country": player.get('country', 'Unknown')
+                "country": player.get('country', 'Unknown'),
+                "mmr_rank": player.get('rank', 'u_rank')  # MMR-based rank (S, A, B, C, D, E, F, U)
             })
         
         return formatted_players

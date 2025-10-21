@@ -345,7 +345,8 @@ class LeaderboardView(discord.ui.View):
                 field_text = ""
                 
                 for player in chunk:
-                    # Get race emote and flag emote
+                    # Get rank emote, race emote, and flag emote
+                    rank_emote = self._get_rank_emote(player.get('mmr_rank', 'u_rank'))
                     race_emote = self._get_race_emote(player.get('race_code', ''))
                     flag_emote = self._get_flag_emote(player.get('country', ''))
                     
@@ -359,7 +360,7 @@ class LeaderboardView(discord.ui.View):
                     # Format MMR in parentheses
                     mmr_value = player['mmr']
                     
-                    field_text += f"- `{rank_padded}.` {race_emote} {flag_emote} `{player_name_padded}` `{mmr_value}`\n"
+                    field_text += f"- `{rank_padded}.` {rank_emote} {race_emote} {flag_emote} `{player_name_padded}` `{mmr_value}`\n"
                 
                 # Create field name based on position and current page
                 current_page = self.leaderboard_service.current_page
@@ -400,6 +401,11 @@ class LeaderboardView(discord.ui.View):
         """Get the Discord flag emote for a country code."""
         from src.bot.utils.discord_utils import get_flag_emote
         return get_flag_emote(country_code)
+    
+    def _get_rank_emote(self, rank: str) -> str:
+        """Get the Discord rank emote for a rank code."""
+        from src.bot.utils.discord_utils import get_rank_emote
+        return get_rank_emote(rank)
 
 
 class PreviousPageButton(discord.ui.Button):

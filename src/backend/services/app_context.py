@@ -27,6 +27,7 @@ from src.backend.services.races_service import RacesService
 from src.backend.services.maps_service import MapsService
 from src.backend.services.mmr_service import MMRService
 from src.backend.services.leaderboard_service import LeaderboardService
+from src.backend.services.ranking_service import RankingService
 from src.backend.services.validation_service import ValidationService
 from src.backend.services.storage_service import StorageService
 from src.backend.services.replay_service import ReplayService
@@ -81,11 +82,15 @@ command_guard_service = CommandGuardService(user_service=user_info_service)
 # LEADERBOARD SERVICES - Services for rankings and leaderboards
 # =============================================================================
 
+# Ranking service for MMR-based percentile ranks
+ranking_service = RankingService(db_reader=db_reader)
+
 # Leaderboard service with injected dependencies
 leaderboard_service = LeaderboardService(
     country_service=countries_service,
     race_service=races_service,
-    db_reader=db_reader
+    db_reader=db_reader,
+    ranking_service=ranking_service
 )
 
 
@@ -125,6 +130,7 @@ __all__ = [
     "command_guard_service",
     # Leaderboard services
     "leaderboard_service",
+    "ranking_service",
     # Matchmaking services
     "matchmaker",
     "match_completion_service",
