@@ -38,18 +38,8 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
         - On failure: 'error': <error_message> with other fields None or partial
     """
     import logging
-    import os
     import sys
     import time
-    
-    # Track memory usage in worker
-    try:
-        import psutil
-        process = psutil.Process(os.getpid())
-        mem_before = process.memory_info().rss / 1024 / 1024  # MB
-        print(f"[Worker Process] Memory before parse: {mem_before:.2f} MB")
-    except:
-        mem_before = None
     
     start_time = time.time()
     
@@ -169,16 +159,6 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
         replay_date = replay.date.isoformat() if hasattr(replay, 'date') and replay.date else ''
         
         elapsed_time = time.time() - start_time
-        
-        # Log memory usage after parse
-        if mem_before is not None:
-            try:
-                mem_after = process.memory_info().rss / 1024 / 1024
-                mem_delta = mem_after - mem_before
-                print(f"[Worker Process] Memory after parse: {mem_after:.2f} MB (Δ {mem_delta:+.2f} MB)")
-            except:
-                pass
-        
         print(f"[Worker Process] Parse complete for hash {replay_hash} in {elapsed_time:.3f}s")
         
         return {
