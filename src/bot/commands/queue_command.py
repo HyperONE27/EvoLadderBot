@@ -1725,9 +1725,24 @@ async def on_message(message: discord.Message, bot=None):
         # function and lets the event loop run other tasks.
         try:
             if bot and hasattr(bot, 'process_pool'):
-                replay_info = await loop.run_in_executor(
-                    bot.process_pool, parse_replay_data_blocking, replay_bytes
-                )
+                # Event-driven process pool health check
+                # Only check when we actually need to use the pool
+                try:
+                    from src.backend.services.process_pool_health import ensure_process_pool_healthy
+                    is_healthy = await ensure_process_pool_healthy()
+                    if not is_healthy:
+                        print("[WARN] Process pool health check failed, falling back to synchronous parsing")
+                        replay_info = parse_replay_data_blocking(replay_bytes)
+                    else:
+                        replay_info = await loop.run_in_executor(
+                            bot.process_pool, parse_replay_data_blocking, replay_bytes
+                        )
+                except Exception as e:
+                    print(f"[WARN] Process pool health check failed with error: {e}")
+                    # Continue with process pool usage - let the executor handle the error
+                    replay_info = await loop.run_in_executor(
+                        bot.process_pool, parse_replay_data_blocking, replay_bytes
+                    )
             else:
                 # Fallback to synchronous parsing if process pool is not available
                 # This shouldn't happen in production, but provides a safety net

@@ -21,6 +21,7 @@ from src.backend.services.app_context import command_guard_service, db_writer, l
 from src.backend.services.cache_service import static_cache
 from src.backend.services.command_guard_service import DMOnlyError
 from src.backend.services.performance_service import FlowTracker, performance_monitor
+from src.backend.services.process_pool_health import set_bot_instance
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import DATABASE_URL, DB_POOL_MAX_CONNECTIONS, DB_POOL_MIN_CONNECTIONS, WORKER_PROCESSES
 
@@ -115,9 +116,40 @@ class EvoLadderBot(commands.Bot):
             # Log error but don't fail the command
             logger.error(f"Failed to log command {command} for user {discord_uid}: {e}")
     
-    async def _check_and_restart_process_pool(self) -> bool:
+    
+    async def _restart_process_pool(self) -> bool:
         """
-        Check if the process pool is healthy and restart it if needed.
+        Restart the process pool.
+        
+        Returns:
+            True if restart was successful, False otherwise
+        """
+        async with self._process_pool_lock:
+            try:
+                # Shutdown old pool
+                if self.process_pool:
+                    print("[Process Pool] Shutting down crashed pool...")
+                    try:
+                        self.process_pool.shutdown(wait=False, cancel_futures=True)
+                    except Exception as e:
+                        logger.warning(f"[Process Pool] Error during shutdown: {e}")
+                
+                # Create new pool
+                print(f"[Process Pool] Creating new pool with {WORKER_PROCESSES} worker(s)...")
+                self.process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
+                print("[Process Pool] ✅ Process pool restarted successfully")
+                return True
+                
+            except Exception as e:
+                logger.error(f"[Process Pool] ❌ Failed to restart process pool: {e}")
+                return False
+    
+    async def _ensure_process_pool_healthy(self) -> bool:
+        """
+        Event-driven process pool health check.
+        
+        Only checks the process pool when it's actually needed for work.
+        This replaces the idle spinning monitor with an on-demand approach.
         
         Returns:
             True if pool is healthy or was successfully restarted, False otherwise
@@ -150,71 +182,6 @@ class EvoLadderBot(commands.Bot):
             logger.info("[Process Pool] Attempting to restart process pool...")
             return await self._restart_process_pool()
     
-    async def _restart_process_pool(self) -> bool:
-        """
-        Restart the process pool.
-        
-        Returns:
-            True if restart was successful, False otherwise
-        """
-        async with self._process_pool_lock:
-            try:
-                # Shutdown old pool
-                if self.process_pool:
-                    print("[Process Pool] Shutting down crashed pool...")
-                    try:
-                        self.process_pool.shutdown(wait=False, cancel_futures=True)
-                    except Exception as e:
-                        logger.warning(f"[Process Pool] Error during shutdown: {e}")
-                
-                # Create new pool
-                print(f"[Process Pool] Creating new pool with {WORKER_PROCESSES} worker(s)...")
-                self.process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
-                print("[Process Pool] ✅ Process pool restarted successfully")
-                return True
-                
-            except Exception as e:
-                logger.error(f"[Process Pool] ❌ Failed to restart process pool: {e}")
-                return False
-    
-    async def _monitor_process_pool_task(self):
-        """
-        Background task that monitors the process pool health.
-        
-        Checks every 30 seconds and restarts the pool if it's unhealthy.
-        Uses simple crash detection without relying on complex error parsing.
-        """
-        await self.wait_until_ready()
-        print("[Process Pool Monitor] Starting process pool health monitoring...")
-        
-        consecutive_failures = 0
-        max_consecutive_failures = 3
-        
-        while not self.is_closed():
-            try:
-                await asyncio.sleep(30)  # Check every 30 seconds
-                
-                is_healthy = await self._check_and_restart_process_pool()
-                if is_healthy:
-                    consecutive_failures = 0  # Reset failure counter
-                    print("[Process Pool Monitor] ✅ Health check passed")
-                else:
-                    consecutive_failures += 1
-                    logger.error(f"[Process Pool Monitor] ❌ Health check failed ({consecutive_failures}/{max_consecutive_failures})")
-                    
-                    # If we've had too many consecutive failures, something is seriously wrong
-                    if consecutive_failures >= max_consecutive_failures:
-                        logger.critical("[Process Pool Monitor] CRITICAL: Too many consecutive failures, pool may be permanently broken")
-                        # Reset counter to avoid spam
-                        consecutive_failures = 0
-                    
-            except Exception as e:
-                consecutive_failures += 1
-                logger.error(f"[Process Pool Monitor] Error in monitoring task: {e}")
-                if consecutive_failures >= max_consecutive_failures:
-                    logger.critical("[Process Pool Monitor] CRITICAL: Monitoring task itself is failing")
-                    consecutive_failures = 0
-    
     # DISABLED: Periodic leaderboard cache refresh task removed for resource optimization
     # Cache will now be invalidated only when MMR changes occur
     # async def _refresh_leaderboard_cache_task(self):
@@ -230,9 +197,9 @@ class EvoLadderBot(commands.Bot):
         """Start all background tasks for the bot."""
         print("[Background Tasks] Starting background tasks...")
         
-        # Start process pool monitor task
-        self._process_pool_monitor_task = asyncio.create_task(self._monitor_process_pool_task())
-        print("[Background Tasks] Process pool monitor task started")
+        # DISABLED: Process pool monitor task removed for resource optimization
+        # Process pool health is now checked on-demand when work is submitted
+        # This eliminates idle spinning and reduces resource usage
         
         # DISABLED: Leaderboard cache refresh task removed for resource optimization
         # Cache will be invalidated only when MMR changes occur
@@ -243,14 +210,11 @@ class EvoLadderBot(commands.Bot):
         """Stop all background tasks for the bot."""
         print("[Background Tasks] Stopping background tasks...")
         
-        if self._process_pool_monitor_task and not self._process_pool_monitor_task.done():
-            self._process_pool_monitor_task.cancel()
-            print("[Background Tasks] Process pool monitor task stopped")
+        # DISABLED: Process pool monitor task removed for resource optimization
+        # Process pool health is now checked on-demand when work is submitted
         
         # DISABLED: Leaderboard cache refresh task removed for resource optimization
-        # if self._leaderboard_cache_task and not self._leaderboard_cache_task.done():
-        #     self._leaderboard_cache_task.cancel()
-        #     print("[Background Tasks] Leaderboard cache refresh task stopped")
+        # Cache will be invalidated only when MMR changes occur
 
 
 def initialize_bot_resources(bot: EvoLadderBot) -> None:
@@ -304,7 +268,11 @@ def initialize_bot_resources(bot: EvoLadderBot) -> None:
     bot.process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
     print(f"[INFO] Initialized Process Pool with {WORKER_PROCESSES} worker process(es)")
     
-    # 5. Performance monitoring is active
+    # 5. Register bot instance for global process pool health checking
+    set_bot_instance(bot)
+    print("[INFO] Process pool health checker registered")
+    
+    # 6. Performance monitoring is active
     print("[INFO] Performance monitoring ACTIVE - All commands will be tracked")
     print("[INFO] Performance thresholds configured:")
     for cmd, threshold in performance_monitor.alert_thresholds.items():

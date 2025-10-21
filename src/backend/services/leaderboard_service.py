@@ -265,6 +265,19 @@ class LeaderboardService:
             from src.bot.config import DATABASE_URL
             loop = asyncio.get_running_loop()
             
+            # Event-driven process pool health check
+            # Only check when we actually need to use the pool
+            try:
+                from src.backend.services.process_pool_health import ensure_process_pool_healthy
+                is_healthy = await ensure_process_pool_healthy()
+                if not is_healthy:
+                    print("[WARN] Process pool health check failed, falling back to synchronous refresh")
+                    # Fallback to synchronous refresh
+                    return self._get_cached_leaderboard_dataframe()
+            except Exception as e:
+                print(f"[WARN] Process pool health check failed with error: {e}")
+                # Continue with process pool usage - let the executor handle the error
+            
             # Offload to worker process
             # Pass DATABASE_URL so worker can initialize its own connection pool
             pickled_df = await loop.run_in_executor(
