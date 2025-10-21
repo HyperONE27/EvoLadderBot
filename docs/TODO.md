@@ -82,7 +82,7 @@
 ## PRE-BETA
 
 - Command timeouts:
-  - ⏰ Check that everyone lasts as long as it needs to
+  - ⏰ Check that everything lasts as long as it needs to
 - Gamemodes:
   - ⏰ Add support for no-party 2v2s
   - ⏰ Add support for forming parties
@@ -90,8 +90,6 @@
 - Localization:
   - ⏰ Add support for koKR and other languages
   - ⏰ Replace 1 million hardcoded formatted strings...sobbing
-- Scaling:
-  - ⏰ Implement Supabase database functions to offload leaderboard and personal stats chunking
 
 ## PRE-RELEASE
 
