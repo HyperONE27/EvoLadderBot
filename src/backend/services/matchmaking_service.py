@@ -208,7 +208,7 @@ class Matchmaker:
 		print(f"🔓 Releasing queue lock for {len(discord_user_ids)} players after match resolution")
 		
 		# Import here to avoid circular imports
-		from src.bot.commands.queue_command import queue_searching_view_manager, match_results
+		from src.bot.commands.queue_command import queue_searching_view_manager, match_results, channel_to_match_view_map
 		
 		# Remove players from the queue searching views and match results
 		for discord_user_id in discord_user_ids:
@@ -217,6 +217,18 @@ class Matchmaker:
 			
 			# Remove from match results if present
 			match_results.pop(discord_user_id, None)
+			
+			# Remove from channel_to_match_view_map if present
+			# Need to find and remove all channels where this player has a match view
+			channels_to_remove = []
+			for channel_id, match_view in list(channel_to_match_view_map.items()):
+				if (match_view.match_result.player_1_discord_id == discord_user_id or 
+				    match_view.match_result.player_2_discord_id == discord_user_id):
+					channels_to_remove.append(channel_id)
+			
+			for channel_id in channels_to_remove:
+				channel_to_match_view_map.pop(channel_id, None)
+				print(f"🔓 Removed match view for player {discord_user_id} from channel {channel_id}")
 			
 			print(f"🔓 Released queue lock for player {discord_user_id}")
 
@@ -627,19 +639,23 @@ class Matchmaker:
 		print("🚀 Advanced matchmaker started - checking for matches every 45 seconds")
 
 		interval = self.MATCH_INTERVAL_SECONDS
+		last_match_time = time.time()
 
 		while self.running:
-			now = time.time()
-			remainder = now % interval
-			sleep_duration = interval - remainder if remainder > 0 else 0
-
-			if sleep_duration > 0:
+			current_time = time.time()
+			time_since_last_match = current_time - last_match_time
+			
+			# Sleep until the next interval
+			if time_since_last_match < interval:
+				sleep_duration = interval - time_since_last_match
 				await asyncio.sleep(sleep_duration)
 				if not self.running:
 					break
 
+			# Update last match time
+			last_match_time = time.time()
+
 			# Prune stale activity data periodically
-			current_time = time.time()
 			if current_time - self.last_prune_time > self.PRUNE_INTERVAL_SECONDS:
 				self._prune_recent_activity()
 				self.last_prune_time = current_time

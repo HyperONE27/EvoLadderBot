@@ -1144,8 +1144,23 @@ class MatchFoundView(discord.ui.View):
 
         p1_flag = get_flag_emote(p1_info.get('country', 'XX'))
         p2_flag = get_flag_emote(p2_info.get('country', 'XX'))
-        p1_race_emote = get_race_emote(final_results['p1_race'])
-        p2_race_emote = get_race_emote(final_results['p2_race'])
+        p1_race = final_results['p1_race']
+        p2_race = final_results['p2_race']
+        p1_race_emote = get_race_emote(p1_race)
+        p2_race_emote = get_race_emote(p2_race)
+
+        # Get rank emotes for both players
+        from src.backend.services.app_context import ranking_service
+        from src.bot.utils.discord_utils import get_rank_emote
+        
+        # Ensure rankings are refreshed
+        ranking_service.refresh_rankings()
+        
+        p1_rank = ranking_service.get_rank(final_results['p1_discord_uid'], p1_race)
+        p2_rank = ranking_service.get_rank(final_results['p2_discord_uid'], p2_race)
+        
+        p1_rank_emote = get_rank_emote(p1_rank)
+        p2_rank_emote = get_rank_emote(p2_rank)
 
         p1_current_mmr = final_results['p1_current_mmr']
         p2_current_mmr = final_results['p2_current_mmr']
@@ -1159,7 +1174,7 @@ class MatchFoundView(discord.ui.View):
 
         notification_embed = discord.Embed(
             title=f"🏆 Match #{self.match_result.match_id} Result Finalized",
-            description=f"**{p1_flag} {p1_race_emote} {p1_name} ({int(p1_current_mmr)} → {int(p1_new_mmr)})** vs **{p2_flag} {p2_race_emote} {p2_name} ({int(p2_current_mmr)} → {int(p2_new_mmr)})**",
+            description=f"**{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_name} ({int(p1_current_mmr)} → {int(p1_new_mmr)})** vs **{p2_rank_emote} {p2_flag} {p2_race_emote} {p2_name} ({int(p2_current_mmr)} → {int(p2_new_mmr)})**",
             color=discord.Color.gold()
         )
 
@@ -1215,15 +1230,30 @@ class MatchFoundView(discord.ui.View):
             
         p1_flag = get_flag_emote(p1_info.get('country', 'XX')) if p1_info else '🏳️'
         p2_flag = get_flag_emote(p2_info.get('country', 'XX')) if p2_info else '🏳️'
-        p1_race_emote = get_race_emote(match_data.get('player_1_race'))
-        p2_race_emote = get_race_emote(match_data.get('player_2_race'))
+        p1_race = match_data.get('player_1_race')
+        p2_race = match_data.get('player_2_race')
+        p1_race_emote = get_race_emote(p1_race)
+        p2_race_emote = get_race_emote(p2_race)
+
+        # Get rank emotes for both players
+        from src.backend.services.app_context import ranking_service
+        from src.bot.utils.discord_utils import get_rank_emote
+        
+        # Ensure rankings are refreshed
+        ranking_service.refresh_rankings()
+        
+        p1_rank = ranking_service.get_rank(match_data['player_1_discord_uid'], p1_race)
+        p2_rank = ranking_service.get_rank(match_data['player_2_discord_uid'], p2_race)
+        
+        p1_rank_emote = get_rank_emote(p1_rank)
+        p2_rank_emote = get_rank_emote(p2_rank)
 
         p1_current_mmr = match_data['player_1_mmr']
         p2_current_mmr = match_data['player_2_mmr']
 
         abort_embed = discord.Embed(
             title=f"🛑 Match #{self.match_result.match_id} Aborted",
-            description=f"**{p1_flag} {p1_race_emote} {p1_name} ({int(p1_current_mmr)})** vs **{p2_flag} {p2_race_emote} {p2_name} ({int(p2_current_mmr)})**",
+            description=f"**{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_name} ({int(p1_current_mmr)})** vs **{p2_rank_emote} {p2_flag} {p2_race_emote} {p2_name} ({int(p2_current_mmr)})**",
             color=discord.Color.red()
         )
 

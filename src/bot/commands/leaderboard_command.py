@@ -428,6 +428,7 @@ class LeaderboardView(discord.ui.View):
                 value="No players found.",
                 inline=False
             )
+            checkpoint_8 = time.perf_counter()
         else:
             # Split players into chunks of 5 to avoid Discord's 1024 character limit
             players_per_field = 5
