@@ -173,6 +173,53 @@ class Matchmaker:
 			print(f"🚪 Player with Discord ID {discord_user_id} left the queue")
 			print(f"   Players before removal: {before_count}, after: {after_count}")
 
+	async def remove_players_from_matchmaking_queue(self, discord_user_ids: List[int]) -> None:
+		"""
+		Remove multiple players from the matchmaking queue when they get matched.
+		
+		This is called when players are successfully matched and should be removed
+		from the matchmaking pool to prevent them from being matched again.
+		
+		Args:
+			discord_user_ids: List of Discord user IDs to remove from the queue
+		"""
+		async with self.lock:
+			before_count = len(self.players)
+			self.players = [p for p in self.players if p.discord_user_id not in discord_user_ids]
+			after_count = len(self.players)
+			removed_count = before_count - after_count
+			print(f"🎯 Removed {removed_count} matched players from matchmaking queue")
+			print(f"   Players before removal: {before_count}, after: {after_count}")
+
+	async def release_queue_lock_for_players(self, discord_user_ids: List[int]) -> None:
+		"""
+		Release the queue lock for players when a match is resolved or aborted.
+		
+		This allows players to queue again after their match is completed.
+		This is different from removing from matchmaking queue - these players
+		are already out of the matchmaking queue but need their queue lock released.
+		
+		Args:
+			discord_user_ids: List of Discord user IDs to release from queue lock
+		"""
+		# This method handles the queue lock release logic
+		# The actual queue lock is managed in the bot commands, but this method
+		# can be used to trigger the release process
+		print(f"🔓 Releasing queue lock for {len(discord_user_ids)} players after match resolution")
+		
+		# Import here to avoid circular imports
+		from src.bot.commands.queue_command import queue_searching_view_manager, match_results
+		
+		# Remove players from the queue searching views and match results
+		for discord_user_id in discord_user_ids:
+			# Remove from queue searching view manager
+			await queue_searching_view_manager.unregister(discord_user_id)
+			
+			# Remove from match results if present
+			match_results.pop(discord_user_id, None)
+			
+			print(f"🔓 Released queue lock for player {discord_user_id}")
+
 	def set_match_callback(self, callback: Callable[[MatchResult, Callable[[Callable], None]], None]) -> None:
 		"""Set the callback function to be called when a match is found."""
 		self.match_callback = callback
@@ -563,9 +610,9 @@ class Matchmaker:
 		for discord_id in matched_players:
 			self.recent_activity[discord_id] = timestamp
 			
-		# Remove matched players from the main queue
-		for discord_id in matched_players:
-			await self.remove_player(discord_id)
+		# Remove matched players from the matchmaking queue
+		matched_player_list = list(matched_players)
+		await self.remove_players_from_matchmaking_queue(matched_player_list)
 		
 		# Log remaining players by category
 		remaining_bw = [p for p in original_bw_only if p.discord_user_id not in matched_players]
@@ -647,10 +694,23 @@ class Matchmaker:
 			user_info_service = UserInfoService()
 			user_info_service.decrement_aborts(player_discord_uid)
 			
+			# Get match data to find both players
+			match_data = self.db_reader.get_match_1v1(match_id)
+			if match_data:
+				# Get both players' Discord UIDs
+				p1_discord_uid = match_data.get('player_1_discord_uid')
+				p2_discord_uid = match_data.get('player_2_discord_uid')
+				
+				# Release queue lock for both players so they can queue again
+				player_ids = [uid for uid in [p1_discord_uid, p2_discord_uid] if uid is not None]
+				if player_ids:
+					import asyncio
+					asyncio.create_task(self.release_queue_lock_for_players(player_ids))
+			
 			# Trigger completion check to notify players
-			import asyncio
 			from src.backend.services.match_completion_service import match_completion_service
 			print(f"🚀 Triggering immediate completion check for match {match_id} after abort.")
+			import asyncio
 			asyncio.create_task(match_completion_service.check_match_completion(match_id))
 			
 			return True

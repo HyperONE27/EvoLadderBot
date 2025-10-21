@@ -313,6 +313,27 @@ class MatchCompletionService:
                 await callback(status="complete", data=final_results)
             except Exception as e:
                 print(f"❌ Error executing completion callback for match {match_id}: {e}")
+        
+        # Release queue lock for both players so they can queue again
+        await self._release_queue_lock_for_completed_match(match_id, final_results)
+
+    async def _release_queue_lock_for_completed_match(self, match_id: int, final_results: dict):
+        """Release queue lock for both players when a match is completed."""
+        try:
+            # Get both players' Discord UIDs from the match data
+            p1_discord_uid = final_results.get('player_1_discord_uid')
+            p2_discord_uid = final_results.get('player_2_discord_uid')
+            
+            if p1_discord_uid and p2_discord_uid:
+                # Use the matchmaker's release_queue_lock_for_players method
+                from src.backend.services.matchmaking_service import matchmaker
+                player_ids = [p1_discord_uid, p2_discord_uid]
+                await matchmaker.release_queue_lock_for_players(player_ids)
+                print(f"🔓 Released queue lock for completed match {match_id}")
+            else:
+                print(f"⚠️ Could not get player IDs for match {match_id} - skipping queue lock release")
+        except Exception as e:
+            print(f"❌ Error releasing queue lock for match {match_id}: {e}")
 
     async def _notify_players_of_conflict(self, match_id: int):
         """Notify all registered frontends of a match result conflict."""
@@ -323,6 +344,31 @@ class MatchCompletionService:
                 await callback(status="conflict", data={"match_id": match_id})
             except Exception as e:
                 print(f"❌ Error executing conflict callback for match {match_id}: {e}")
+        
+        # Release queue lock for both players so they can queue again after conflict
+        await self._release_queue_lock_for_conflict_match(match_id)
+
+    async def _release_queue_lock_for_conflict_match(self, match_id: int):
+        """Release queue lock for both players when a match has a conflict."""
+        try:
+            # Get match data to find both players
+            match_data = self.db_reader.get_match_1v1(match_id)
+            if match_data:
+                p1_discord_uid = match_data.get('player_1_discord_uid')
+                p2_discord_uid = match_data.get('player_2_discord_uid')
+                
+                if p1_discord_uid and p2_discord_uid:
+                    # Use the matchmaker's release_queue_lock_for_players method
+                    from src.backend.services.matchmaking_service import matchmaker
+                    player_ids = [p1_discord_uid, p2_discord_uid]
+                    await matchmaker.release_queue_lock_for_players(player_ids)
+                    print(f"🔓 Released queue lock for conflict match {match_id}")
+                else:
+                    print(f"⚠️ Could not get player IDs for conflict match {match_id} - skipping queue lock release")
+            else:
+                print(f"⚠️ Could not get match data for conflict match {match_id} - skipping queue lock release")
+        except Exception as e:
+            print(f"❌ Error releasing queue lock for conflict match {match_id}: {e}")
 
     async def _get_match_final_results(self, match_id: int) -> Optional[dict]:
         """
