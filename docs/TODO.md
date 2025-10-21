@@ -66,7 +66,14 @@
     - ✅ Full documentation and demonstration scripts
   - ✅ Implement service locator pattern for global service instances
 - Activation
-  - ⏰ De-activate the outdated /activation command
+  - ✅ De-activate the outdated /activation command
+- System hardening
+  - ⏰ Implement a smarter prune protection algorithm than using string matching
+  - ⏰ Implement frontend mock testing
+  - ⏰ Implement action deferral? And add loading bars + disable UI while waiting
+- Resource optimization
+  - ✅ No 60-second leaderboard refresh loop, invalidate cache specifically only when services modify MMR
+  - ✅ Remove synchronous leaderboard path (async path should not fall back to it)
 - Admin stuff:
   - ⏰ Add automatic logging/pinging of admins when a match disagreement arises
     - ⏰ Send replay data to admins

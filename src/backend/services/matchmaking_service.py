@@ -839,6 +839,7 @@ class Matchmaker:
 				print(f"   Player 1 ({player1_uid}): {p1_current_mmr} → {mmr_outcome.player_one_mmr} ({p1_race})")
 				print(f"   Player 2 ({player2_uid}): {p2_current_mmr} → {mmr_outcome.player_two_mmr} ({p2_race})")
 				print(f"   MMR Change: {p1_mmr_change:+} (positive = player 1 gained)")
+				# Cache invalidation is now handled automatically by the database decorator
 			else:
 				print(f"❌ Could not get MMR data for players in match {match_id}")
 		

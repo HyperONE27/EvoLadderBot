@@ -47,6 +47,20 @@ _leaderboard_cache = {
 _non_common_countries_cache = None
 
 
+def invalidate_leaderboard_cache():
+    """
+    Invalidate the leaderboard cache to force a refresh on next access.
+    
+    This should be called whenever MMR changes occur to ensure the leaderboard
+    reflects the latest data without waiting for cache expiration.
+    """
+    global _leaderboard_cache
+    _leaderboard_cache["data"] = None
+    _leaderboard_cache["dataframe"] = None
+    _leaderboard_cache["timestamp"] = 0
+    print("[Leaderboard Cache] Invalidated due to MMR changes")
+
+
 def _refresh_leaderboard_worker(database_url: str) -> bytes:
     """
     Blocking worker function to refresh leaderboard data in a separate process.
@@ -269,9 +283,8 @@ class LeaderboardService:
             
             return df
         else:
-            # No process pool available, fall back to synchronous method
-            print("[Leaderboard Cache] MISS - No process pool, using sync method...")
-            return self._get_cached_leaderboard_dataframe()
+            # Process pool is required for async leaderboard operations
+            raise RuntimeError("Process pool is required for async leaderboard operations. No synchronous fallback available.")
     
     async def get_leaderboard_data(
         self,

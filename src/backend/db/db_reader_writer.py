@@ -10,9 +10,34 @@ Supports both SQLite and PostgreSQL via database adapters.
 
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
+from functools import wraps
 
 from src.backend.db.adapters import get_adapter
 from src.bot.config import DATABASE_TYPE
+
+
+def invalidate_leaderboard_on_mmr_change(func):
+    """
+    Decorator that automatically invalidates the leaderboard cache when MMR changes occur.
+    
+    This ensures that ANY MMR modification triggers cache invalidation, making the system
+    foolproof against future changes and ensuring the leaderboard is always up-to-date.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+        
+        # Only invalidate if the operation was successful
+        if result is True or (isinstance(result, bool) and result):
+            try:
+                from src.backend.services.leaderboard_service import invalidate_leaderboard_cache
+                invalidate_leaderboard_cache()
+                print(f"[MMR Change] Cache invalidated after {func.__name__}")
+            except Exception as e:
+                print(f"[MMR Change] Warning: Failed to invalidate cache after {func.__name__}: {e}")
+        
+        return result
+    return wrapper
 
 
 def get_timestamp() -> str:
@@ -461,6 +486,7 @@ class DatabaseWriter:
     
     # ========== MMRs 1v1 Table ==========
     
+    @invalidate_leaderboard_on_mmr_change
     def create_or_update_mmr_1v1(
         self,
         discord_uid: int,
@@ -478,7 +504,7 @@ class DatabaseWriter:
         Returns:
             True if successful.
         """
-        self.adapter.execute_write(
+        result = self.adapter.execute_write(
             """
             INSERT INTO mmrs_1v1 (
                 discord_uid, player_name, race, mmr,
@@ -506,8 +532,9 @@ class DatabaseWriter:
                 "last_played": get_timestamp()
             }
         )
-        return True
+        return result
     
+    @invalidate_leaderboard_on_mmr_change
     def update_mmr_after_match(
         self,
         discord_uid: int,
@@ -802,6 +829,7 @@ class DatabaseWriter:
             print(f"Database error in update_match_replay_1v1: {e}")
             return False
     
+    @invalidate_leaderboard_on_mmr_change
     def update_match_mmr_change(
         self,
         match_id: int,

@@ -229,6 +229,7 @@ class MatchCompletionService:
             
             # Calculate and write MMR changes
             await matchmaker._calculate_and_write_mmr(match_id, match_data)
+            # Cache invalidation is now handled automatically by the database decorator
 
             # Re-fetch match data to ensure it's the absolute latest
             final_match_data = await self._get_match_final_results(match_id)

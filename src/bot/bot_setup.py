@@ -56,7 +56,7 @@ class EvoLadderBot(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.process_pool: ProcessPoolExecutor = None
-        self._leaderboard_cache_task = None
+        # self._leaderboard_cache_task = None  # DISABLED: No longer using periodic refresh
         self._process_pool_monitor_task = None
         self._process_pool_lock = asyncio.Lock()
 
@@ -215,48 +215,16 @@ class EvoLadderBot(commands.Bot):
                     logger.critical("[Process Pool Monitor] CRITICAL: Monitoring task itself is failing")
                     consecutive_failures = 0
     
-    async def _refresh_leaderboard_cache_task(self):
-        """
-        Background task that periodically refreshes the leaderboard cache.
-        
-        This ensures the cache is always "hot" and users never have to wait
-        for a database query when viewing the leaderboard. The task runs
-        every 60 seconds (matching the cache TTL).
-        """
-        await self.wait_until_ready()
-        print("[Background Task] Starting leaderboard cache refresh task...")
-        
-        while not self.is_closed():
-            try:
-                print("[Background Task] Refreshing leaderboard cache...")
-                start_time = asyncio.get_event_loop().time()
-                
-                # Fetch leaderboard data - this will refresh the cache if needed
-                # Pass the process pool to offload heavy computation
-                # We don't care about the result, just that the cache is updated
-                await leaderboard_service.get_leaderboard_data(
-                    country_filter=None,
-                    race_filter=None,
-                    best_race_only=False,
-                    current_page=1,
-                    page_size=1,  # Only fetch 1 record to minimize processing
-                    process_pool=self.process_pool  # Offload to worker process
-                )
-                
-                duration_ms = (asyncio.get_event_loop().time() - start_time) * 1000
-                print(f"[Background Task] Leaderboard cache refreshed in {duration_ms:.2f}ms")
-                
-            except Exception as e:
-                logger.error(f"[Background Task] Error refreshing leaderboard cache: {e}")
-                print(f"[Background Task] Error refreshing leaderboard cache: {e}")
-                
-                # If error involves the process pool, trigger a health check
-                if "process" in str(e).lower() or "pool" in str(e).lower():
-                    logger.info("[Background Task] Process pool error detected, triggering health check...")
-                    await self._check_and_restart_process_pool()
-            
-            # Wait 60 seconds before next refresh (matching cache TTL)
-            await asyncio.sleep(60)
+    # DISABLED: Periodic leaderboard cache refresh task removed for resource optimization
+    # Cache will now be invalidated only when MMR changes occur
+    # async def _refresh_leaderboard_cache_task(self):
+    #     """
+    #     DISABLED: Background task that periodically refreshes the leaderboard cache.
+    #     
+    #     This was removed to reduce idle CPU usage. Cache is now invalidated
+    #     only when MMR changes occur, making it more efficient.
+    #     """
+    #     pass
     
     def start_background_tasks(self):
         """Start all background tasks for the bot."""
@@ -266,9 +234,10 @@ class EvoLadderBot(commands.Bot):
         self._process_pool_monitor_task = asyncio.create_task(self._monitor_process_pool_task())
         print("[Background Tasks] Process pool monitor task started")
         
-        # Start leaderboard cache refresh task
-        self._leaderboard_cache_task = asyncio.create_task(self._refresh_leaderboard_cache_task())
-        print("[Background Tasks] Leaderboard cache refresh task started")
+        # DISABLED: Leaderboard cache refresh task removed for resource optimization
+        # Cache will be invalidated only when MMR changes occur
+        # self._leaderboard_cache_task = asyncio.create_task(self._refresh_leaderboard_cache_task())
+        # print("[Background Tasks] Leaderboard cache refresh task started")
     
     def stop_background_tasks(self):
         """Stop all background tasks for the bot."""
@@ -278,9 +247,10 @@ class EvoLadderBot(commands.Bot):
             self._process_pool_monitor_task.cancel()
             print("[Background Tasks] Process pool monitor task stopped")
         
-        if self._leaderboard_cache_task and not self._leaderboard_cache_task.done():
-            self._leaderboard_cache_task.cancel()
-            print("[Background Tasks] Leaderboard cache refresh task stopped")
+        # DISABLED: Leaderboard cache refresh task removed for resource optimization
+        # if self._leaderboard_cache_task and not self._leaderboard_cache_task.done():
+        #     self._leaderboard_cache_task.cancel()
+        #     print("[Background Tasks] Leaderboard cache refresh task stopped")
 
 
 def initialize_bot_resources(bot: EvoLadderBot) -> None:
