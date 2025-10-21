@@ -81,6 +81,17 @@ def _refresh_leaderboard_worker(database_url: str) -> bytes:
     """
     print("[Leaderboard Worker] Starting refresh in worker process...")
     
+    # Track memory usage in worker
+    import os
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        mem_before = process.memory_info().rss / 1024 / 1024  # MB
+        print(f"[Leaderboard Worker] Memory before refresh: {mem_before:.2f} MB")
+    except:
+        mem_before = None
+        process = None
+    
     # Import here to avoid circular imports and ensure fresh imports in worker
     from src.backend.db.connection_pool import initialize_pool, close_pool
     from src.backend.db.db_reader_writer import DatabaseReader
@@ -138,6 +149,15 @@ def _refresh_leaderboard_worker(database_url: str) -> bytes:
         # Pickle the DataFrame for transfer back to main process
         pickled_df = pickle.dumps(df)
         print(f"[Leaderboard Worker] Pickled DataFrame size: {len(pickled_df) / 1024:.1f} KB")
+        
+        # Log memory usage after refresh
+        if mem_before is not None and process is not None:
+            try:
+                mem_after = process.memory_info().rss / 1024 / 1024
+                mem_delta = mem_after - mem_before
+                print(f"[Leaderboard Worker] Memory after refresh: {mem_after:.2f} MB (Δ {mem_delta:+.2f} MB)")
+            except:
+                pass
         
         return pickled_df
         
