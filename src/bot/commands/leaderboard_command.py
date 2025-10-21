@@ -47,7 +47,7 @@ async def leaderboard_command(interaction: discord.Interaction):
     
     # Get initial data to set proper button states
     flow.checkpoint("fetch_leaderboard_data_start")
-    data = await leaderboard_service.get_leaderboard_data(page_size=20)
+    data = await leaderboard_service.get_leaderboard_data(page_size=40)
     flow.checkpoint("fetch_leaderboard_data_complete")
     
     # Update button states based on data
@@ -254,7 +254,7 @@ class LeaderboardView(discord.ui.View):
     async def update_view(self, interaction: discord.Interaction):
         """Update the view with current filters and page"""
         # Get leaderboard data from backend service
-        data = await self.leaderboard_service.get_leaderboard_data(page_size=20)
+        data = await self.leaderboard_service.get_leaderboard_data(page_size=40)
         
         # Create a new view with current selections to maintain state
         new_view = LeaderboardView(self.leaderboard_service)
@@ -299,48 +299,88 @@ class LeaderboardView(discord.ui.View):
         
         # Add filter information using backend service
         filter_info = self.leaderboard_service.get_filter_info()
-        filter_text = "**Filters:**\n"
         
         # Race filter
         race_names = filter_info.get("race_names", [])
         if race_names:
-            race_count = len(race_names)
-            filter_text += f"Race: `{race_count} selected`\n"
+            race_display = ", ".join(race_names)
+            race_text = f"**Race:** `{race_display}`"
         else:
-            filter_text += "Race: `All`\n"
+            race_text = "**Race:** `All`"
         
         # Country filter
         country_names = filter_info.get("country_names", [])
         if country_names:
-            country_count = len(country_names)
-            filter_text += f"Country: `{country_count} selected`\n"
+            country_display = ", ".join(country_names)
+            country_text = f"**Country:** `{country_display}`"
         else:
-            filter_text += "Country: `All`\n"
+            country_text = "**Country:** `All`"
         
-        embed.add_field(name="", value=filter_text, inline=False)
+        # Add filters stacked vertically
+        embed.add_field(name="", value=race_text + "\n" + country_text, inline=False)
         
         # Add leaderboard content using backend service
         players = data.get("players", [])
-        page_size = 15  # Discord-specific page size
+        page_size = 40  # Discord-specific page size (4 sections of 10)
         formatted_players = self.leaderboard_service.get_leaderboard_data_formatted(players, page_size)
         
         if not formatted_players:
-            leaderboard_text = "No players found."
+            embed.add_field(
+                name="Leaderboard",
+                value="No players found.",
+                inline=False
+            )
         else:
-            leaderboard_text = ""
-            for player in formatted_players:
-                # Get race emote and flag emote
-                race_emote = self._get_race_emote(player.get('race_code', ''))
-                flag_emote = self._get_flag_emote(player.get('country', ''))
+            # Split players into chunks of 10 to avoid Discord's 1024 character limit
+            players_per_field = 10
+            
+            # Calculate the maximum rank number to determine padding width
+            max_rank = max(player['rank'] for player in formatted_players) if formatted_players else 0
+            rank_width = len(str(max_rank))
+            
+            # Prepare all chunks first
+            chunks = []
+            for i in range(0, len(formatted_players), players_per_field):
+                chunk = formatted_players[i:i + players_per_field]
+                field_text = ""
                 
-                # Format: - 1. {race_emote} {flag_emote} Master88 ({MMR number})
-                leaderboard_text += f"- {player['rank']}. {race_emote} {flag_emote} {player['player_id']} ({player['mmr']})\n"
-        
-        embed.add_field(
-            name="Leaderboard",
-            value=leaderboard_text,
-            inline=False
-        )
+                for player in chunk:
+                    # Get race emote and flag emote
+                    race_emote = self._get_race_emote(player.get('race_code', ''))
+                    flag_emote = self._get_flag_emote(player.get('country', ''))
+                    
+                    # Format rank with backticks and proper alignment
+                    rank_padded = f"{player['rank']:>{rank_width}d}"
+                    
+                    # Format player name with padding to 12 chars (12 max)
+                    player_name = player['player_id']
+                    player_name_padded = f"{player_name:<12}"
+                    
+                    # Format MMR in parentheses
+                    mmr_value = player['mmr']
+                    
+                    field_text += f"- `{rank_padded}.` {race_emote} {flag_emote} `{player_name_padded}` `{mmr_value}`\n"
+                
+                # Create field name based on position and current page
+                current_page = self.leaderboard_service.current_page
+                start_rank = (current_page - 1) * page_size + i + 1
+                end_rank = min(start_rank + len(chunk) - 1, current_page * page_size)
+                field_name = f"Leaderboard ({start_rank}-{end_rank})"
+                
+                chunks.append((field_name, field_text))
+            
+            # Add fields in 2x2 grid layout using line breaker method
+            for i, (field_name, field_text) in enumerate(chunks):
+                # Add the leaderboard field
+                embed.add_field(name=field_name, value=field_text, inline=True)
+                
+                # After the 2nd field, add a minimal separator to force a new row
+                if i == 1:  # After the 2nd field (0-indexed)
+                    embed.add_field(
+                        name=" ",  # Single space (minimal)
+                        value=" ",  # Single space (minimal)
+                        inline=False
+                    )
         
         # Add page information using backend service
         total_pages = data.get("total_pages", 1)

@@ -162,10 +162,22 @@ class LeaderboardService:
         total_players = len(filtered_players)
         total_pages = max(1, (total_players + page_size - 1) // page_size)
         
+        # Limit to 25 pages to avoid Discord dropdown limits
+        # This means we show max 25 * page_size players (e.g., 25 * 40 = 1000 players)
+        max_pages = 25
+        if total_pages > max_pages:
+            total_pages = max_pages
+            # Truncate players to fit the page limit
+            max_players = max_pages * page_size
+            filtered_players = filtered_players[:max_players]
+        
         # Get page data
         start_idx = (self.current_page - 1) * page_size
         end_idx = start_idx + page_size
         page_players = filtered_players[start_idx:end_idx]
+        
+        # Update total_players to reflect any truncation
+        total_players = len(filtered_players)
         
         return {
             "players": page_players,
