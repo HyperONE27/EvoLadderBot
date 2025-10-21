@@ -1,38 +1,47 @@
 import asyncio
 import json
-import discord
-from discord import app_commands
-from src.bot.components.error_embed import ErrorEmbedException, create_error_view_from_exception
-from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
-from src.bot.components.cancel_embed import create_cancel_embed
+import logging
 from functools import partial
 from typing import Callable, Dict, Optional
-from src.backend.services.matchmaking_service import matchmaker, Player, QueuePreferences, MatchResult
-from src.backend.services.user_info_service import get_user_info
+
+import discord
+from discord import app_commands
+
 from src.backend.db.db_reader_writer import get_timestamp
-from src.bot.utils.discord_utils import send_ephemeral_response, get_current_unix_timestamp, format_discord_timestamp, get_flag_emote, get_race_emote
-from src.backend.services.command_guard_service import CommandGuardError
-from src.bot.components.command_guard_embeds import create_command_guard_error_embed
-from src.bot.utils.command_decorators import dm_only
-from src.backend.services.replay_service import ReplayRaw, parse_replay_data_blocking
-from src.backend.services.match_completion_service import match_completion_service
 from src.backend.services.app_context import (
-    races_service as race_service,
-    maps_service,
-    regions_service,
-    user_info_service,
-    db_writer,
-    db_reader,
     command_guard_service as guard_service,
+    db_reader,
+    db_writer,
+    maps_service,
+    mmr_service,
+    races_service as race_service,
+    regions_service,
     replay_service,
-    mmr_service
+    user_info_service,
 )
-import logging
+from src.backend.services.command_guard_service import CommandGuardError
+from src.backend.services.match_completion_service import match_completion_service
+from src.backend.services.matchmaking_service import MatchResult, Player, QueuePreferences, matchmaker
+from src.backend.services.replay_service import ReplayRaw, parse_replay_data_blocking
+from src.backend.services.user_info_service import get_user_info
+from src.bot.components.cancel_embed import create_cancel_embed
+from src.bot.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
+from src.bot.components.error_embed import ErrorEmbedException, create_error_view_from_exception
+from src.bot.utils.command_decorators import dm_only
+from src.bot.utils.discord_utils import (
+    format_discord_timestamp,
+    get_current_unix_timestamp,
+    get_flag_emote,
+    get_race_emote,
+    send_ephemeral_response,
+)
 import time
 from contextlib import suppress
+
+from src.backend.services.performance_service import FlowTracker
 from src.bot.components.replay_details_embed import ReplayDetailsEmbed
 from src.bot.config import GLOBAL_TIMEOUT
-from src.backend.services.performance_service import FlowTracker
 
 
 class QueueSearchingViewManager:
@@ -1156,8 +1165,8 @@ class MatchFoundView(discord.ui.View):
         # Ensure rankings are refreshed
         ranking_service.refresh_rankings()
         
-        p1_rank = ranking_service.get_rank(final_results['p1_discord_uid'], p1_race)
-        p2_rank = ranking_service.get_rank(final_results['p2_discord_uid'], p2_race)
+        p1_rank = ranking_service.get_rank(final_results['player_1_discord_uid'], p1_race)
+        p2_rank = ranking_service.get_rank(final_results['player_2_discord_uid'], p2_race)
         
         p1_rank_emote = get_rank_emote(p1_rank)
         p2_rank_emote = get_rank_emote(p2_rank)

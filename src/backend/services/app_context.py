@@ -19,22 +19,20 @@ Usage:
 """
 
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
-from src.backend.services.user_info_service import UserInfoService
 from src.backend.services.command_guard_service import CommandGuardService
 from src.backend.services.countries_service import CountriesService
-from src.backend.services.regions_service import RegionsService
-from src.backend.services.races_service import RacesService
-from src.backend.services.maps_service import MapsService
-from src.backend.services.mmr_service import MMRService
 from src.backend.services.leaderboard_service import LeaderboardService
-from src.backend.services.ranking_service import RankingService
-from src.backend.services.validation_service import ValidationService
-from src.backend.services.storage_service import StorageService
-from src.backend.services.replay_service import ReplayService
-# Note: matchmaker is already a singleton in matchmaking_service.py, import it directly
-from src.backend.services.matchmaking_service import matchmaker
-# Note: MatchCompletionService is already a singleton, import the class
+from src.backend.services.maps_service import MapsService
 from src.backend.services.match_completion_service import MatchCompletionService
+from src.backend.services.matchmaking_service import matchmaker
+from src.backend.services.mmr_service import MMRService
+from src.backend.services.ranking_service import RankingService
+from src.backend.services.races_service import RacesService
+from src.backend.services.regions_service import RegionsService
+from src.backend.services.replay_service import ReplayService
+from src.backend.services.storage_service import StorageService
+from src.backend.services.user_info_service import UserInfoService
+from src.backend.services.validation_service import ValidationService
 
 
 # =============================================================================

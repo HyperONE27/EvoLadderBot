@@ -1,16 +1,18 @@
+from typing import List, Optional
+
 import discord
 from discord import app_commands
-from typing import List, Optional
-from src.backend.services.command_guard_service import CommandGuardError
-from src.backend.services.leaderboard_service import LeaderboardService  # For type hints
+
 from src.backend.services.app_context import (
     command_guard_service as guard_service,
-    leaderboard_service
+    leaderboard_service,
 )
-from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote, get_flag_emote
+from src.backend.services.command_guard_service import CommandGuardError
+from src.backend.services.leaderboard_service import LeaderboardService  # For type hints
+from src.backend.services.performance_service import FlowTracker
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
-from src.backend.services.performance_service import FlowTracker
+from src.bot.utils.discord_utils import get_flag_emote, get_race_emote, send_ephemeral_response
 
 
 # Register Command

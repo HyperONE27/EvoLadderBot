@@ -2,17 +2,19 @@
 Replay service.
 """
 
-from dataclasses import dataclass, asdict
+import hashlib
+import io
 import json
+import os
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from typing import Optional
+
 import sc2reader
 import xxhash
-from typing import Optional
-import hashlib
-import os
-from datetime import datetime, timezone
+
 from src.backend.db.db_reader_writer import DatabaseWriter, get_timestamp
 from src.bot.utils.discord_utils import get_current_unix_timestamp
-import io
 
 
 class ReplayParseError(Exception):
@@ -35,12 +37,24 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
         - On success: All parsed replay data fields with 'error': None
         - On failure: 'error': <error_message> with other fields None or partial
     """
+    import logging
+    import sys
     import time
+    
     start_time = time.time()
     
     print(f"[Worker Process] Starting replay parse (size: {len(replay_bytes)} bytes)...")
     
+    # Suppress sc2reader logging errors to reduce noise
+    sc2reader_logger = logging.getLogger('sc2reader')
+    sc2reader_logger.setLevel(logging.CRITICAL)  # Only show critical errors
+    
+    # Also suppress stderr for sc2reader to prevent error spam
+    original_stderr = sys.stderr
     try:
+        # Redirect stderr to devnull to suppress sc2reader errors
+        sys.stderr = open(os.devnull, 'w')
+        
         # Load the replay using sc2reader at level 4 for full parsing
         replay = sc2reader.load_replay(io.BytesIO(replay_bytes), load_level=4)
         
@@ -168,6 +182,10 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
         error_msg = f"sc2reader failed to parse replay: {type(e).__name__}: {str(e)}"
         print(f"[Worker Process] Parse failed after {elapsed_time:.3f}s: {error_msg}")
         return {"error": error_msg}
+    finally:
+        # Restore stderr
+        sys.stderr.close()
+        sys.stderr = original_stderr
 
 
 @dataclass

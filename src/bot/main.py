@@ -1,19 +1,20 @@
 import asyncio
 import logging
+
 import discord
 from discord.ext import commands
 
-from src.bot.config import EVOLADDERBOT_TOKEN
+from src.backend.services.matchmaking_service import matchmaker
 from src.bot.bot_setup import EvoLadderBot, initialize_bot_resources, shutdown_bot_resources
 from src.bot.commands.activate_command import register_activate_command
 from src.bot.commands.leaderboard_command import register_leaderboard_command
 from src.bot.commands.profile_command import register_profile_command
 from src.bot.commands.prune_command import register_prune_command
-from src.bot.commands.queue_command import register_queue_command, on_message as handle_replay_message
+from src.bot.commands.queue_command import on_message as handle_replay_message, register_queue_command
 from src.bot.commands.setcountry_command import register_setcountry_command
 from src.bot.commands.setup_command import register_setup_command
 from src.bot.commands.termsofservice_command import register_termsofservice_command
-from src.backend.services.matchmaking_service import matchmaker
+from src.bot.config import EVOLADDERBOT_TOKEN
 
 
 # Configure logging

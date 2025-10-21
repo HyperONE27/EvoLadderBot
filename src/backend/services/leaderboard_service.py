@@ -19,15 +19,17 @@ Intended usage:
     )
 """
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple
-from functools import lru_cache
 import time
-import polars as pl
+from functools import lru_cache
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+
 import pickle
 
+import polars as pl
+
+from src.backend.db.db_reader_writer import DatabaseReader
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.races_service import RacesService
-from src.backend.db.db_reader_writer import DatabaseReader
 
 if TYPE_CHECKING:
     from src.backend.services.ranking_service import RankingService

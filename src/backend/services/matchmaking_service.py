@@ -12,11 +12,12 @@ This module defines the MatchmakerService class, which contains methods for:
 import asyncio
 import random
 import time
-from typing import List, Optional, Dict, Any, Callable, Tuple
 from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
-from src.backend.services.regions_service import RegionsService
 from src.backend.services.maps_service import MapsService
+from src.backend.services.regions_service import RegionsService
 
 @dataclass
 class QueuePreferences:
@@ -642,24 +643,30 @@ class Matchmaker:
 		print("🚀 Advanced matchmaker started - checking for matches every 45 seconds")
 
 		interval = self.MATCH_INTERVAL_SECONDS
-		last_match_time = time.time()
 
 		while self.running:
-			current_time = time.time()
-			time_since_last_match = current_time - last_match_time
+			import math
 			
-			# Sleep until the next interval
-			if time_since_last_match < interval:
-				sleep_duration = interval - time_since_last_match
+			# Optimized Unix-epoch synchronization
+			now = time.time()
+			# Use floor division to avoid floating remainder jitter
+			next_tick = math.floor(now / interval + 1.0) * interval
+			sleep_duration = next_tick - now
+			
+			# Clamp small negatives to zero (clock drift or scheduler delay)
+			if sleep_duration < 0:
+				sleep_duration = 0.0
+			
+			if sleep_duration > 0:
 				await asyncio.sleep(sleep_duration)
 				if not self.running:
 					break
 
-			# Update last match time
-			last_match_time = time.time()
-			self.last_match_time = last_match_time
+			# Update last match time for display purposes
+			self.last_match_time = time.time()
 
 			# Prune stale activity data periodically
+			current_time = time.time()
 			if current_time - self.last_prune_time > self.PRUNE_INTERVAL_SECONDS:
 				self._prune_recent_activity()
 				self.last_prune_time = current_time
@@ -844,21 +851,20 @@ class Matchmaker:
 
 	def get_next_matchmaking_time(self) -> int:
 		"""
-		Get the Unix timestamp of the next matchmaking wave.
+		Get the Unix timestamp of the next matchmaking wave using optimized epoch sync.
 		
 		Returns:
 			int: Unix timestamp of the next matchmaking wave
 		"""
-		current_time = time.time()
-		time_since_last_match = current_time - self.last_match_time
+		import math
 		
-		if time_since_last_match >= self.MATCH_INTERVAL_SECONDS:
-			# Next wave is immediate
-			return int(current_time)
-		else:
-			# Calculate when the next wave will be
-			time_until_next = self.MATCH_INTERVAL_SECONDS - time_since_last_match
-			return int(current_time + time_until_next)
+		now = time.time()
+		interval = self.MATCH_INTERVAL_SECONDS
+		
+		# Use floor division to avoid floating remainder jitter
+		next_tick = math.floor(now / interval + 1.0) * interval
+		
+		return int(next_tick)
 
 
 # Global matchmaker instance

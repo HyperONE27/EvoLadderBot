@@ -6,8 +6,9 @@ and handles the finalization process including notifying both players.
 """
 
 import asyncio
-from typing import Dict, Set, Optional, Callable, List
 from asyncio import Lock
+from typing import Callable, Dict, List, Optional, Set
+
 from src.backend.db.db_reader_writer import DatabaseReader
 from src.backend.services.leaderboard_service import LeaderboardService
 
@@ -403,8 +404,8 @@ class MatchCompletionService:
                 "p2_info": p2_info,
                 "p1_name": p1_name,
                 "p2_name": p2_name,
-                "p1_discord_uid": match_data['player_1_discord_uid'],
-                "p2_discord_uid": match_data['player_2_discord_uid'],
+                "player_1_discord_uid": match_data['player_1_discord_uid'],
+                "player_2_discord_uid": match_data['player_2_discord_uid'],
                 "p1_race": match_data.get('player_1_race'),
                 "p2_race": match_data.get('player_2_race'),
                 "p1_current_mmr": match_data['player_1_mmr'],

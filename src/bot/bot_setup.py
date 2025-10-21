@@ -7,21 +7,22 @@ This module handles:
 - Resource cleanup at shutdown
 """
 
-import sys
 import asyncio
 import logging
-import discord
-from discord.ext import commands
+import sys
 from concurrent.futures import ProcessPoolExecutor
 
-from src.bot.config import WORKER_PROCESSES, DATABASE_URL, DB_POOL_MIN_CONNECTIONS, DB_POOL_MAX_CONNECTIONS
-from src.backend.db.connection_pool import initialize_pool, close_pool
+import discord
+from discord.ext import commands
+
+from src.backend.db.connection_pool import close_pool, initialize_pool
 from src.backend.db.test_connection_startup import test_database_connection
+from src.backend.services.app_context import command_guard_service, db_writer, leaderboard_service
 from src.backend.services.cache_service import static_cache
-from src.backend.services.app_context import db_writer, command_guard_service, leaderboard_service
 from src.backend.services.command_guard_service import DMOnlyError
-from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.backend.services.performance_service import FlowTracker, performance_monitor
+from src.bot.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.config import DATABASE_URL, DB_POOL_MAX_CONNECTIONS, DB_POOL_MIN_CONNECTIONS, WORKER_PROCESSES
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,17 @@ def _health_check_worker():
     Simple health check function for process pool.
     
     This function can be pickled and sent to worker processes.
+    Returns a simple success indicator.
     """
-    return True
+    import os
+    import time
+    
+    # Simple health indicators
+    return {
+        "status": "healthy",
+        "pid": os.getpid(),
+        "timestamp": time.time()
+    }
 
 
 class EvoLadderBot(commands.Bot):
@@ -125,8 +135,16 @@ class EvoLadderBot(commands.Bot):
                 _health_check_worker
             )
             # Wait up to 5 seconds for response
-            await asyncio.wait_for(future, timeout=5.0)
-            return True
+            result = await asyncio.wait_for(future, timeout=5.0)
+            
+            # Validate the health check result
+            if isinstance(result, dict) and result.get("status") == "healthy":
+                print(f"[Process Pool] ✅ Health check passed (PID: {result.get('pid', 'unknown')})")
+                return True
+            else:
+                logger.error(f"[Process Pool] Health check returned invalid result: {result}")
+                return await self._restart_process_pool()
+                
         except (asyncio.TimeoutError, Exception) as e:
             logger.error(f"[Process Pool] Health check failed: {e}")
             logger.info("[Process Pool] Attempting to restart process pool...")
@@ -164,9 +182,13 @@ class EvoLadderBot(commands.Bot):
         Background task that monitors the process pool health.
         
         Checks every 30 seconds and restarts the pool if it's unhealthy.
+        Uses simple crash detection without relying on complex error parsing.
         """
         await self.wait_until_ready()
         print("[Process Pool Monitor] Starting process pool health monitoring...")
+        
+        consecutive_failures = 0
+        max_consecutive_failures = 3
         
         while not self.is_closed():
             try:
@@ -174,12 +196,24 @@ class EvoLadderBot(commands.Bot):
                 
                 is_healthy = await self._check_and_restart_process_pool()
                 if is_healthy:
+                    consecutive_failures = 0  # Reset failure counter
                     print("[Process Pool Monitor] ✅ Health check passed")
                 else:
-                    logger.error("[Process Pool Monitor] ❌ Health check failed after restart attempt")
+                    consecutive_failures += 1
+                    logger.error(f"[Process Pool Monitor] ❌ Health check failed ({consecutive_failures}/{max_consecutive_failures})")
+                    
+                    # If we've had too many consecutive failures, something is seriously wrong
+                    if consecutive_failures >= max_consecutive_failures:
+                        logger.critical("[Process Pool Monitor] CRITICAL: Too many consecutive failures, pool may be permanently broken")
+                        # Reset counter to avoid spam
+                        consecutive_failures = 0
                     
             except Exception as e:
+                consecutive_failures += 1
                 logger.error(f"[Process Pool Monitor] Error in monitoring task: {e}")
+                if consecutive_failures >= max_consecutive_failures:
+                    logger.critical("[Process Pool Monitor] CRITICAL: Monitoring task itself is failing")
+                    consecutive_failures = 0
     
     async def _refresh_leaderboard_cache_task(self):
         """
