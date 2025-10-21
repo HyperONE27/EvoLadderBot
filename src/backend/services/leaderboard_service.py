@@ -342,24 +342,21 @@ class LeaderboardService:
             # Filter by specific rank (e.g., "s_rank", "a_rank")
             filter_conditions.append(pl.col("rank") == rank_filter)
         
-        # Apply all filters at once (more efficient than multiple filter() calls)
+        # Apply all filters at once using Polars' optimized all_horizontal combinator
+        # This is fully vectorized and more efficient than manually combining with &
         if filter_conditions:
-            # Combine all conditions with AND
-            combined_condition = filter_conditions[0]
-            for condition in filter_conditions[1:]:
-                combined_condition = combined_condition & condition
-            df = df.filter(combined_condition)
+            df = df.filter(pl.all_horizontal(filter_conditions))
         
         perf_filter = time.time()
         print(f"[Leaderboard Perf] Apply filters: {(perf_filter - perf_cache)*1000:.2f}ms")
         
         # Apply best race only filtering if enabled
         if best_race_only:
-            # Group by player_id and keep only the highest MMR entry (optimized groupby)
-            # Use last_played as tie-breaker for players with same MMR
+            # Group by player_id and keep only the highest MMR entry
+            # Sort first, then group and take first (highest MMR per player)
             df = (df
                 .sort(["mmr", "last_played"], descending=[True, True])
-                .group_by("player_id")
+                .group_by("player_id", maintain_order=True)
                 .first()
             )
         
@@ -368,8 +365,10 @@ class LeaderboardService:
             print(f"[Leaderboard Perf] Best race filter: {(perf_best_race - perf_filter)*1000:.2f}ms")
         
         # Sort by MMR (descending), then by last_played (descending) for tie-breaking
-        # Players with same MMR will be ranked by who played more recently
-        df = df.sort(["mmr", "last_played"], descending=[True, True])
+        # Only sort if we didn't just do best_race_only (which already sorted)
+        if not best_race_only:
+            df = df.sort(["mmr", "last_played"], descending=[True, True])
+        # Note: If best_race_only was enabled, data is already sorted from groupby operation
         
         perf_sort = time.time()
         print(f"[Leaderboard Perf] Sort by MMR: {(perf_sort - perf_best_race)*1000:.2f}ms")
