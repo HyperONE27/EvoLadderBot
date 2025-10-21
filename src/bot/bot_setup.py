@@ -14,7 +14,7 @@ import discord
 from discord.ext import commands
 from concurrent.futures import ProcessPoolExecutor
 
-from src.bot.config import WORKER_PROCESSES, DATABASE_URL
+from src.bot.config import WORKER_PROCESSES, DATABASE_URL, DB_POOL_MIN_CONNECTIONS, DB_POOL_MAX_CONNECTIONS
 from src.backend.db.connection_pool import initialize_pool, close_pool
 from src.backend.db.test_connection_startup import test_database_connection
 from src.backend.services.cache_service import static_cache
@@ -111,13 +111,15 @@ class EvoLadderBot(commands.Bot):
                 start_time = asyncio.get_event_loop().time()
                 
                 # Fetch leaderboard data - this will refresh the cache if needed
+                # Pass the process pool to offload heavy computation
                 # We don't care about the result, just that the cache is updated
                 await leaderboard_service.get_leaderboard_data(
                     country_filter=None,
                     race_filter=None,
                     best_race_only=False,
                     current_page=1,
-                    page_size=1  # Only fetch 1 record to minimize processing
+                    page_size=1,  # Only fetch 1 record to minimize processing
+                    process_pool=self.process_pool  # Offload to worker process
                 )
                 
                 duration_ms = (asyncio.get_event_loop().time() - start_time) * 1000
@@ -167,7 +169,11 @@ def initialize_bot_resources(bot: EvoLadderBot) -> None:
     
     # 1. Initialize Database Connection Pool
     try:
-        initialize_pool(dsn=DATABASE_URL)
+        initialize_pool(
+            dsn=DATABASE_URL,
+            min_conn=DB_POOL_MIN_CONNECTIONS,
+            max_conn=DB_POOL_MAX_CONNECTIONS
+        )
     except Exception as e:
         print(f"\n[FATAL] Failed to initialize connection pool: {e}")
         sys.exit(1)

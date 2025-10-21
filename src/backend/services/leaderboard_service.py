@@ -19,10 +19,11 @@ Intended usage:
     )
 """
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple
 from functools import lru_cache
 import time
 import polars as pl
+import pickle
 
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.races_service import RacesService
@@ -42,6 +43,83 @@ _leaderboard_cache = {
 
 # Cache for non-common country codes
 _non_common_countries_cache = None
+
+
+def _refresh_leaderboard_worker(database_url: str) -> bytes:
+    """
+    Blocking worker function to refresh leaderboard data in a separate process.
+    
+    This function:
+    1. Initializes database connection pool for this worker process
+    2. Fetches all player data from the database
+    3. Calculates ranks using the ranking service
+    4. Converts to a Polars DataFrame
+    5. Returns the pickled DataFrame
+    
+    Args:
+        database_url: Database connection URL (DSN)
+        
+    Returns:
+        Pickled Polars DataFrame containing all leaderboard data with ranks
+    """
+    print("[Leaderboard Worker] Starting refresh in worker process...")
+    
+    # Import here to avoid circular imports and ensure fresh imports in worker
+    from src.backend.db.connection_pool import initialize_pool
+    from src.backend.db.db_reader_writer import DatabaseReader
+    from src.backend.services.ranking_service import RankingService
+    
+    # Initialize connection pool for this worker process
+    # Each worker process needs its own pool since processes don't share memory
+    print("[Leaderboard Worker] Initializing connection pool...")
+    from src.bot.config import DB_POOL_MIN_CONNECTIONS, DB_POOL_MAX_CONNECTIONS
+    initialize_pool(
+        dsn=database_url,
+        min_conn=DB_POOL_MIN_CONNECTIONS,
+        max_conn=DB_POOL_MAX_CONNECTIONS
+    )
+    
+    # Create fresh instances for this worker process
+    db_reader = DatabaseReader()
+    ranking_service = RankingService(db_reader=db_reader)
+    
+    # Fetch all players
+    all_players = db_reader.get_leaderboard_1v1(limit=10000)
+    print(f"[Leaderboard Worker] Fetched {len(all_players)} players from database")
+    
+    # Refresh rankings
+    print("[Leaderboard Worker] Refreshing rankings...")
+    ranking_service.refresh_rankings()
+    
+    # Convert database format to expected format and add rank information
+    formatted_players = []
+    for player in all_players:
+        discord_uid = player.get("discord_uid")
+        race = player.get("race", "Unknown")
+        
+        # Get rank from ranking service
+        rank = "u_rank"  # Default to unranked
+        if discord_uid is not None and race != "Unknown":
+            rank = ranking_service.get_rank(discord_uid, race)
+        
+        formatted_players.append({
+            "player_id": player.get("player_name", "Unknown"),
+            "mmr": player.get("mmr", 0),
+            "race": race,
+            "country": player.get("country", "Unknown"),
+            "discord_uid": discord_uid,
+            "rank": rank
+        })
+    
+    # Convert to DataFrame
+    df = pl.DataFrame(formatted_players)
+    print(f"[Leaderboard Worker] Created DataFrame with {len(df)} rows")
+    
+    # Pickle the DataFrame for transfer back to main process
+    pickled_df = pickle.dumps(df)
+    print(f"[Leaderboard Worker] Pickled DataFrame size: {len(pickled_df) / 1024:.1f} KB")
+    
+    return pickled_df
 
 
 class LeaderboardService:
@@ -82,6 +160,9 @@ class LeaderboardService:
         Cache is global and shared across all LeaderboardService instances.
         This dramatically reduces database load and includes pre-computed ranks.
         
+        NOTE: This is a synchronous method. For async contexts, use the async version
+        which can optionally offload to a worker process.
+        
         Returns:
             Polars DataFrame with all player data including ranks
         """
@@ -93,11 +174,8 @@ class LeaderboardService:
             print(f"[Leaderboard Cache] HIT - Age: {current_time - _leaderboard_cache['timestamp']:.1f}s")
             return _leaderboard_cache["dataframe"]
         
-        # Cache miss or expired - fetch from database
-        print("[Leaderboard Cache] MISS - Fetching from database...")
-        all_players = []
-        
-        # Get all players regardless of race
+        # Cache miss or expired - fetch from database (synchronous path)
+        print("[Leaderboard Cache] MISS - Fetching from database (sync)...")
         all_players = self.db_reader.get_leaderboard_1v1(limit=10000)
         
         # Refresh rankings FIRST before processing players
@@ -105,14 +183,13 @@ class LeaderboardService:
         self.ranking_service.refresh_rankings()
         
         # Convert database format to expected format and add rank information
-        # Do this ONCE during cache refresh, not on every page view
         formatted_players = []
         for player in all_players:
             discord_uid = player.get("discord_uid")
             race = player.get("race", "Unknown")
             
-            # Get rank from ranking service (pre-computed during refresh above)
-            rank = "u_rank"  # Default to unranked
+            # Get rank from ranking service
+            rank = "u_rank"
             if discord_uid is not None and race != "Unknown":
                 rank = self.ranking_service.get_rank(discord_uid, race)
             
@@ -129,12 +206,60 @@ class LeaderboardService:
         df = pl.DataFrame(formatted_players)
         
         # Update cache
-        _leaderboard_cache["data"] = all_players  # Keep for backward compatibility
+        _leaderboard_cache["data"] = all_players
         _leaderboard_cache["dataframe"] = df
         _leaderboard_cache["timestamp"] = current_time
         print(f"[Leaderboard Cache] Updated - Cached {len(all_players)} players as DataFrame")
         
         return df
+    
+    async def _get_cached_leaderboard_dataframe_async(self, process_pool=None) -> pl.DataFrame:
+        """
+        Async version of _get_cached_leaderboard_dataframe that can optionally use
+        a process pool to offload the heavy computation.
+        
+        Args:
+            process_pool: Optional ProcessPoolExecutor for offloading work
+            
+        Returns:
+            Polars DataFrame with all player data including ranks
+        """
+        current_time = time.time()
+        
+        # Check if cache is valid
+        if (_leaderboard_cache["dataframe"] is not None and 
+            current_time - _leaderboard_cache["timestamp"] < _leaderboard_cache["ttl"]):
+            print(f"[Leaderboard Cache] HIT - Age: {current_time - _leaderboard_cache['timestamp']:.1f}s")
+            return _leaderboard_cache["dataframe"]
+        
+        # Cache miss or expired - use process pool if available
+        if process_pool is not None:
+            print("[Leaderboard Cache] MISS - Offloading to worker process...")
+            import asyncio
+            from src.bot.config import DATABASE_URL
+            loop = asyncio.get_running_loop()
+            
+            # Offload to worker process
+            # Pass DATABASE_URL so worker can initialize its own connection pool
+            pickled_df = await loop.run_in_executor(
+                process_pool,
+                _refresh_leaderboard_worker,
+                DATABASE_URL
+            )
+            
+            # Unpickle the DataFrame in the main process
+            df = pickle.loads(pickled_df)
+            print(f"[Leaderboard Cache] Received DataFrame from worker: {len(df)} rows")
+            
+            # Update cache
+            _leaderboard_cache["dataframe"] = df
+            _leaderboard_cache["timestamp"] = current_time
+            
+            return df
+        else:
+            # No process pool available, fall back to synchronous method
+            print("[Leaderboard Cache] MISS - No process pool, using sync method...")
+            return self._get_cached_leaderboard_dataframe()
     
     async def get_leaderboard_data(
         self,
@@ -142,8 +267,10 @@ class LeaderboardService:
         country_filter: Optional[List[str]] = None,
         race_filter: Optional[List[str]] = None,
         best_race_only: bool = False,
+        rank_filter: Optional[str] = None,
         current_page: int = 1,
-        page_size: int = 20
+        page_size: int = 20,
+        process_pool=None
     ) -> Dict[str, Any]:
         """
         Get leaderboard data with filters applied.
@@ -154,14 +281,22 @@ class LeaderboardService:
             country_filter: List of country codes to filter by (None = all)
             race_filter: List of race codes to filter by (None = all)
             best_race_only: If True, show only best race per player
+            rank_filter: Rank to filter by (e.g., "s_rank", "a_rank", None = all)
             current_page: Page number (1-indexed)
             page_size: Number of items per page
+            process_pool: Optional ProcessPoolExecutor for offloading heavy computation
         
         Returns:
             Dictionary containing players, pagination info, and totals
         """
+        perf_start = time.time()
+        
         # Get cached DataFrame (already has ranks computed)
-        df = self._get_cached_leaderboard_dataframe()
+        # Use async version to optionally offload to process pool
+        df = await self._get_cached_leaderboard_dataframe_async(process_pool=process_pool)
+        
+        perf_cache = time.time()
+        print(f"[Leaderboard Perf] Cache fetch: {(perf_cache - perf_start)*1000:.2f}ms")
         
         # Apply filters (optimized for large filter lists)
         # Build filter conditions and apply them in one operation for better performance
@@ -193,6 +328,10 @@ class LeaderboardService:
             
             filter_conditions.append(pl.col("race").is_in(race_filter))
         
+        if rank_filter:
+            # Filter by specific rank (e.g., "s_rank", "a_rank")
+            filter_conditions.append(pl.col("rank") == rank_filter)
+        
         # Apply all filters at once (more efficient than multiple filter() calls)
         if filter_conditions:
             # Combine all conditions with AND
@@ -200,6 +339,9 @@ class LeaderboardService:
             for condition in filter_conditions[1:]:
                 combined_condition = combined_condition & condition
             df = df.filter(combined_condition)
+        
+        perf_filter = time.time()
+        print(f"[Leaderboard Perf] Apply filters: {(perf_filter - perf_cache)*1000:.2f}ms")
         
         # Apply best race only filtering if enabled
         if best_race_only:
@@ -210,8 +352,15 @@ class LeaderboardService:
                 .first()
             )
         
+        perf_best_race = time.time()
+        if best_race_only:
+            print(f"[Leaderboard Perf] Best race filter: {(perf_best_race - perf_filter)*1000:.2f}ms")
+        
         # Sort by MMR (multi-threaded, very fast)
         df = df.sort("mmr", descending=True)
+        
+        perf_sort = time.time()
+        print(f"[Leaderboard Perf] Sort by MMR: {(perf_sort - perf_best_race)*1000:.2f}ms")
         
         # Calculate pagination
         total_players = len(df)
@@ -229,8 +378,15 @@ class LeaderboardService:
         start_idx = (current_page - 1) * page_size
         page_df = df.slice(start_idx, page_size)
         
+        perf_slice = time.time()
+        print(f"[Leaderboard Perf] Slice page: {(perf_slice - perf_sort)*1000:.2f}ms")
+        
         # Convert back to list of dicts for compatibility
         page_players = page_df.to_dicts()
+        
+        perf_to_dicts = time.time()
+        print(f"[Leaderboard Perf] to_dicts(): {(perf_to_dicts - perf_slice)*1000:.2f}ms")
+        print(f"[Leaderboard Perf] TOTAL: {(perf_to_dicts - perf_start)*1000:.2f}ms")
         
         return {
             "players": page_players,
@@ -284,6 +440,8 @@ class LeaderboardService:
         page_size: int = 20
     ) -> List[Dict[str, Any]]:
         """Get leaderboard data formatted for display."""
+        perf_start = time.time()
+        
         if not players:
             return []
         
@@ -302,6 +460,9 @@ class LeaderboardService:
                 "country": player.get('country', 'Unknown'),
                 "mmr_rank": player.get('rank', 'u_rank')
             })
+        
+        perf_end = time.time()
+        print(f"[Format Players] Formatted {len(formatted_players)} players in {(perf_end - perf_start)*1000:.2f}ms")
         
         return formatted_players
     

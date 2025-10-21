@@ -87,6 +87,10 @@ else:
 # SQLite Configuration (only used when DATABASE_TYPE=sqlite)
 SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "evoladder.db")
 
+# Database Connection Pool Configuration
+DB_POOL_MIN_CONNECTIONS = int(os.getenv("DB_POOL_MIN_CONNECTIONS"))
+DB_POOL_MAX_CONNECTIONS = int(os.getenv("DB_POOL_MAX_CONNECTIONS"))
+
 # Supabase Configuration (for storage and additional features)
 SUPABASE_URL = _get_required_env("SUPABASE_URL")
 SUPABASE_KEY = _get_required_env("SUPABASE_KEY")  # Anon key for client-side operations

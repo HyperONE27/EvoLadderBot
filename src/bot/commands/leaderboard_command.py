@@ -48,12 +48,15 @@ async def leaderboard_command(interaction: discord.Interaction):
     
     # Get initial data to set proper button states
     flow.checkpoint("fetch_leaderboard_data_start")
+    # Pass bot's process pool for offloading heavy computation
+    process_pool = getattr(interaction.client, 'process_pool', None)
     data = await leaderboard_service.get_leaderboard_data(
         country_filter=view.country_filter,
         race_filter=view.race_filter,
         best_race_only=view.best_race_only,
         current_page=view.current_page,
-        page_size=40
+        page_size=40,
+        process_pool=process_pool
     )
     flow.checkpoint("fetch_leaderboard_data_complete")
     
@@ -80,7 +83,16 @@ async def leaderboard_command(interaction: discord.Interaction):
     flow.checkpoint("embed_generation_complete")
     
     flow.checkpoint("discord_api_call_start")
+    import time
+    discord_api_start = time.perf_counter()
     await send_ephemeral_response(interaction, embed=embed, view=view)
+    discord_api_end = time.perf_counter()
+    discord_api_time = (discord_api_end - discord_api_start) * 1000
+    print(f"[Initial Command] Discord API call: {discord_api_time:.2f}ms")
+    if discord_api_time > 100:
+        print(f"⚠️  SLOW Discord API (initial): {discord_api_time:.2f}ms")
+    elif discord_api_time > 50:
+        print(f"🟡 Moderate Discord API (initial): {discord_api_time:.2f}ms")
     flow.checkpoint("discord_api_call_complete")
     
     flow.complete("success")
@@ -232,6 +244,7 @@ class LeaderboardView(discord.ui.View):
                  country_filter: Optional[List[str]] = None,
                  race_filter: Optional[List[str]] = None,
                  best_race_only: bool = False,
+                 rank_filter: Optional[str] = None,
                  country_page1_selection: Optional[List[str]] = None,
                  country_page2_selection: Optional[List[str]] = None):
         super().__init__(timeout=GLOBAL_TIMEOUT)
@@ -245,12 +258,14 @@ class LeaderboardView(discord.ui.View):
         self.country_filter: List[str] = country_filter if country_filter is not None else []
         self.race_filter: Optional[List[str]] = race_filter
         self.best_race_only: bool = best_race_only
+        self.rank_filter: Optional[str] = rank_filter
         self.country_page1_selection: List[str] = country_page1_selection if country_page1_selection is not None else []
         self.country_page2_selection: List[str] = country_page2_selection if country_page2_selection is not None else []
         
         # Add pagination and clear buttons (at the top, right under embed)
         self.add_item(PreviousPageButton(disabled=True))
         self.add_item(NextPageButton(disabled=True))
+        self.add_item(RankFilterButton(disabled=False, rank_filter=self.rank_filter))
         self.add_item(BestRaceOnlyButton(disabled=False, best_race_only=self.best_race_only))
         self.add_item(ClearFiltersButton())
         
@@ -264,14 +279,24 @@ class LeaderboardView(discord.ui.View):
 
     async def update_view(self, interaction: discord.Interaction):
         """Update the view with current filters and page"""
+        import time
+        filter_start = time.perf_counter()
+        
         # Get leaderboard data from backend service with VIEW's state
+        # Pass bot's process pool for offloading heavy computation
+        process_pool = getattr(interaction.client, 'process_pool', None)
         data = await self.leaderboard_service.get_leaderboard_data(
             country_filter=self.country_filter,
             race_filter=self.race_filter,
             best_race_only=self.best_race_only,
+            rank_filter=self.rank_filter,
             current_page=self.current_page,
-            page_size=40
+            page_size=40,
+            process_pool=process_pool
         )
+        
+        data_fetch_time = time.perf_counter()
+        print(f"[Filter Perf] Data fetch: {(data_fetch_time - filter_start)*1000:.2f}ms")
         
         # Create a new view with current selections to maintain state
         new_view = LeaderboardView(
@@ -280,9 +305,13 @@ class LeaderboardView(discord.ui.View):
             country_filter=self.country_filter,
             race_filter=self.race_filter,
             best_race_only=self.best_race_only,
+            rank_filter=self.rank_filter,
             country_page1_selection=self.country_page1_selection,
             country_page2_selection=self.country_page2_selection
         )
+        
+        view_creation_time = time.perf_counter()
+        print(f"[Filter Perf] View creation: {(view_creation_time - data_fetch_time)*1000:.2f}ms")
         
         # Update button states based on data
         total_pages = data.get("total_pages", 1)
@@ -300,7 +329,30 @@ class LeaderboardView(discord.ui.View):
                 new_view.remove_item(item)
                 new_view.add_item(PageNavigationSelect(total_pages, current_page))
         
-        await interaction.response.edit_message(embed=new_view.get_embed(data), view=new_view)
+        button_update_time = time.perf_counter()
+        print(f"[Filter Perf] Button updates: {(button_update_time - view_creation_time)*1000:.2f}ms")
+        
+        # Generate embed
+        embed = new_view.get_embed(data)
+        embed_generation_time = time.perf_counter()
+        print(f"[Filter Perf] Embed generation: {(embed_generation_time - button_update_time)*1000:.2f}ms")
+        
+        # Discord API call - this is where the lag might be
+        discord_api_start = time.perf_counter()
+        await interaction.response.edit_message(embed=embed, view=new_view)
+        discord_api_end = time.perf_counter()
+        
+        discord_api_time = (discord_api_end - discord_api_start) * 1000
+        total_time = (discord_api_end - filter_start) * 1000
+        
+        print(f"[Filter Perf] Discord API call: {discord_api_time:.2f}ms")
+        print(f"[Filter Perf] TOTAL FILTER OPERATION: {total_time:.2f}ms")
+        
+        # Alert if Discord API is slow
+        if discord_api_time > 100:
+            print(f"⚠️  SLOW Discord API: {discord_api_time:.2f}ms")
+        elif discord_api_time > 50:
+            print(f"🟡 Moderate Discord API: {discord_api_time:.2f}ms")
 
     def get_embed(self, data: dict = None) -> discord.Embed:
         """Get the leaderboard embed"""
@@ -380,16 +432,34 @@ class LeaderboardView(discord.ui.View):
             # Split players into chunks of 5 to avoid Discord's 1024 character limit
             players_per_field = 5
             
-            # Calculate the maximum rank number to determine padding width
-            max_rank = max(player['rank'] for player in formatted_players) if formatted_players else 0
-            rank_width = len(str(max_rank))
-            
             checkpoint_6 = time.perf_counter()
-            print(f"[Embed Perf] Calculate rank width: {(checkpoint_6 - checkpoint_5)*1000:.2f}ms")
+            print(f"[Embed Perf] Prepare formatting: {(checkpoint_6 - checkpoint_5)*1000:.2f}ms")
             
-            # Prepare all chunks first
+            # OPTIMIZATION: Batch emote lookups to reduce function call overhead
+            emote_fetch_start = time.perf_counter()
+            
+            # Pre-fetch all emotes in one pass
+            rank_emotes = {}
+            race_emotes = {}
+            flag_emotes = {}
+            
+            for player in formatted_players:
+                mmr_rank = player.get('mmr_rank', 'u_rank')
+                race_code = player.get('race_code', '')
+                country = player.get('country', '')
+                
+                # Cache emotes to avoid repeated lookups
+                if mmr_rank not in rank_emotes:
+                    rank_emotes[mmr_rank] = self._get_rank_emote(mmr_rank)
+                if race_code not in race_emotes:
+                    race_emotes[race_code] = self._get_race_emote(race_code)
+                if country not in flag_emotes:
+                    flag_emotes[country] = self._get_flag_emote(country)
+            
+            emote_fetch_time = (time.perf_counter() - emote_fetch_start)
+            
+            # Prepare all chunks with pre-fetched emotes
             chunks = []
-            emote_fetch_time = 0.0
             text_format_time = 0.0
             
             for i in range(0, len(formatted_players), players_per_field):
@@ -397,16 +467,15 @@ class LeaderboardView(discord.ui.View):
                 field_text = ""
                 
                 for player in chunk:
-                    emote_start = time.perf_counter()
-                    # Get rank emote, race emote, and flag emote
-                    rank_emote = self._get_rank_emote(player.get('mmr_rank', 'u_rank'))
-                    race_emote = self._get_race_emote(player.get('race_code', ''))
-                    flag_emote = self._get_flag_emote(player.get('country', ''))
-                    emote_fetch_time += (time.perf_counter() - emote_start)
-                    
                     format_start = time.perf_counter()
-                    # Format rank with backticks and proper alignment
-                    rank_padded = f"{player['rank']:>{rank_width}d}"
+                    
+                    # Use pre-fetched emotes (no function calls)
+                    rank_emote = rank_emotes[player.get('mmr_rank', 'u_rank')]
+                    race_emote = race_emotes[player.get('race_code', '')]
+                    flag_emote = flag_emotes[player.get('country', '')]
+                    
+                    # Format rank with backticks and proper alignment (4 chars + period)
+                    rank_padded = f"{player['rank']:>4d}"
                     
                     # Format player name with padding to 12 chars (12 max)
                     player_name = player['player_id']
@@ -523,6 +592,55 @@ class NextPageButton(discord.ui.Button):
         await self.view.update_view(interaction)
 
 
+class RankFilterButton(discord.ui.Button):
+    """Cycle through rank filters: All -> S -> A -> B -> C -> D -> E -> F -> All"""
+    
+    # Rank cycle order
+    RANK_CYCLE = [None, "s_rank", "a_rank", "b_rank", "c_rank", "d_rank", "e_rank", "f_rank"]
+    
+    def __init__(self, disabled=False, rank_filter=None):
+        from src.bot.utils.discord_utils import get_rank_emote
+        
+        # Determine current state
+        if rank_filter is None:
+            label = "All Ranks"
+            emoji = get_rank_emote("u_rank")
+            style = discord.ButtonStyle.secondary
+        else:
+            # Get the rank letter (e.g., "s_rank" -> "S")
+            rank_letter = rank_filter.split("_")[0].upper()
+            label = f"{rank_letter}-Rank"
+            emoji = get_rank_emote(rank_filter)
+            style = discord.ButtonStyle.primary
+        
+        super().__init__(
+            label=label,
+            emoji=emoji,
+            style=style,
+            row=0,
+            disabled=disabled
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        # Cycle to next rank
+        current_rank = self.view.rank_filter
+        try:
+            current_index = self.RANK_CYCLE.index(current_rank)
+        except ValueError:
+            current_index = 0
+        
+        # Get next rank (wrap around to beginning)
+        next_index = (current_index + 1) % len(self.RANK_CYCLE)
+        next_rank = self.RANK_CYCLE[next_index]
+        
+        # Update view state
+        self.view.rank_filter = next_rank
+        self.view.current_page = 1  # Reset to first page
+        
+        # Update the view
+        await self.view.update_view(interaction)
+
+
 class BestRaceOnlyButton(discord.ui.Button):
     """Toggle best race only mode button"""
     
@@ -578,6 +696,7 @@ class ClearFiltersButton(discord.ui.Button):
         self.view.country_page1_selection = []
         self.view.country_page2_selection = []
         self.view.best_race_only = False
+        self.view.rank_filter = None
         self.view.current_page = 1
         
         # Reset best race only button
