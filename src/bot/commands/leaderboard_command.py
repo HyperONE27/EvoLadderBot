@@ -302,16 +302,18 @@ class LeaderboardView(discord.ui.View):
         filter_text = "**Filters:**\n"
         
         # Race filter
-        if filter_info.get("race_names"):
-            race_display = ", ".join(filter_info["race_names"])
-            filter_text += f"Race: `{race_display}`\n"
+        race_names = filter_info.get("race_names", [])
+        if race_names:
+            race_count = len(race_names)
+            filter_text += f"Race: `{race_count} selected`\n"
         else:
             filter_text += "Race: `All`\n"
         
         # Country filter
-        if filter_info.get("country_names"):
-            country_display = ", ".join(filter_info["country_names"])
-            filter_text += f"Country: `{country_display}`\n"
+        country_names = filter_info.get("country_names", [])
+        if country_names:
+            country_count = len(country_names)
+            filter_text += f"Country: `{country_count} selected`\n"
         else:
             filter_text += "Country: `All`\n"
         
@@ -323,12 +325,16 @@ class LeaderboardView(discord.ui.View):
         formatted_players = self.leaderboard_service.get_leaderboard_data_formatted(players, page_size)
         
         if not formatted_players:
-            leaderboard_text = "```\nNo players found.\n```"
+            leaderboard_text = "No players found."
         else:
-            leaderboard_text = "```\n"
+            leaderboard_text = ""
             for player in formatted_players:
-                leaderboard_text += f"{player['rank']:2d}. {player['player_id']} - {player['mmr']} MMR ({player['race']}, {player['country']})\n"
-            leaderboard_text += "```"
+                # Get race emote and flag emote
+                race_emote = self._get_race_emote(player.get('race_code', ''))
+                flag_emote = self._get_flag_emote(player.get('country', ''))
+                
+                # Format: - 1. {race_emote} {flag_emote} Master88 ({MMR number})
+                leaderboard_text += f"- {player['rank']}. {race_emote} {flag_emote} {player['player_id']} ({player['mmr']})\n"
         
         embed.add_field(
             name="Leaderboard",
@@ -344,6 +350,16 @@ class LeaderboardView(discord.ui.View):
         embed.set_footer(text=footer_text)
         
         return embed
+
+    def _get_race_emote(self, race_code: str) -> str:
+        """Get the Discord emote for a race code."""
+        from src.bot.utils.discord_utils import get_race_emote
+        return get_race_emote(race_code)
+    
+    def _get_flag_emote(self, country_code: str) -> str:
+        """Get the Discord flag emote for a country code."""
+        from src.bot.utils.discord_utils import get_flag_emote
+        return get_flag_emote(country_code)
 
 
 class PreviousPageButton(discord.ui.Button):

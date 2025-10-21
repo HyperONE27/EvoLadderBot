@@ -247,6 +247,7 @@ class LeaderboardService:
                 "player_id": player.get('player_id', 'Unknown'),
                 "mmr": mmr_display,
                 "race": self.race_service.format_race_name(player.get('race', 'Unknown')),
+                "race_code": player.get('race', 'Unknown'),  # Include race code for emotes
                 "country": player.get('country', 'Unknown')
             })
         
