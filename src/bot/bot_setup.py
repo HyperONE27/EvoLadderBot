@@ -18,7 +18,7 @@ from src.bot.config import WORKER_PROCESSES, DATABASE_URL
 from src.backend.db.connection_pool import initialize_pool, close_pool
 from src.backend.db.test_connection_startup import test_database_connection
 from src.backend.services.cache_service import static_cache
-from src.backend.services.app_context import db_writer, command_guard_service
+from src.backend.services.app_context import db_writer, command_guard_service, leaderboard_service
 from src.backend.services.command_guard_service import DMOnlyError
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.backend.services.performance_service import FlowTracker, performance_monitor
@@ -34,20 +34,13 @@ class EvoLadderBot(commands.Bot):
         process_pool: ProcessPoolExecutor for CPU-bound tasks (replay parsing)
     """
     
-    # Commands that should only work in DMs
-    DM_ONLY_COMMANDS = {
-        "activate",
-        "setup", 
-        "setcountry",
-        "termsofservice",
-        "profile",
-        "leaderboard",
-        "queue"
-    }
+    # Commands that should only work in DMs (empty = no restrictions)
+    DM_ONLY_COMMANDS = set()
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.process_pool: ProcessPoolExecutor = None
+        self._leaderboard_cache_task = None
 
     async def on_interaction(self, interaction: discord.Interaction):
         """
@@ -113,6 +106,58 @@ class EvoLadderBot(commands.Bot):
         except Exception as e:
             # Log error but don't fail the command
             logger.error(f"Failed to log command {command} for user {discord_uid}: {e}")
+    
+    async def _refresh_leaderboard_cache_task(self):
+        """
+        Background task that periodically refreshes the leaderboard cache.
+        
+        This ensures the cache is always "hot" and users never have to wait
+        for a database query when viewing the leaderboard. The task runs
+        every 60 seconds (matching the cache TTL).
+        """
+        await self.wait_until_ready()
+        print("[Background Task] Starting leaderboard cache refresh task...")
+        
+        while not self.is_closed():
+            try:
+                print("[Background Task] Refreshing leaderboard cache...")
+                start_time = asyncio.get_event_loop().time()
+                
+                # Fetch leaderboard data - this will refresh the cache if needed
+                # We don't care about the result, just that the cache is updated
+                await leaderboard_service.get_leaderboard_data(
+                    country_filter=None,
+                    race_filter=None,
+                    best_race_only=False,
+                    current_page=1,
+                    page_size=1  # Only fetch 1 record to minimize processing
+                )
+                
+                duration_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+                print(f"[Background Task] Leaderboard cache refreshed in {duration_ms:.2f}ms")
+                
+            except Exception as e:
+                logger.error(f"[Background Task] Error refreshing leaderboard cache: {e}")
+                print(f"[Background Task] Error refreshing leaderboard cache: {e}")
+            
+            # Wait 60 seconds before next refresh (matching cache TTL)
+            await asyncio.sleep(60)
+    
+    def start_background_tasks(self):
+        """Start all background tasks for the bot."""
+        print("[Background Tasks] Starting background tasks...")
+        
+        # Start leaderboard cache refresh task
+        self._leaderboard_cache_task = asyncio.create_task(self._refresh_leaderboard_cache_task())
+        print("[Background Tasks] Leaderboard cache refresh task started")
+    
+    def stop_background_tasks(self):
+        """Stop all background tasks for the bot."""
+        print("[Background Tasks] Stopping background tasks...")
+        
+        if self._leaderboard_cache_task and not self._leaderboard_cache_task.done():
+            self._leaderboard_cache_task.cancel()
+            print("[Background Tasks] Leaderboard cache refresh task stopped")
 
 
 def initialize_bot_resources(bot: EvoLadderBot) -> None:
@@ -174,18 +219,22 @@ def shutdown_bot_resources(bot: EvoLadderBot) -> None:
     Gracefully shut down all application resources.
     
     This should be called when the bot is shutting down. It cleans up:
-    1. Database connection pool
-    2. Process pool for CPU-bound tasks
+    1. Background tasks
+    2. Database connection pool
+    3. Process pool for CPU-bound tasks
     
     Args:
         bot: The EvoLadderBot instance to clean up
     """
     print("[Shutdown] Closing application resources...")
     
-    # 1. Close Database Connection Pool
+    # 1. Stop Background Tasks
+    bot.stop_background_tasks()
+    
+    # 2. Close Database Connection Pool
     close_pool()
     
-    # 2. Shutdown Process Pool
+    # 3. Shutdown Process Pool
     if bot.process_pool:
         print("[Shutdown] Shutting down process pool...")
         bot.process_pool.shutdown(wait=True)

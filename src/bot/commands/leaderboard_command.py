@@ -75,9 +75,13 @@ async def leaderboard_command(interaction: discord.Interaction):
     
     flow.checkpoint("update_button_states_complete")
     
-    flow.checkpoint("send_response_start")
-    await send_ephemeral_response(interaction, embed=view.get_embed(data), view=view)
-    flow.checkpoint("send_response_complete")
+    flow.checkpoint("embed_generation_start")
+    embed = view.get_embed(data)
+    flow.checkpoint("embed_generation_complete")
+    
+    flow.checkpoint("discord_api_call_start")
+    await send_ephemeral_response(interaction, embed=embed, view=view)
+    flow.checkpoint("discord_api_call_complete")
     
     flow.complete("success")
 
@@ -321,6 +325,9 @@ class LeaderboardView(discord.ui.View):
 
     def get_embed(self, data: dict = None) -> discord.Embed:
         """Get the leaderboard embed"""
+        import time
+        start_time = time.perf_counter()
+        
         if data is None:
             data = {
                 "players": [],
@@ -329,11 +336,17 @@ class LeaderboardView(discord.ui.View):
                 "total_players": 0
             }
         
+        checkpoint_1 = time.perf_counter()
+        print(f"[Embed Perf] Data validation: {(checkpoint_1 - start_time)*1000:.2f}ms")
+        
         embed = discord.Embed(
             title="🏆 Player Leaderboard",
             description="",
             color=discord.Color.gold()
         )
+        
+        checkpoint_2 = time.perf_counter()
+        print(f"[Embed Perf] Embed creation: {(checkpoint_2 - checkpoint_1)*1000:.2f}ms")
         
         # Add filter information using backend service with VIEW state
         filter_info = self.leaderboard_service.get_filter_info(
@@ -341,6 +354,9 @@ class LeaderboardView(discord.ui.View):
             country_filter=self.country_filter,
             best_race_only=self.best_race_only
         )
+        
+        checkpoint_3 = time.perf_counter()
+        print(f"[Embed Perf] Get filter info: {(checkpoint_3 - checkpoint_2)*1000:.2f}ms")
         
         # Race filter
         race_names = filter_info.get("race_names", [])
@@ -361,6 +377,9 @@ class LeaderboardView(discord.ui.View):
         # Add filters stacked vertically
         embed.add_field(name="", value=race_text + "\n" + country_text, inline=False)
         
+        checkpoint_4 = time.perf_counter()
+        print(f"[Embed Perf] Add filter fields: {(checkpoint_4 - checkpoint_3)*1000:.2f}ms")
+        
         # Add leaderboard content using backend service
         players = data.get("players", [])
         page_size = 40  # Discord-specific page size (8 sections of 5)
@@ -368,6 +387,9 @@ class LeaderboardView(discord.ui.View):
         formatted_players = self.leaderboard_service.get_leaderboard_data_formatted(
             players, current_page, page_size
         )
+        
+        checkpoint_5 = time.perf_counter()
+        print(f"[Embed Perf] Format players: {(checkpoint_5 - checkpoint_4)*1000:.2f}ms")
         
         if not formatted_players:
             embed.add_field(
@@ -383,18 +405,27 @@ class LeaderboardView(discord.ui.View):
             max_rank = max(player['rank'] for player in formatted_players) if formatted_players else 0
             rank_width = len(str(max_rank))
             
+            checkpoint_6 = time.perf_counter()
+            print(f"[Embed Perf] Calculate rank width: {(checkpoint_6 - checkpoint_5)*1000:.2f}ms")
+            
             # Prepare all chunks first
             chunks = []
+            emote_fetch_time = 0.0
+            text_format_time = 0.0
+            
             for i in range(0, len(formatted_players), players_per_field):
                 chunk = formatted_players[i:i + players_per_field]
                 field_text = ""
                 
                 for player in chunk:
+                    emote_start = time.perf_counter()
                     # Get rank emote, race emote, and flag emote
                     rank_emote = self._get_rank_emote(player.get('mmr_rank', 'u_rank'))
                     race_emote = self._get_race_emote(player.get('race_code', ''))
                     flag_emote = self._get_flag_emote(player.get('country', ''))
+                    emote_fetch_time += (time.perf_counter() - emote_start)
                     
+                    format_start = time.perf_counter()
                     # Format rank with backticks and proper alignment
                     rank_padded = f"{player['rank']:>{rank_width}d}"
                     
@@ -406,8 +437,14 @@ class LeaderboardView(discord.ui.View):
                     mmr_value = player['mmr']
                     
                     field_text += f"`{rank_padded}.` {rank_emote} {race_emote} {flag_emote} `{player_name_padded}` `{mmr_value}`\n"
+                    text_format_time += (time.perf_counter() - format_start)
                 
                 chunks.append(field_text)
+            
+            checkpoint_7 = time.perf_counter()
+            print(f"[Embed Perf] Generate chunks - Total: {(checkpoint_7 - checkpoint_6)*1000:.2f}ms")
+            print(f"[Embed Perf]   -> Emote fetching: {emote_fetch_time*1000:.2f}ms")
+            print(f"[Embed Perf]   -> Text formatting: {text_format_time*1000:.2f}ms")
             
             # Add fields in 2x4 grid layout
             # Left column gets titles (1-10, 11-20, etc), right column gets invisible names
@@ -437,6 +474,9 @@ class LeaderboardView(discord.ui.View):
                         value=" ",  # Single space (minimal)
                         inline=False
                     )
+            
+            checkpoint_8 = time.perf_counter()
+            print(f"[Embed Perf] Add fields to embed: {(checkpoint_8 - checkpoint_7)*1000:.2f}ms")
         
         # Add page information using backend service
         total_pages = data.get("total_pages", 1)
@@ -444,6 +484,12 @@ class LeaderboardView(discord.ui.View):
         pagination_info = self.leaderboard_service.get_pagination_info(current_page, total_pages, total_players)
         footer_text = f"Page {pagination_info['current_page']}/{pagination_info['total_pages']} • {pagination_info['total_players']} total players"
         embed.set_footer(text=footer_text)
+        
+        checkpoint_9 = time.perf_counter()
+        print(f"[Embed Perf] Add footer: {(checkpoint_9 - checkpoint_8)*1000:.2f}ms")
+        
+        total_time = (checkpoint_9 - start_time) * 1000
+        print(f"[Embed Perf] TOTAL EMBED GENERATION: {total_time:.2f}ms")
         
         return embed
 

@@ -8,6 +8,7 @@ from src.bot.bot_setup import EvoLadderBot, initialize_bot_resources, shutdown_b
 from src.bot.commands.activate_command import register_activate_command
 from src.bot.commands.leaderboard_command import register_leaderboard_command
 from src.bot.commands.profile_command import register_profile_command
+from src.bot.commands.prune_command import register_prune_command
 from src.bot.commands.queue_command import register_queue_command, on_message as handle_replay_message
 from src.bot.commands.setcountry_command import register_setcountry_command
 from src.bot.commands.setup_command import register_setup_command
@@ -46,6 +47,10 @@ async def on_ready():
         # Start the matchmaker
         asyncio.create_task(matchmaker.run())
         print("Matchmaker started")
+        
+        # Start background tasks (leaderboard cache refresh, etc.)
+        bot.start_background_tasks()
+        print("Background tasks started")
     except Exception as e:
         print("Sync failed:", e)
 
@@ -58,6 +63,7 @@ def register_commands(bot: commands.Bot):
     register_activate_command(bot.tree)
     register_leaderboard_command(bot.tree)
     register_profile_command(bot.tree)
+    register_prune_command(bot.tree)
     register_queue_command(bot.tree)
     register_setcountry_command(bot.tree)
     register_setup_command(bot.tree)

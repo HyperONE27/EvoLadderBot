@@ -81,7 +81,8 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
                 color=discord.Color.red()
             )
             await interaction.response.send_message(
-                embed=error_embed
+                embed=error_embed,
+                ephemeral=True
             )
             return
         
@@ -100,7 +101,7 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
             fields=[],
             mode="post_confirmation"
         )
-        await interaction.response.send_message(embed=post_confirm_view.embed, view=post_confirm_view)
+        await interaction.response.send_message(embed=post_confirm_view.embed, view=post_confirm_view, ephemeral=True)
     
     # Create a simple view for the cancel target (just show the command again)
     class CountryCancelView(discord.ui.View):
