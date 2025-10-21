@@ -321,7 +321,7 @@ class LeaderboardView(discord.ui.View):
         
         # Add leaderboard content using backend service
         players = data.get("players", [])
-        page_size = 20  # Discord-specific page size
+        page_size = 15  # Discord-specific page size
         formatted_players = self.leaderboard_service.get_leaderboard_data_formatted(players, page_size)
         
         if not formatted_players:
