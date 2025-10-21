@@ -54,7 +54,8 @@ def _refresh_leaderboard_worker(database_url: str) -> bytes:
     2. Fetches all player data from the database
     3. Calculates ranks using the ranking service
     4. Converts to a Polars DataFrame
-    5. Returns the pickled DataFrame
+    5. Closes the connection pool
+    6. Returns the pickled DataFrame
     
     Args:
         database_url: Database connection URL (DSN)
@@ -65,62 +66,69 @@ def _refresh_leaderboard_worker(database_url: str) -> bytes:
     print("[Leaderboard Worker] Starting refresh in worker process...")
     
     # Import here to avoid circular imports and ensure fresh imports in worker
-    from src.backend.db.connection_pool import initialize_pool
+    from src.backend.db.connection_pool import initialize_pool, close_pool
     from src.backend.db.db_reader_writer import DatabaseReader
     from src.backend.services.ranking_service import RankingService
     
-    # Initialize connection pool for this worker process
-    # Each worker process needs its own pool since processes don't share memory
-    print("[Leaderboard Worker] Initializing connection pool...")
-    from src.bot.config import DB_POOL_MIN_CONNECTIONS, DB_POOL_MAX_CONNECTIONS
-    initialize_pool(
-        dsn=database_url,
-        min_conn=DB_POOL_MIN_CONNECTIONS,
-        max_conn=DB_POOL_MAX_CONNECTIONS
-    )
-    
-    # Create fresh instances for this worker process
-    db_reader = DatabaseReader()
-    ranking_service = RankingService(db_reader=db_reader)
-    
-    # Fetch all players
-    all_players = db_reader.get_leaderboard_1v1(limit=10000)
-    print(f"[Leaderboard Worker] Fetched {len(all_players)} players from database")
-    
-    # Refresh rankings
-    print("[Leaderboard Worker] Refreshing rankings...")
-    ranking_service.refresh_rankings()
-    
-    # Convert database format to expected format and add rank information
-    formatted_players = []
-    for player in all_players:
-        discord_uid = player.get("discord_uid")
-        race = player.get("race", "Unknown")
+    try:
+        # Initialize connection pool for this worker process
+        # Each worker process needs its own pool since processes don't share memory
+        print("[Leaderboard Worker] Initializing connection pool...")
+        from src.bot.config import DB_POOL_MIN_CONNECTIONS, DB_POOL_MAX_CONNECTIONS
+        initialize_pool(
+            dsn=database_url,
+            min_conn=DB_POOL_MIN_CONNECTIONS,
+            max_conn=DB_POOL_MAX_CONNECTIONS,
+            force=True  # Force reinitialization in worker process
+        )
         
-        # Get rank from ranking service
-        rank = "u_rank"  # Default to unranked
-        if discord_uid is not None and race != "Unknown":
-            rank = ranking_service.get_rank(discord_uid, race)
+        # Create fresh instances for this worker process
+        db_reader = DatabaseReader()
+        ranking_service = RankingService(db_reader=db_reader)
         
-        formatted_players.append({
-            "player_id": player.get("player_name", "Unknown"),
-            "mmr": player.get("mmr", 0),
-            "race": race,
-            "country": player.get("country", "Unknown"),
-            "discord_uid": discord_uid,
-            "rank": rank,
-            "last_played": player.get("last_played", "1970-01-01T00:00:00Z")  # Default to epoch for sorting
-        })
-    
-    # Convert to DataFrame
-    df = pl.DataFrame(formatted_players)
-    print(f"[Leaderboard Worker] Created DataFrame with {len(df)} rows")
-    
-    # Pickle the DataFrame for transfer back to main process
-    pickled_df = pickle.dumps(df)
-    print(f"[Leaderboard Worker] Pickled DataFrame size: {len(pickled_df) / 1024:.1f} KB")
-    
-    return pickled_df
+        # Fetch all players
+        all_players = db_reader.get_leaderboard_1v1(limit=10000)
+        print(f"[Leaderboard Worker] Fetched {len(all_players)} players from database")
+        
+        # Refresh rankings
+        print("[Leaderboard Worker] Refreshing rankings...")
+        ranking_service.refresh_rankings()
+        
+        # Convert database format to expected format and add rank information
+        formatted_players = []
+        for player in all_players:
+            discord_uid = player.get("discord_uid")
+            race = player.get("race", "Unknown")
+            
+            # Get rank from ranking service
+            rank = "u_rank"  # Default to unranked
+            if discord_uid is not None and race != "Unknown":
+                rank = ranking_service.get_rank(discord_uid, race)
+            
+            formatted_players.append({
+                "player_id": player.get("player_name", "Unknown"),
+                "mmr": player.get("mmr", 0),
+                "race": race,
+                "country": player.get("country", "Unknown"),
+                "discord_uid": discord_uid,
+                "rank": rank,
+                "last_played": player.get("last_played", "1970-01-01T00:00:00Z")  # Default to epoch for sorting
+            })
+        
+        # Convert to DataFrame
+        df = pl.DataFrame(formatted_players)
+        print(f"[Leaderboard Worker] Created DataFrame with {len(df)} rows")
+        
+        # Pickle the DataFrame for transfer back to main process
+        pickled_df = pickle.dumps(df)
+        print(f"[Leaderboard Worker] Pickled DataFrame size: {len(pickled_df) / 1024:.1f} KB")
+        
+        return pickled_df
+        
+    finally:
+        # Always close the connection pool when done to prevent stale connections
+        print("[Leaderboard Worker] Closing connection pool...")
+        close_pool()
 
 
 class LeaderboardService:
