@@ -44,13 +44,27 @@ class CountriesService(BaseConfigService):
                 [c for c in common_countries if c.get("code") not in ["XX", "ZZ"]],
                 key=lambda item: item.get("name", ""),
             )
-            # Add "Other" (ZZ) at the end
+            # Add "Other" which represents all non-common countries (XX, ZZ, and any others)
             other = next((c for c in countries if c.get("code") == "ZZ"), None)
             if other:
                 common_countries.append(other)
             self._common_countries_cache = common_countries
 
         return list(self._common_countries_cache)
+    
+    def get_all_non_common_country_codes(self) -> List[str]:
+        """
+        Get all country codes that are NOT marked as common.
+        This includes XX, ZZ, and any other countries not in the common list.
+        Used for filtering when "Other" is selected.
+        
+        Returns:
+            List of country codes for all non-common countries.
+        """
+        countries = self.get_data()
+        common_codes = {c.get("code") for c in countries if c.get("common", False) and c.get("code") not in ["XX", "ZZ"]}
+        # Return all codes that are NOT in the common set
+        return [c.get("code") for c in countries if c.get("code") not in common_codes]
 
     def get_country_page_data(self, page: int, page_size: int) -> Tuple[List[Dict[str, Any]], int]:
         common_countries = self.get_common_countries()

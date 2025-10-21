@@ -1,5 +1,6 @@
 import discord
 from discord import app_commands
+from typing import List, Optional
 from src.backend.services.command_guard_service import CommandGuardError
 from src.backend.services.leaderboard_service import LeaderboardService  # For type hints
 from src.backend.services.app_context import (
@@ -47,14 +48,20 @@ async def leaderboard_command(interaction: discord.Interaction):
     
     # Get initial data to set proper button states
     flow.checkpoint("fetch_leaderboard_data_start")
-    data = await leaderboard_service.get_leaderboard_data(page_size=40)
+    data = await leaderboard_service.get_leaderboard_data(
+        country_filter=view.country_filter,
+        race_filter=view.race_filter,
+        best_race_only=view.best_race_only,
+        current_page=view.current_page,
+        page_size=40
+    )
     flow.checkpoint("fetch_leaderboard_data_complete")
     
     # Update button states based on data
     flow.checkpoint("update_button_states_start")
     total_pages = data.get("total_pages", 1)
     current_page = data.get("current_page", 1)
-    button_states = leaderboard_service.get_button_states(total_pages)
+    button_states = leaderboard_service.get_button_states(current_page, total_pages)
     
     for item in view.children:
         if isinstance(item, PreviousPageButton):
@@ -119,7 +126,10 @@ class CountryFilterPage1Select(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.leaderboard_service.update_country_filter(self.values, self.view.leaderboard_service.country_page2_selection)
+        # Update VIEW state (not service)
+        self.view.country_page1_selection = self.values
+        self.view.country_filter = self.values + self.view.country_page2_selection
+        self.view.current_page = 1  # Reset to first page
         
         # Update the view
         await self.view.update_view(interaction)
@@ -169,7 +179,10 @@ class CountryFilterPage2Select(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        self.view.leaderboard_service.update_country_filter(self.view.leaderboard_service.country_page1_selection, self.values)
+        # Update VIEW state (not service)
+        self.view.country_page2_selection = self.values
+        self.view.country_filter = self.view.country_page1_selection + self.values
+        self.view.current_page = 1  # Reset to first page
         
         # Update the view
         await self.view.update_view(interaction)
@@ -215,54 +228,83 @@ class RaceFilterSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        # Update VIEW state (not service)
         selected_values = self.values
         if not selected_values:
-            self.view.leaderboard_service.update_race_filter(None)
+            self.view.race_filter = None
         else:
-            self.view.leaderboard_service.update_race_filter(selected_values)
+            self.view.race_filter = selected_values
+        self.view.current_page = 1  # Reset to first page
         
         # Update the view
         await self.view.update_view(interaction)
 
 
 class LeaderboardView(discord.ui.View):
-    """Main leaderboard view with pagination and filtering"""
+    """Main leaderboard view with pagination and filtering - ISOLATED state per user"""
     
-    def __init__(self, leaderboard_service: LeaderboardService):
+    def __init__(self, 
+                 leaderboard_service: LeaderboardService,
+                 current_page: int = 1,
+                 country_filter: Optional[List[str]] = None,
+                 race_filter: Optional[List[str]] = None,
+                 best_race_only: bool = False,
+                 country_page1_selection: Optional[List[str]] = None,
+                 country_page2_selection: Optional[List[str]] = None):
         super().__init__(timeout=GLOBAL_TIMEOUT)
         self.leaderboard_service = leaderboard_service
         
         # Get countries for filter from service
         self.countries = leaderboard_service.country_service.get_common_countries()
         
+        # Per-user filter state (ISOLATED - not shared between users)
+        self.current_page: int = current_page
+        self.country_filter: List[str] = country_filter if country_filter is not None else []
+        self.race_filter: Optional[List[str]] = race_filter
+        self.best_race_only: bool = best_race_only
+        self.country_page1_selection: List[str] = country_page1_selection if country_page1_selection is not None else []
+        self.country_page2_selection: List[str] = country_page2_selection if country_page2_selection is not None else []
+        
         # Add pagination and clear buttons (at the top, right under embed)
-        # Note: Button states will be properly set in update_view based on actual data
-        self.add_item(PreviousPageButton(disabled=True))  # Start disabled, will be enabled if not page 1
-        self.add_item(NextPageButton(disabled=True))      # Start disabled, will be enabled if not last page
-        self.add_item(BestRaceOnlyButton(disabled=False, best_race_only=self.leaderboard_service.best_race_only))  # Toggle for best race only mode
+        self.add_item(PreviousPageButton(disabled=True))
+        self.add_item(NextPageButton(disabled=True))
+        self.add_item(BestRaceOnlyButton(disabled=False, best_race_only=self.best_race_only))
         self.add_item(ClearFiltersButton())
         
         # Add filter dropdowns (race first, then countries)
-        self.add_item(RaceFilterSelect(self.leaderboard_service, self.leaderboard_service.race_filter))
-        self.add_item(CountryFilterPage1Select(self.countries, self.leaderboard_service.country_page1_selection))
-        self.add_item(CountryFilterPage2Select(self.countries, self.leaderboard_service.country_page2_selection))
+        self.add_item(RaceFilterSelect(self.leaderboard_service, self.race_filter))
+        self.add_item(CountryFilterPage1Select(self.countries, self.country_page1_selection))
+        self.add_item(CountryFilterPage2Select(self.countries, self.country_page2_selection))
         
-        # Add pagination dropdown (will be updated with actual page data in update_view)
-        self.add_item(PageNavigationSelect(1, 1))  # Placeholder, will be updated
-
+        # Add pagination dropdown
+        self.add_item(PageNavigationSelect(1, 1))
 
     async def update_view(self, interaction: discord.Interaction):
         """Update the view with current filters and page"""
-        # Get leaderboard data from backend service
-        data = await self.leaderboard_service.get_leaderboard_data(page_size=40)
+        # Get leaderboard data from backend service with VIEW's state
+        data = await self.leaderboard_service.get_leaderboard_data(
+            country_filter=self.country_filter,
+            race_filter=self.race_filter,
+            best_race_only=self.best_race_only,
+            current_page=self.current_page,
+            page_size=40
+        )
         
         # Create a new view with current selections to maintain state
-        new_view = LeaderboardView(self.leaderboard_service)
+        new_view = LeaderboardView(
+            leaderboard_service=self.leaderboard_service,
+            current_page=self.current_page,
+            country_filter=self.country_filter,
+            race_filter=self.race_filter,
+            best_race_only=self.best_race_only,
+            country_page1_selection=self.country_page1_selection,
+            country_page2_selection=self.country_page2_selection
+        )
         
         # Update button states based on data
         total_pages = data.get("total_pages", 1)
         current_page = data.get("current_page", 1)
-        button_states = self.leaderboard_service.get_button_states(total_pages)
+        button_states = self.leaderboard_service.get_button_states(current_page, total_pages)
         
         # Update button states and pagination dropdown
         for item in new_view.children:
@@ -277,17 +319,13 @@ class LeaderboardView(discord.ui.View):
         
         await interaction.response.edit_message(embed=new_view.get_embed(data), view=new_view)
 
-    def _format_race_name(self, race: str) -> str:
-        """Format race name with proper capitalization"""
-        return format_race_name(race)
-
     def get_embed(self, data: dict = None) -> discord.Embed:
         """Get the leaderboard embed"""
         if data is None:
             data = {
                 "players": [],
                 "total_pages": 1,
-                "current_page": self.leaderboard_service.current_page,
+                "current_page": self.current_page,
                 "total_players": 0
             }
         
@@ -297,8 +335,12 @@ class LeaderboardView(discord.ui.View):
             color=discord.Color.gold()
         )
         
-        # Add filter information using backend service
-        filter_info = self.leaderboard_service.get_filter_info()
+        # Add filter information using backend service with VIEW state
+        filter_info = self.leaderboard_service.get_filter_info(
+            race_filter=self.race_filter,
+            country_filter=self.country_filter,
+            best_race_only=self.best_race_only
+        )
         
         # Race filter
         race_names = filter_info.get("race_names", [])
@@ -322,7 +364,10 @@ class LeaderboardView(discord.ui.View):
         # Add leaderboard content using backend service
         players = data.get("players", [])
         page_size = 40  # Discord-specific page size (8 sections of 5)
-        formatted_players = self.leaderboard_service.get_leaderboard_data_formatted(players, page_size)
+        current_page = data.get("current_page", 1)
+        formatted_players = self.leaderboard_service.get_leaderboard_data_formatted(
+            players, current_page, page_size
+        )
         
         if not formatted_players:
             embed.add_field(
@@ -357,27 +402,20 @@ class LeaderboardView(discord.ui.View):
                     player_name = player['player_id']
                     player_name_padded = f"{player_name:<12}"
                     
-                    # Format MMR in parentheses
+                    # Format MMR
                     mmr_value = player['mmr']
                     
                     field_text += f"`{rank_padded}.` {rank_emote} {race_emote} {flag_emote} `{player_name_padded}` `{mmr_value}`\n"
                 
-                # Create field name based on position and current page
-                current_page = self.leaderboard_service.current_page
-                start_rank = (current_page - 1) * page_size + i + 1
-                end_rank = min(start_rank + len(chunk) - 1, current_page * page_size)
-                field_name = f"Leaderboard ({start_rank}-{end_rank})"
-                
-                chunks.append((field_name, field_text))
+                chunks.append(field_text)
             
             # Add fields in 2x4 grid layout
             # Left column gets titles (1-10, 11-20, etc), right column gets invisible names
             for i in range(0, len(chunks), 2):
-                left_field_name, left_field_text = chunks[i]
+                left_field_text = chunks[i]
                 
                 # Calculate pair index (0, 1, 2, 3...)
                 pair_index = i // 2
-                current_page = self.leaderboard_service.current_page
                 
                 # Each pair represents 10 players (2 chunks * 5 players)
                 pair_start = (current_page - 1) * page_size + pair_index * 10 + 1
@@ -389,7 +427,7 @@ class LeaderboardView(discord.ui.View):
                 
                 # Add right field with invisible name (zero-width space)
                 if i + 1 < len(chunks):
-                    right_field_name, right_field_text = chunks[i + 1]
+                    right_field_text = chunks[i + 1]
                     embed.add_field(name="\u200b", value=right_field_text, inline=True)
                 
                 # Add row separator after each pair (except the last)
@@ -403,7 +441,7 @@ class LeaderboardView(discord.ui.View):
         # Add page information using backend service
         total_pages = data.get("total_pages", 1)
         total_players = data.get("total_players", 0)
-        pagination_info = self.leaderboard_service.get_pagination_info(total_pages, total_players)
+        pagination_info = self.leaderboard_service.get_pagination_info(current_page, total_pages, total_players)
         footer_text = f"Page {pagination_info['current_page']}/{pagination_info['total_pages']} • {pagination_info['total_players']} total players"
         embed.set_footer(text=footer_text)
         
@@ -438,8 +476,8 @@ class PreviousPageButton(discord.ui.Button):
         )
     
     async def callback(self, interaction: discord.Interaction):
-        if self.view.leaderboard_service.current_page > 1:
-            self.view.leaderboard_service.set_page(self.view.leaderboard_service.current_page - 1)
+        if self.view.current_page > 1:
+            self.view.current_page -= 1
             await self.view.update_view(interaction)
 
 
@@ -456,8 +494,7 @@ class NextPageButton(discord.ui.Button):
         )
     
     async def callback(self, interaction: discord.Interaction):
-        # For now, just increment page (will be limited by actual data later)
-        self.view.leaderboard_service.set_page(self.view.leaderboard_service.current_page + 1)
+        self.view.current_page += 1
         await self.view.update_view(interaction)
 
 
@@ -482,11 +519,12 @@ class BestRaceOnlyButton(discord.ui.Button):
         )
     
     async def callback(self, interaction: discord.Interaction):
-        # Toggle best race only mode
-        self.view.leaderboard_service.toggle_best_race_only()
+        # Toggle VIEW state (not service)
+        self.view.best_race_only = not self.view.best_race_only
+        self.view.current_page = 1  # Reset to first page
         
         # Update button emoji and style based on state
-        if self.view.leaderboard_service.best_race_only:
+        if self.view.best_race_only:
             self.emoji = "✅"
             self.style = discord.ButtonStyle.primary
         else:
@@ -509,8 +547,13 @@ class ClearFiltersButton(discord.ui.Button):
         )
     
     async def callback(self, interaction: discord.Interaction):
-        # Clear all filter selections
-        self.view.leaderboard_service.clear_all_filters()
+        # Clear VIEW filter state (not service)
+        self.view.race_filter = None
+        self.view.country_filter = []
+        self.view.country_page1_selection = []
+        self.view.country_page2_selection = []
+        self.view.best_race_only = False
+        self.view.current_page = 1
         
         # Reset best race only button
         for item in self.view.children:
@@ -552,8 +595,9 @@ class PageNavigationSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         selected_value = self.values[0]
         
-        # Direct page navigation
+        # Direct page navigation - update VIEW state
         page_num = int(selected_value.split("_")[1])
-        self.view.leaderboard_service.set_page(page_num)
+        self.view.current_page = page_num
         
         await self.view.update_view(interaction)
+

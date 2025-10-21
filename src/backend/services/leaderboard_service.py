@@ -5,14 +5,18 @@ This module defines the LeaderboardService class, which contains methods for:
 - Retrieving leaderboard data from the database
 - Filtering the leaderboard based on provided criteria
 - Returning the leaderboard data in a formatted manner
-- Managing filter state internally
+- STATELESS: No mutable state stored to prevent race conditions between users
 
 Intended usage:
     from backend.services.leaderboard_service import LeaderboardService
 
     leaderboard = LeaderboardService()
-    leaderboard.update_country_filter(['US', 'KR'])
-    data = await leaderboard.get_leaderboard_data()
+    data = await leaderboard.get_leaderboard_data(
+        country_filter=['US', 'KR'],
+        race_filter=['sc2_terran'],
+        current_page=1,
+        page_size=40
+    )
 """
 
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -31,13 +35,21 @@ if TYPE_CHECKING:
 # Global cache for leaderboard data with timestamp
 _leaderboard_cache = {
     "data": None,
+    "dataframe": None,  # Store as Polars DataFrame for fast filtering
     "timestamp": 0,
     "ttl": 60  # Cache for 60 seconds
 }
 
+# Cache for non-common country codes
+_non_common_countries_cache = None
+
 
 class LeaderboardService:
-    """Service for handling leaderboard data operations with integrated filter management."""
+    """
+    STATELESS service for handling leaderboard data operations.
+    
+    All filter state is passed as parameters to prevent race conditions between users.
+    """
 
     def __init__(
         self,
@@ -47,21 +59,13 @@ class LeaderboardService:
         db_reader: Optional[DatabaseReader] = None,
         ranking_service: Optional["RankingService"] = None,
     ) -> None:
-        # Services
+        # Services (stateless)
         self.country_service = country_service or CountriesService()
         self.race_service = race_service or RacesService()
         self.db_reader = db_reader or DatabaseReader()
         
         # Ranking service (will be set after initialization if not provided)
         self._ranking_service = ranking_service
-        
-        # Filter state
-        self.current_page: int = 1
-        self.country_filter: List[str] = []
-        self.race_filter: Optional[List[str]] = None
-        self.best_race_only: bool = False
-        self.country_page1_selection: List[str] = []
-        self.country_page2_selection: List[str] = []
     
     @property
     def ranking_service(self) -> "RankingService":
@@ -71,104 +75,43 @@ class LeaderboardService:
             self._ranking_service = ranking_service
         return self._ranking_service
     
-    def update_country_filter(self, page1_selection: List[str], page2_selection: List[str]) -> None:
-        """Update country filter from both page selections."""
-        self.country_page1_selection = page1_selection
-        self.country_page2_selection = page2_selection
-        self.country_filter = page1_selection + page2_selection
-        self.current_page = 1  # Reset to first page when filter changes
-    
-    def update_race_filter(self, race_selection: Optional[List[str]]) -> None:
-        """Update race filter."""
-        self.race_filter = race_selection
-        self.current_page = 1  # Reset to first page when filter changes
-    
-    def toggle_best_race_only(self) -> None:
-        """Toggle best race only mode."""
-        self.best_race_only = not self.best_race_only
-        self.current_page = 1  # Reset to first page when filter changes
-    
-    def clear_all_filters(self) -> None:
-        """Clear all filters and reset to default state."""
-        self.race_filter = None
-        self.country_filter = []
-        self.country_page1_selection = []
-        self.country_page2_selection = []
-        self.best_race_only = False
-        self.current_page = 1
-    
-    def set_page(self, page: int) -> None:
-        """Set current page."""
-        self.current_page = page
-    
-    def _get_cached_leaderboard_data(self) -> List[Dict]:
+    def _get_cached_leaderboard_dataframe(self) -> pl.DataFrame:
         """
-        Get leaderboard data from cache or database.
+        Get leaderboard data as a Polars DataFrame from cache or database.
         
         Cache is global and shared across all LeaderboardService instances.
-        This dramatically reduces database load for frequently-accessed leaderboard data.
+        This dramatically reduces database load and includes pre-computed ranks.
         
         Returns:
-            List of player dictionaries with all data
+            Polars DataFrame with all player data including ranks
         """
         current_time = time.time()
         
         # Check if cache is valid
-        if (_leaderboard_cache["data"] is not None and 
+        if (_leaderboard_cache["dataframe"] is not None and 
             current_time - _leaderboard_cache["timestamp"] < _leaderboard_cache["ttl"]):
             print(f"[Leaderboard Cache] HIT - Age: {current_time - _leaderboard_cache['timestamp']:.1f}s")
-            return _leaderboard_cache["data"]
+            return _leaderboard_cache["dataframe"]
         
         # Cache miss or expired - fetch from database
         print("[Leaderboard Cache] MISS - Fetching from database...")
         all_players = []
         
-        # If filtering by specific race(s), query each race
-        if self.race_filter:
-            for race in self.race_filter:
-                race_players = self.db_reader.get_leaderboard_1v1(
-                    race=race,
-                    limit=10000  # Large limit to get all players
-                )
-                all_players.extend(race_players)
-        else:
-            # Get all players regardless of race
-            all_players = self.db_reader.get_leaderboard_1v1(limit=10000)
+        # Get all players regardless of race
+        all_players = self.db_reader.get_leaderboard_1v1(limit=10000)
         
-        # Update cache
-        _leaderboard_cache["data"] = all_players
-        _leaderboard_cache["timestamp"] = current_time
-        print(f"[Leaderboard Cache] Updated - Cached {len(all_players)} players")
-        
-        # Refresh rankings when cache is refreshed
+        # Refresh rankings FIRST before processing players
         print("[Leaderboard Cache] Refreshing rankings...")
         self.ranking_service.refresh_rankings()
         
-        return all_players
-    
-    async def get_leaderboard_data(self, page_size: int = 20) -> Dict[str, Any]:
-        """
-        Get leaderboard data with current filters applied.
-        
-        Uses in-memory caching to reduce database load. Cache expires after 60 seconds.
-        Optimized with multi-threaded filtering and sorting for large datasets.
-        
-        Args:
-            page_size: Number of items per page (default: 20)
-        
-        Returns:
-            Dictionary containing players, pagination info, and totals
-        """
-        # Get data from database (with caching)
-        all_players = self._get_cached_leaderboard_data()
-        
         # Convert database format to expected format and add rank information
+        # Do this ONCE during cache refresh, not on every page view
         formatted_players = []
         for player in all_players:
             discord_uid = player.get("discord_uid")
             race = player.get("race", "Unknown")
             
-            # Get rank from ranking service
+            # Get rank from ranking service (pre-computed during refresh above)
             rank = "u_rank"  # Default to unranked
             if discord_uid is not None and race != "Unknown":
                 rank = self.ranking_service.get_rank(discord_uid, race)
@@ -182,18 +125,63 @@ class LeaderboardService:
                 "rank": rank
             })
         
-        # Convert to DataFrame for fast filtering and sorting
+        # Convert to DataFrame ONCE and cache it
         df = pl.DataFrame(formatted_players)
         
-        # Apply filters (multi-threaded, much faster than list comprehensions)
-        if self.country_filter:
-            df = df.filter(pl.col("country").is_in(self.country_filter))
+        # Update cache
+        _leaderboard_cache["data"] = all_players  # Keep for backward compatibility
+        _leaderboard_cache["dataframe"] = df
+        _leaderboard_cache["timestamp"] = current_time
+        print(f"[Leaderboard Cache] Updated - Cached {len(all_players)} players as DataFrame")
         
-        if self.race_filter:
-            df = df.filter(pl.col("race").is_in(self.race_filter))
+        return df
+    
+    async def get_leaderboard_data(
+        self,
+        *,
+        country_filter: Optional[List[str]] = None,
+        race_filter: Optional[List[str]] = None,
+        best_race_only: bool = False,
+        current_page: int = 1,
+        page_size: int = 20
+    ) -> Dict[str, Any]:
+        """
+        Get leaderboard data with filters applied.
+        
+        STATELESS: All filter state is passed as parameters to prevent race conditions.
+        
+        Args:
+            country_filter: List of country codes to filter by (None = all)
+            race_filter: List of race codes to filter by (None = all)
+            best_race_only: If True, show only best race per player
+            current_page: Page number (1-indexed)
+            page_size: Number of items per page
+        
+        Returns:
+            Dictionary containing players, pagination info, and totals
+        """
+        # Get cached DataFrame (already has ranks computed)
+        df = self._get_cached_leaderboard_dataframe()
+        
+        # Apply filters (multi-threaded, much faster than list comprehensions)
+        if country_filter:
+            # If ZZ ("Other") is selected, expand it to all non-common countries
+            # Cache this expansion to avoid recomputing
+            global _non_common_countries_cache
+            filter_countries = country_filter.copy()
+            if "ZZ" in filter_countries:
+                filter_countries.remove("ZZ")
+                if _non_common_countries_cache is None:
+                    _non_common_countries_cache = self.country_service.get_all_non_common_country_codes()
+                filter_countries.extend(_non_common_countries_cache)
+            
+            df = df.filter(pl.col("country").is_in(filter_countries))
+        
+        if race_filter:
+            df = df.filter(pl.col("race").is_in(race_filter))
         
         # Apply best race only filtering if enabled
-        if self.best_race_only:
+        if best_race_only:
             # Group by player_id and keep only the highest MMR entry (optimized groupby)
             df = (df
                 .sort("mmr", descending=True)
@@ -217,7 +205,7 @@ class LeaderboardService:
             total_players = max_players
         
         # Get page data (zero-copy slicing)
-        start_idx = (self.current_page - 1) * page_size
+        start_idx = (current_page - 1) * page_size
         page_df = df.slice(start_idx, page_size)
         
         # Convert back to list of dicts for compatibility
@@ -226,51 +214,61 @@ class LeaderboardService:
         return {
             "players": page_players,
             "total_pages": total_pages,
-            "current_page": self.current_page,
+            "current_page": current_page,
             "total_players": total_players
         }
     
-    def get_button_states(self, total_pages: int) -> Dict[str, bool]:
+    def get_button_states(self, current_page: int, total_pages: int) -> Dict[str, bool]:
         """Get button states based on current page and total pages."""
         return {
-            "previous_disabled": self.current_page <= 1,
-            "next_disabled": self.current_page >= total_pages,
+            "previous_disabled": current_page <= 1,
+            "next_disabled": current_page >= total_pages,
             "best_race_only_disabled": False
         }
     
-    def get_filter_info(self) -> Dict[str, Any]:
+    def get_filter_info(
+        self,
+        *,
+        race_filter: Optional[List[str]] = None,
+        country_filter: Optional[List[str]] = None,
+        best_race_only: bool = False
+    ) -> Dict[str, Any]:
         """Get filter information as structured data."""
         filter_info = {
-            "race_filter": self.race_filter,
-            "country_filter": self.country_filter,
-            "best_race_only": self.best_race_only
+            "race_filter": race_filter,
+            "country_filter": country_filter,
+            "best_race_only": best_race_only
         }
         
         # Add formatted race names if race filter is active
-        if self.race_filter:
-            if isinstance(self.race_filter, list):
+        if race_filter:
+            if isinstance(race_filter, list):
                 race_order = self.race_service.get_race_order()
-                ordered_races = [race for race in race_order if race in self.race_filter]
+                ordered_races = [race for race in race_order if race in race_filter]
                 filter_info["race_names"] = [self.race_service.format_race_name(race) for race in ordered_races]
             else:
-                filter_info["race_names"] = [self.race_service.format_race_name(self.race_filter)]
+                filter_info["race_names"] = [self.race_service.format_race_name(race_filter)]
         
         # Add formatted country names if country filter is active
-        if self.country_filter:
-            country_names = self.country_service.get_ordered_country_names(self.country_filter)
+        if country_filter:
+            country_names = self.country_service.get_ordered_country_names(country_filter)
             filter_info["country_names"] = country_names
         
         return filter_info
     
-    def get_leaderboard_data_formatted(self, players: List[Dict], page_size: int = 20) -> List[Dict[str, Any]]:
+    def get_leaderboard_data_formatted(
+        self,
+        players: List[Dict],
+        current_page: int,
+        page_size: int = 20
+    ) -> List[Dict[str, Any]]:
         """Get leaderboard data formatted for display."""
         if not players:
             return []
         
         formatted_players = []
         for i, player in enumerate(players, 1):
-            rank = (self.current_page - 1) * page_size + i
-            # Round MMR to integer for display
+            rank = (current_page - 1) * page_size + i
             mmr_value = player.get('mmr', 0)
             mmr_display = int(round(mmr_value)) if isinstance(mmr_value, (int, float)) else 0
             
@@ -279,17 +277,17 @@ class LeaderboardService:
                 "player_id": player.get('player_id', 'Unknown'),
                 "mmr": mmr_display,
                 "race": self.race_service.format_race_name(player.get('race', 'Unknown')),
-                "race_code": player.get('race', 'Unknown'),  # Include race code for emotes
+                "race_code": player.get('race', 'Unknown'),
                 "country": player.get('country', 'Unknown'),
-                "mmr_rank": player.get('rank', 'u_rank')  # MMR-based rank (S, A, B, C, D, E, F, U)
+                "mmr_rank": player.get('rank', 'u_rank')
             })
         
         return formatted_players
     
-    def get_pagination_info(self, total_pages: int, total_players: int) -> Dict[str, Any]:
+    def get_pagination_info(self, current_page: int, total_pages: int, total_players: int) -> Dict[str, Any]:
         """Get pagination information as structured data."""
         return {
-            "current_page": self.current_page,
+            "current_page": current_page,
             "total_pages": total_pages,
             "total_players": total_players
         }
@@ -302,6 +300,9 @@ class LeaderboardService:
         Call this when MMR values change (e.g., after a match is completed)
         to ensure the leaderboard reflects the latest data.
         """
+        global _non_common_countries_cache
         _leaderboard_cache["data"] = None
+        _leaderboard_cache["dataframe"] = None
         _leaderboard_cache["timestamp"] = 0
+        _non_common_countries_cache = None
         print("[Leaderboard Cache] Invalidated")
