@@ -34,9 +34,6 @@ class EvoLadderBot(commands.Bot):
         process_pool: ProcessPoolExecutor for CPU-bound tasks (replay parsing)
     """
     
-    # Commands that should only work in DMs (empty = no restrictions)
-    DM_ONLY_COMMANDS = set()
-    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.process_pool: ProcessPoolExecutor = None
@@ -44,10 +41,13 @@ class EvoLadderBot(commands.Bot):
 
     async def on_interaction(self, interaction: discord.Interaction):
         """
-        Global listener for all interactions to log command calls and enforce DM-only rules.
+        Global listener for all interactions to log command calls.
         
         This event fires for every interaction (slash commands, buttons, etc.)
         and logs slash command usage to the database asynchronously (non-blocking).
+        
+        Note: DM-only checks are done in individual command handlers, not here,
+        because this listener runs alongside the command handler, not before it.
         """
         if interaction.type == discord.InteractionType.application_command:
             command_name = interaction.command.name if interaction.command else "unknown"
@@ -56,19 +56,6 @@ class EvoLadderBot(commands.Bot):
             # Start performance tracking for this interaction
             flow = FlowTracker(f"interaction.{command_name}", user_id=user.id)
             flow.checkpoint("interaction_start")
-            
-            # Check if this is a DM-only command used outside of DMs
-            if command_name in self.DM_ONLY_COMMANDS:
-                try:
-                    command_guard_service.require_dm(interaction)
-                except DMOnlyError as e:
-                    flow.checkpoint("dm_check_failed")
-                    error_embed = create_command_guard_error_embed(e)
-                    await interaction.response.send_message(embed=error_embed)
-                    flow.complete("dm_check_failed")
-                    return
-            
-            flow.checkpoint("dm_check_passed")
             
             # Log command asynchronously (fire and forget - don't block command execution)
             asyncio.create_task(self._log_command_async(user.id, user.name, command_name))

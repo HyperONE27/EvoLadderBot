@@ -99,3 +99,18 @@ SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "replays")  # Default b
 
 # The current map pool season to be used by the matchmaking service
 CURRENT_SEASON = "season_alpha"
+
+# =============================================================================
+# PRUNE COMMAND PROTECTION TIMERS
+# =============================================================================
+
+# Recent message protection (minutes) - protects very recent messages from deletion
+# This is a safety net to prevent deleting messages that might be prune-related
+RECENT_MESSAGE_PROTECTION_MINUTES = 5
+
+# Queue message protection (days) - protects queue messages from deletion
+# Only queue messages less than this age are protected from pruning
+QUEUE_MESSAGE_PROTECTION_DAYS = 7
+
+# Prune command delay (seconds) - delay between message deletions to avoid rate limits
+PRUNE_DELETE_DELAY_SECONDS = 1

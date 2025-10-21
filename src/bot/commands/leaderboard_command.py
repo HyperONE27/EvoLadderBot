@@ -7,7 +7,7 @@ from src.backend.services.app_context import (
     command_guard_service as guard_service,
     leaderboard_service
 )
-from src.bot.utils.discord_utils import send_ephemeral_response
+from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote, get_flag_emote
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
 from src.backend.services.performance_service import FlowTracker
@@ -99,27 +99,19 @@ class CountryFilterPage1Select(discord.ui.Select):
         # Add first 25 common countries as options with default selection
         for country in page_countries:
             is_default = country['code'] in self.selected_values
+            flag_emote = get_flag_emote(country['code'])
             options.append(
                 discord.SelectOption(
                     label=country['name'],
                     value=country['code'],
                     description="",
+                    emoji=flag_emote,
                     default=is_default
                 )
             )
         
-        # Set placeholder based on current selections
+        # Static placeholder - selected values will show in the dropdown
         placeholder = "Filter by country (Page 1)..."
-        if self.selected_values:
-            country_names = []
-            for country_code in self.selected_values:
-                country_name = next(
-                    (c['name'] for c in countries if c['code'] == country_code),
-                    country_code
-                )
-                country_names.append(country_name)
-            if country_names:
-                placeholder = f"Selected: {', '.join(country_names)}"
         
         super().__init__(
             placeholder=placeholder,
@@ -152,27 +144,19 @@ class CountryFilterPage2Select(discord.ui.Select):
         # Add countries 26-50 as options with default selection
         for country in page_countries:
             is_default = country['code'] in self.selected_values
+            flag_emote = get_flag_emote(country['code'])
             options.append(
                 discord.SelectOption(
                     label=country['name'],
                     value=country['code'],
                     description="",
+                    emoji=flag_emote,
                     default=is_default
                 )
             )
         
-        # Set placeholder based on current selections
+        # Static placeholder - selected values will show in the dropdown
         placeholder = "Filter by country (Page 2)..."
-        if self.selected_values:
-            country_names = []
-            for country_code in self.selected_values:
-                country_name = next(
-                    (c['name'] for c in countries if c['code'] == country_code),
-                    country_code
-                )
-                country_names.append(country_name)
-            if country_names:
-                placeholder = f"Selected: {', '.join(country_names)}"
         
         super().__init__(
             placeholder=placeholder,
@@ -204,24 +188,19 @@ class RaceFilterSelect(discord.ui.Select):
         
         for label, value, description in all_options:
             is_default = value in self.selected_values
+            race_emote = get_race_emote(value)
             options.append(
                 discord.SelectOption(
                     label=label,
                     value=value,
                     description=description,
+                    emoji=race_emote,
                     default=is_default
                 )
             )
         
-        # Set placeholder based on current selections
+        # Static placeholder - selected values will show in the dropdown
         placeholder = "Filter by race (multiselect)..."
-        if self.selected_values:
-            race_names = []
-            for race_code in self.selected_values:
-                race_name = leaderboard_service.race_service.get_race_name(race_code)
-                race_names.append(race_name)
-            if race_names:
-                placeholder = f"Selected: {', '.join(race_names)}"
         
         super().__init__(
             placeholder=placeholder,

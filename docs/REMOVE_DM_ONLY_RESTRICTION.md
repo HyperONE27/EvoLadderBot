@@ -1,44 +1,54 @@
-# Remove DM-Only Restriction
+# DM-Only Command Enforcement
 
 ## Summary
 
-Removed the DM-only restriction from all bot commands. Commands can now work in both DMs and guilds/servers. This enables ephemeral messages to work properly in guilds.
+Implemented DM-only enforcement for `/prune` and `/queue` commands. These commands must be used in DMs for security and privacy reasons. All other commands can work in both DMs and guilds, with ephemeral messages in guilds.
 
 ## Changes Made
 
-### 1. **bot_setup.py**
+### 1. **queue_command.py**
 ```python
-# Before
-DM_ONLY_COMMANDS = {
-    "activate",
-    "setup", 
-    "setcountry",
-    "termsofservice",
-    "profile",
-    "leaderboard",
-    "prune",
-    "queue"
-}
-
-# After
-DM_ONLY_COMMANDS = set()  # Empty = no restrictions
+# Added DM-only check in guard checks
+try:
+    flow.checkpoint("guard_checks_start")
+    player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+    guard_service.require_dm(interaction)  # DM-only check
+    guard_service.require_queue_access(player)
+    flow.checkpoint("guard_checks_complete")
+except CommandGuardError as exc:
+    flow.complete("guard_check_failed")
+    error_embed = create_command_guard_error_embed(exc)
+    await send_ephemeral_response(interaction, embed=error_embed)
+    return
 ```
 
 ### 2. **prune_command.py**
 ```python
-# Before
-if not isinstance(channel, discord.DMChannel):
-    error_embed = discord.Embed(
-        title="❌ Error",
-        description="This command can only be used in DMs.",
-        color=discord.Color.red()
+# Added DM-only check in guard checks
+try:
+    flow.checkpoint("guard_checks_start")
+    player = command_guard_service.ensure_player_record(
+        interaction.user.id, 
+        interaction.user.name
     )
-    await interaction.followup.send(embed=error_embed, ephemeral=True)
-    flow.complete("not_dm")
+    command_guard_service.require_dm(interaction)  # DM-only check
+    command_guard_service.require_tos_accepted(player)
+    flow.checkpoint("guard_checks_complete")
+except CommandGuardError as exc:
+    flow.complete("guard_check_failed")
+    error_embed = create_command_guard_error_embed(exc)
+    await send_ephemeral_response(interaction, embed=error_embed)
     return
+```
 
-# After
-# Removed DM-only check - works in any channel
+### 3. **bot_setup.py**
+```python
+# DM_ONLY_COMMANDS list is for documentation only
+# Actual enforcement happens in individual command handlers
+DM_ONLY_COMMANDS = {
+    "prune",  # Personal message cleanup
+    "queue"   # Matchmaking (security + ephemeral messages work in DMs)
+}
 ```
 
 ## Benefits

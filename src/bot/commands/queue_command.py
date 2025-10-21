@@ -13,6 +13,7 @@ from src.backend.db.db_reader_writer import get_timestamp
 from src.bot.utils.discord_utils import send_ephemeral_response, get_current_unix_timestamp, format_discord_timestamp, get_flag_emote, get_race_emote
 from src.backend.services.command_guard_service import CommandGuardError
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.utils.command_decorators import dm_only
 from src.backend.services.replay_service import ReplayRaw, parse_replay_data_blocking
 from src.backend.services.match_completion_service import match_completion_service
 from src.backend.services.app_context import (
@@ -130,6 +131,7 @@ def register_queue_command(tree: app_commands.CommandTree):
 
 
 # UI Elements
+@dm_only
 async def queue_command(interaction: discord.Interaction):
     """Handle the /queue slash command"""
     flow = FlowTracker("queue_command", user_id=interaction.user.id)

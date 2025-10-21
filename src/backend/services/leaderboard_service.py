@@ -163,7 +163,10 @@ class LeaderboardService:
         # Get cached DataFrame (already has ranks computed)
         df = self._get_cached_leaderboard_dataframe()
         
-        # Apply filters (multi-threaded, much faster than list comprehensions)
+        # Apply filters (optimized for large filter lists)
+        # Build filter conditions and apply them in one operation for better performance
+        filter_conditions = []
+        
         if country_filter:
             # If ZZ ("Other") is selected, expand it to all non-common countries
             # Cache this expansion to avoid recomputing
@@ -175,10 +178,28 @@ class LeaderboardService:
                     _non_common_countries_cache = self.country_service.get_all_non_common_country_codes()
                 filter_countries.extend(_non_common_countries_cache)
             
-            df = df.filter(pl.col("country").is_in(filter_countries))
+            # Optimize: Use is_in with sorted list for better performance
+            if len(filter_countries) > 10:
+                # Sort the list to help Polars optimize the lookup
+                filter_countries = sorted(filter_countries)
+            
+            filter_conditions.append(pl.col("country").is_in(filter_countries))
         
         if race_filter:
-            df = df.filter(pl.col("race").is_in(race_filter))
+            # Optimize: Use is_in with sorted list for better performance
+            if len(race_filter) > 5:
+                # Sort the list to help Polars optimize the lookup
+                race_filter = sorted(race_filter)
+            
+            filter_conditions.append(pl.col("race").is_in(race_filter))
+        
+        # Apply all filters at once (more efficient than multiple filter() calls)
+        if filter_conditions:
+            # Combine all conditions with AND
+            combined_condition = filter_conditions[0]
+            for condition in filter_conditions[1:]:
+                combined_condition = combined_condition & condition
+            df = df.filter(combined_condition)
         
         # Apply best race only filtering if enabled
         if best_race_only:

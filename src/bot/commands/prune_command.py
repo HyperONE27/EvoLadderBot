@@ -18,8 +18,10 @@ from src.backend.services.command_guard_service import CommandGuardError
 from src.backend.services.app_context import command_guard_service
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
-from src.bot.config import GLOBAL_TIMEOUT
+from src.bot.config import GLOBAL_TIMEOUT, RECENT_MESSAGE_PROTECTION_MINUTES, QUEUE_MESSAGE_PROTECTION_DAYS, PRUNE_DELETE_DELAY_SECONDS
 from src.backend.services.performance_service import FlowTracker
+from src.bot.utils.command_decorators import dm_only
+from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 
 
 # Track active queue message IDs to avoid deleting them
@@ -46,6 +48,145 @@ def unregister_active_queue_message(message_id: int) -> None:
     _active_queue_message_ids.discard(message_id)
 
 
+def is_prune_related_message(message: discord.Message) -> bool:
+    """
+    Detect if a message is related to the prune command and should be protected.
+    We never want to delete prune messages, regardless of age.
+    
+    Args:
+        message: Discord message to check
+        
+    Returns:
+        True if the message appears to be prune-related and should be protected
+    """
+    # Check if message has embeds
+    if not message.embeds:
+        return False
+    
+    embed = message.embeds[0]  # Check the first embed
+    
+    # Check for prune-related embed titles
+    prune_titles = [
+        "🗑️ Confirm Message Deletion",
+        "🗑️ Pruning in Progress...",
+        "✅ Messages Pruned",
+        "❌ Failed to Prune",
+        "✅ No Messages to Prune",
+        "🗑️ Confirm Message Deletion",  # Duplicate to be extra sure
+    ]
+    
+    if embed.title:
+        for title_pattern in prune_titles:
+            if title_pattern in embed.title:
+                return True
+    
+    # Check for prune-related descriptions
+    prune_descriptions = [
+        "message(s) will be deleted",
+        "Deleting",
+        "old message(s)",
+        "Successfully deleted",
+        "Could not delete",
+        "No bot messages found",
+        "Queue-related messages",
+        "automatically protected",
+        "Delete old bot messages",
+        "to reduce lag",
+    ]
+    
+    if embed.description:
+        for desc_pattern in prune_descriptions:
+            if desc_pattern in embed.description:
+                return True
+    
+    # Check for prune-related field names
+    if embed.fields:
+        for field in embed.fields:
+            if field.name and any(keyword in field.name.lower() for keyword in ["oldest message", "newest message", "estimated time"]):
+                return True
+            if field.value and any(keyword in field.value.lower() for keyword in ["jump to message", "created:", "seconds"]):
+                return True
+    
+    return False
+
+
+def is_queue_related_message(message: discord.Message) -> bool:
+    """
+    Detect if a message contains queue-related content that should be protected from pruning.
+    Only protects queue messages that are less than a week old.
+    
+    Args:
+        message: Discord message to check
+        
+    Returns:
+        True if the message appears to be queue-related and should be protected
+    """
+    # Check if message has embeds
+    if not message.embeds:
+        return False
+    
+    # Only protect queue messages that are less than the configured protection period
+    protection_cutoff = datetime.now(timezone.utc) - timedelta(days=QUEUE_MESSAGE_PROTECTION_DAYS)
+    if message.created_at < protection_cutoff:
+        return False
+    
+    embed = message.embeds[0]  # Check the first embed
+    
+    # Check for queue-related embed titles
+    queue_titles = [
+        "🔍 Searching...",
+        "Match #",  # Match found views start with "Match #"
+    ]
+    
+    if embed.title:
+        for title_pattern in queue_titles:
+            if title_pattern in embed.title:
+                return True
+    
+    # Check for queue-related field names
+    queue_field_names = [
+        "Player Information:",
+        "Match Information:",
+        "Match Result:",
+        "Replay Status:"
+    ]
+    
+    if embed.fields:
+        for field in embed.fields:
+            if field.name in queue_field_names:
+                return True
+    
+    # Check for queue-related button labels in components
+    if message.components:
+        for component in message.components:
+            if hasattr(component, 'children'):
+                for child in component.children:
+                    if hasattr(child, 'label') and child.label:
+                        queue_button_labels = [
+                            "Cancel Queue",  # From QueueSearchingView
+                            "Abort Match",  # From MatchFoundView
+                            "Report match result...",
+                            "Select result first...",
+                        ]
+                        if child.label in queue_button_labels:
+                            return True
+    
+    # Check for queue-related descriptions
+    queue_descriptions = [
+        "The queue is searching for a game",
+        "Search interval:",
+        "Next match wave:",
+        "Current players queueing:",
+    ]
+    
+    if embed.description:
+        for desc_pattern in queue_descriptions:
+            if desc_pattern in embed.description:
+                return True
+    
+    return False
+
+
 def register_prune_command(tree: app_commands.CommandTree):
     """Register the prune command"""
     @tree.command(
@@ -58,6 +199,7 @@ def register_prune_command(tree: app_commands.CommandTree):
     return prune
 
 
+@dm_only
 async def prune_command(interaction: discord.Interaction):
     """
     Handle the /prune slash command.
@@ -85,19 +227,14 @@ async def prune_command(interaction: discord.Interaction):
     
     # Defer the response since this might take a while
     flow.checkpoint("defer_response_start")
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=False)  # Non-ephemeral in DMs
     flow.checkpoint("defer_response_complete")
     
-    # Calculate cutoff time
-    cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=GLOBAL_TIMEOUT)
-    
-    # Get the channel (can be DM or guild)
+    # Get the channel (DM-only enforced by centralized system)
     channel = interaction.channel
     
-    # Debug: Log cutoff time and current time
+    # Debug: Log current time and protected messages
     print(f"[Prune Debug] Current time: {datetime.now(timezone.utc)}")
-    print(f"[Prune Debug] Cutoff time: {cutoff_time}")
-    print(f"[Prune Debug] GLOBAL_TIMEOUT: {GLOBAL_TIMEOUT} seconds")
     print(f"[Prune Debug] Bot user ID: {interaction.client.user.id}")
     print(f"[Prune Debug] Protected queue messages: {len(_active_queue_message_ids)}")
     
@@ -123,16 +260,32 @@ async def prune_command(interaction: discord.Interaction):
             
             bot_messages += 1
             
-            # Skip if message is newer than cutoff
-            if message.created_at > cutoff_time:
-                too_new += 1
-                print(f"[Prune Debug] Message too new: {message.created_at} > {cutoff_time}")
-                continue
-            
-            # Skip if message is associated with an active queue view
+            # Skip if message is associated with an active queue view (legacy protection)
             if message.id in _active_queue_message_ids:
                 protected += 1
-                print(f"[Prune Debug] Message protected (queue): {message.id}")
+                print(f"[Prune Debug] Message protected (legacy queue): {message.id}")
+                continue
+            
+            # Skip if message contains prune-related content (protect prune command messages)
+            if is_prune_related_message(message):
+                protected += 1
+                print(f"[Prune Debug] Message protected (prune command): {message.id}")
+                print(f"[Prune Debug] - Title: {message.embeds[0].title if message.embeds else 'No embeds'}")
+                print(f"[Prune Debug] - Description: {message.embeds[0].description[:100] if message.embeds and message.embeds[0].description else 'No description'}")
+                continue
+            
+            # Skip very recent messages (within configured protection period) as they might be prune-related
+            recent_cutoff = datetime.now(timezone.utc) - timedelta(minutes=RECENT_MESSAGE_PROTECTION_MINUTES)
+            if message.created_at > recent_cutoff:
+                protected += 1
+                print(f"[Prune Debug] Message protected (recent message): {message.id} (created: {message.created_at})")
+                continue
+            
+            # Skip if message contains queue-related content (programmatic detection)
+            # Only protects queue messages less than the configured protection period
+            if is_queue_related_message(message):
+                protected += 1
+                print(f"[Prune Debug] Message protected (queue content < {QUEUE_MESSAGE_PROTECTION_DAYS} days): {message.id}")
                 continue
             
             messages_to_delete.append(message)
@@ -142,7 +295,6 @@ async def prune_command(interaction: discord.Interaction):
         print(f"[Prune Debug] Summary:")
         print(f"  - Total messages fetched: {total_messages}")
         print(f"  - Bot messages: {bot_messages}")
-        print(f"  - Too new (< {GLOBAL_TIMEOUT}s): {too_new}")
         print(f"  - Protected (queue): {protected}")
         print(f"  - Queued for deletion: {len(messages_to_delete)}")
     
@@ -152,7 +304,7 @@ async def prune_command(interaction: discord.Interaction):
             description="I don't have permission to read message history in this channel.",
             color=discord.Color.red()
         )
-        await interaction.followup.send(embed=error_embed, ephemeral=True)
+        await interaction.followup.send(embed=error_embed, ephemeral=False)
         flow.complete("permission_error")
         return
     except discord.HTTPException as e:
@@ -161,7 +313,7 @@ async def prune_command(interaction: discord.Interaction):
             description=f"Failed to fetch messages: {str(e)}",
             color=discord.Color.red()
         )
-        await interaction.followup.send(embed=error_embed, ephemeral=True)
+        await interaction.followup.send(embed=error_embed, ephemeral=False)
         flow.complete("fetch_error")
         return
     
@@ -171,25 +323,57 @@ async def prune_command(interaction: discord.Interaction):
     if not messages_to_delete:
         info_embed = discord.Embed(
             title="✅ No Messages to Prune",
-            description=f"No bot messages older than {GLOBAL_TIMEOUT} seconds found.",
+            description="No bot messages found that can be safely deleted.\n\nQueue-related messages less than a week old are automatically protected.",
             color=discord.Color.blue()
         )
-        await interaction.followup.send(embed=info_embed, ephemeral=True)
+        await interaction.followup.send(embed=info_embed, ephemeral=False)
         flow.complete("no_messages")
         return
     
-    # Delete messages with rate limit handling
-    flow.checkpoint("delete_messages_start")
-    deleted_count = 0
-    failed_count = 0
+    # Show confirmation prompt with message details
+    oldest_message = messages_to_delete[-1]  # Last in list is oldest
+    newest_message = messages_to_delete[0]   # First in list is newest
     
-    # Add delay between deletions to avoid rate limiting
-    # Discord rate limit: ~5 deletions per second for DM messages
-    DELAY_BETWEEN_DELETES = 0.5  # 500ms delay = ~2 deletions/sec (safe margin)
+    # Create confirmation embed
+    confirm_embed = discord.Embed(
+        title="🗑️ Confirm Message Deletion",
+        description=f"**{len(messages_to_delete)} message(s)** will be deleted.\n\n"
+                   f"Queue-related messages less than a week old are automatically protected from deletion.",
+        color=discord.Color.orange()
+    )
     
-    # Notify user that pruning is in progress (especially for many messages)
-    if len(messages_to_delete) > 10:
-        estimated_time = int(len(messages_to_delete) * DELAY_BETWEEN_DELETES)
+    # Add message links
+    confirm_embed.add_field(
+        name="📅 Oldest Message",
+        value=f"[Jump to message]({oldest_message.jump_url})\n"
+              f"Created: <t:{int(oldest_message.created_at.timestamp())}:R>",
+        inline=True
+    )
+    confirm_embed.add_field(
+        name="📅 Newest Message",
+        value=f"[Jump to message]({newest_message.jump_url})\n"
+              f"Created: <t:{int(newest_message.created_at.timestamp())}:R>",
+        inline=True
+    )
+    
+    # Estimated deletion time
+    estimated_time = int(len(messages_to_delete) * PRUNE_DELETE_DELAY_SECONDS)
+    
+    confirm_embed.add_field(
+        name="⏱️ Estimated Time",
+        value=f"~{estimated_time} seconds",
+        inline=False
+    )
+    
+    # Create confirmation view with buttons
+    confirm_view = discord.ui.View(timeout=GLOBAL_TIMEOUT)
+    
+    # Define the confirm callback
+    async def confirm_deletion(confirm_interaction: discord.Interaction):
+        # Defer to prevent timeout
+        await confirm_interaction.response.defer()
+        
+        # Show progress embed immediately
         progress_embed = discord.Embed(
             title="🗑️ Pruning in Progress...",
             description=f"Deleting {len(messages_to_delete)} old message(s).\n\n"
@@ -197,63 +381,91 @@ async def prune_command(interaction: discord.Interaction):
                        f"to avoid Discord rate limits.*",
             color=discord.Color.blue()
         )
-        await interaction.followup.send(embed=progress_embed, ephemeral=True)
-    
-    for i, message in enumerate(messages_to_delete):
-        try:
-            await message.delete()
-            deleted_count += 1
-            
-            # Add delay between deletions (except after the last one)
-            if i < len(messages_to_delete) - 1:
-                await asyncio.sleep(DELAY_BETWEEN_DELETES)
+        await confirm_interaction.edit_original_response(embed=progress_embed, view=None)
+        
+        # Delete messages with rate limit handling
+        flow.checkpoint("delete_messages_start")
+        deleted_count = 0
+        failed_count = 0
+        
+        for i, message in enumerate(messages_to_delete):
+            try:
+                await message.delete()
+                deleted_count += 1
                 
-        except discord.NotFound:
-            # Message already deleted
-            failed_count += 1
-        except discord.Forbidden:
-            # No permission to delete this message
-            failed_count += 1
-        except discord.HTTPException as e:
-            # Check if it's a rate limit error (shouldn't happen with our delays, but just in case)
-            if e.status == 429:
-                # Rate limited - wait longer
-                retry_after = e.retry_after if hasattr(e, 'retry_after') else 2.0
-                print(f"[Prune] Rate limited, waiting {retry_after}s before retrying...")
-                await asyncio.sleep(retry_after)
-                # Retry this message
-                try:
-                    await message.delete()
-                    deleted_count += 1
-                except Exception:
-                    failed_count += 1
-            else:
-                # Other HTTP error
+                # Add delay between deletions (except after the last one)
+                if i < len(messages_to_delete) - 1:
+                    await asyncio.sleep(PRUNE_DELETE_DELAY_SECONDS)
+                    
+            except discord.NotFound:
+                # Message already deleted
                 failed_count += 1
-    
-    flow.checkpoint("delete_messages_complete")
-    
-    # Send success message
-    if deleted_count > 0:
-        success_embed = discord.Embed(
-            title="✅ Messages Pruned",
-            description=f"Successfully deleted {deleted_count} old bot message(s).",
-            color=discord.Color.green()
-        )
-        if failed_count > 0:
-            success_embed.add_field(
-                name="⚠️ Failed to Delete",
-                value=f"{failed_count} message(s) could not be deleted.",
-                inline=False
+            except discord.Forbidden:
+                # No permission to delete this message
+                failed_count += 1
+            except discord.HTTPException as e:
+                # Check if it's a rate limit error (shouldn't happen with our delays, but just in case)
+                if e.status == 429:
+                    # Rate limited - wait longer
+                    retry_after = e.retry_after if hasattr(e, 'retry_after') else 2.0
+                    print(f"[Prune] Rate limited, waiting {retry_after}s before retrying...")
+                    await asyncio.sleep(retry_after)
+                    # Retry this message
+                    try:
+                        await message.delete()
+                        deleted_count += 1
+                    except Exception:
+                        failed_count += 1
+                else:
+                    # Other HTTP error
+                    failed_count += 1
+        
+        flow.checkpoint("delete_messages_complete")
+        
+        # Send success message
+        if deleted_count > 0:
+            success_embed = discord.Embed(
+                title="✅ Messages Pruned",
+                description=f"Successfully deleted {deleted_count} old bot message(s).",
+                color=discord.Color.green()
             )
-        await interaction.followup.send(embed=success_embed, ephemeral=True)
-        flow.complete("success")
-    else:
-        error_embed = discord.Embed(
-            title="❌ Failed to Prune",
-            description=f"Could not delete any messages. {failed_count} deletion(s) failed.",
-            color=discord.Color.red()
-        )
-        await interaction.followup.send(embed=error_embed, ephemeral=True)
-        flow.complete("all_failed")
+            if failed_count > 0:
+                success_embed.add_field(
+                    name="⚠️ Failed to Delete",
+                    value=f"{failed_count} message(s) could not be deleted.",
+                    inline=False
+                )
+            await confirm_interaction.edit_original_response(embed=success_embed, view=None)
+            flow.complete("success")
+        else:
+            error_embed = discord.Embed(
+                title="❌ Failed to Prune",
+                description=f"Could not delete any messages. {failed_count} deletion(s) failed.",
+                color=discord.Color.red()
+            )
+            await confirm_interaction.edit_original_response(embed=error_embed, view=None)
+            flow.complete("all_failed")
+    
+    # Create a dummy view for cancel button (required by ConfirmRestartCancelButtons)
+    class PruneCancelView:
+        """Dummy view to satisfy ConfirmRestartCancelButtons requirements"""
+        pass
+    
+    cancel_target = PruneCancelView()
+    
+    # Add confirm and cancel buttons
+    buttons = ConfirmRestartCancelButtons.create_buttons(
+        confirm_callback=confirm_deletion,
+        reset_target=cancel_target,  # Dummy target for cancel
+        include_confirm=True,
+        include_restart=False,
+        include_cancel=True
+    )
+    
+    for button in buttons:
+        confirm_view.add_item(button)
+    
+    # Send confirmation prompt
+    await interaction.followup.send(embed=confirm_embed, view=confirm_view, ephemeral=False)
+    flow.complete("awaiting_confirmation")
 
