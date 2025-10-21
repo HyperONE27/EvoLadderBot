@@ -1734,15 +1734,33 @@ async def on_message(message: discord.Message, bot=None):
                         print("[WARN] Process pool health check failed, falling back to synchronous parsing")
                         replay_info = parse_replay_data_blocking(replay_bytes)
                     else:
-                        replay_info = await loop.run_in_executor(
-                            bot.process_pool, parse_replay_data_blocking, replay_bytes
-                        )
+                        # Track work start
+                        if hasattr(bot, '_track_work_start'):
+                            bot._track_work_start()
+                        
+                        try:
+                            replay_info = await loop.run_in_executor(
+                                bot.process_pool, parse_replay_data_blocking, replay_bytes
+                            )
+                        finally:
+                            # Track work end
+                            if hasattr(bot, '_track_work_end'):
+                                bot._track_work_end()
                 except Exception as e:
                     print(f"[WARN] Process pool health check failed with error: {e}")
                     # Continue with process pool usage - let the executor handle the error
-                    replay_info = await loop.run_in_executor(
-                        bot.process_pool, parse_replay_data_blocking, replay_bytes
-                    )
+                    # Track work start
+                    if hasattr(bot, '_track_work_start'):
+                        bot._track_work_start()
+                    
+                    try:
+                        replay_info = await loop.run_in_executor(
+                            bot.process_pool, parse_replay_data_blocking, replay_bytes
+                        )
+                    finally:
+                        # Track work end
+                        if hasattr(bot, '_track_work_end'):
+                            bot._track_work_end()
             else:
                 # Fallback to synchronous parsing if process pool is not available
                 # This shouldn't happen in production, but provides a safety net

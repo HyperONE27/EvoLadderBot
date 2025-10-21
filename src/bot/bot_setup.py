@@ -10,6 +10,7 @@ This module handles:
 import asyncio
 import logging
 import sys
+import time
 from concurrent.futures import ProcessPoolExecutor
 
 import discord
@@ -60,6 +61,8 @@ class EvoLadderBot(commands.Bot):
         # self._leaderboard_cache_task = None  # DISABLED: No longer using periodic refresh
         self._process_pool_monitor_task = None
         self._process_pool_lock = asyncio.Lock()
+        self._active_work_count = 0  # Track number of active tasks
+        self._last_work_time = 0  # Track when work was last submitted
 
     async def on_interaction(self, interaction: discord.Interaction):
         """
@@ -116,6 +119,27 @@ class EvoLadderBot(commands.Bot):
             # Log error but don't fail the command
             logger.error(f"Failed to log command {command} for user {discord_uid}: {e}")
     
+    def _track_work_start(self):
+        """Track that work is starting on the process pool."""
+        self._active_work_count += 1
+        self._last_work_time = time.time()
+        print(f"[Process Pool] Work started (active: {self._active_work_count})")
+    
+    def _track_work_end(self):
+        """Track that work has completed on the process pool."""
+        if self._active_work_count > 0:
+            self._active_work_count -= 1
+        print(f"[Process Pool] Work completed (active: {self._active_work_count})")
+    
+    def _is_worker_busy(self) -> bool:
+        """Check if workers are currently busy with legitimate work."""
+        return self._active_work_count > 0
+    
+    def _get_work_age(self) -> float:
+        """Get the age of the oldest active work in seconds."""
+        if self._last_work_time == 0:
+            return 0
+        return time.time() - self._last_work_time
     
     async def _restart_process_pool(self) -> bool:
         """
@@ -146,10 +170,11 @@ class EvoLadderBot(commands.Bot):
     
     async def _ensure_process_pool_healthy(self) -> bool:
         """
-        Event-driven process pool health check.
+        Intelligent event-driven process pool health check.
         
         Only checks the process pool when it's actually needed for work.
-        This replaces the idle spinning monitor with an on-demand approach.
+        Uses intelligent timeouts based on worker status to avoid false positives
+        when workers are legitimately busy with long-running tasks.
         
         Returns:
             True if pool is healthy or was successfully restarted, False otherwise
@@ -157,6 +182,17 @@ class EvoLadderBot(commands.Bot):
         if not self.process_pool:
             logger.error("[Process Pool] Process pool is None, attempting restart...")
             return await self._restart_process_pool()
+        
+        # Determine appropriate timeout based on worker status
+        if self._is_worker_busy():
+            work_age = self._get_work_age()
+            # If workers are busy, give them more time based on how long they've been working
+            # Cap at 30 seconds to avoid infinite waits
+            timeout = min(5.0 + (work_age * 0.1), 30.0)
+            print(f"[Process Pool] Workers busy (age: {work_age:.1f}s), using extended timeout: {timeout:.1f}s")
+        else:
+            timeout = 5.0  # Standard timeout for idle workers
+            print(f"[Process Pool] Workers idle, using standard timeout: {timeout:.1f}s")
         
         # Test pool health with a simple task
         try:
@@ -166,8 +202,8 @@ class EvoLadderBot(commands.Bot):
                 self.process_pool,
                 _health_check_worker
             )
-            # Wait up to 5 seconds for response
-            result = await asyncio.wait_for(future, timeout=5.0)
+            # Wait with intelligent timeout
+            result = await asyncio.wait_for(future, timeout=timeout)
             
             # Validate the health check result
             if isinstance(result, dict) and result.get("status") == "healthy":
@@ -177,7 +213,22 @@ class EvoLadderBot(commands.Bot):
                 logger.error(f"[Process Pool] Health check returned invalid result: {result}")
                 return await self._restart_process_pool()
                 
-        except (asyncio.TimeoutError, Exception) as e:
+        except asyncio.TimeoutError:
+            # Timeout occurred - check if workers were legitimately busy
+            if self._is_worker_busy():
+                work_age = self._get_work_age()
+                if work_age < 60:  # If work is less than 1 minute old, might be legitimate
+                    print(f"[Process Pool] Health check timeout but workers busy (age: {work_age:.1f}s) - retrying later")
+                    # Don't restart immediately, let the work complete
+                    return True
+                else:
+                    logger.error(f"[Process Pool] Health check timeout with old work (age: {work_age:.1f}s) - likely crashed")
+                    return await self._restart_process_pool()
+            else:
+                logger.error("[Process Pool] Health check timeout with no active work - likely crashed")
+                return await self._restart_process_pool()
+                
+        except Exception as e:
             logger.error(f"[Process Pool] Health check failed: {e}")
             logger.info("[Process Pool] Attempting to restart process pool...")
             return await self._restart_process_pool()

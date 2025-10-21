@@ -278,13 +278,29 @@ class LeaderboardService:
                 print(f"[WARN] Process pool health check failed with error: {e}")
                 # Continue with process pool usage - let the executor handle the error
             
-            # Offload to worker process
-            # Pass DATABASE_URL so worker can initialize its own connection pool
-            pickled_df = await loop.run_in_executor(
-                process_pool,
-                _refresh_leaderboard_worker,
-                DATABASE_URL
-            )
+            # Track work start (try to get bot instance for tracking)
+            bot = None
+            try:
+                from src.backend.services.process_pool_health import _bot_instance
+                bot = _bot_instance
+            except:
+                pass
+            
+            if bot and hasattr(bot, '_track_work_start'):
+                bot._track_work_start()
+            
+            try:
+                # Offload to worker process
+                # Pass DATABASE_URL so worker can initialize its own connection pool
+                pickled_df = await loop.run_in_executor(
+                    process_pool,
+                    _refresh_leaderboard_worker,
+                    DATABASE_URL
+                )
+            finally:
+                # Track work end
+                if bot and hasattr(bot, '_track_work_end'):
+                    bot._track_work_end()
             
             # Unpickle the DataFrame in the main process
             df = pickle.loads(pickled_df)
