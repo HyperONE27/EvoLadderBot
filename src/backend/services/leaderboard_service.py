@@ -108,7 +108,8 @@ def _refresh_leaderboard_worker(database_url: str) -> bytes:
             "race": race,
             "country": player.get("country", "Unknown"),
             "discord_uid": discord_uid,
-            "rank": rank
+            "rank": rank,
+            "last_played": player.get("last_played", "1970-01-01T00:00:00Z")  # Default to epoch for sorting
         })
     
     # Convert to DataFrame
@@ -199,7 +200,8 @@ class LeaderboardService:
                 "race": race,
                 "country": player.get("country", "Unknown"),
                 "discord_uid": discord_uid,
-                "rank": rank
+                "rank": rank,
+                "last_played": player.get("last_played", "1970-01-01T00:00:00Z")  # Default to epoch for sorting
             })
         
         # Convert to DataFrame ONCE and cache it
@@ -346,8 +348,9 @@ class LeaderboardService:
         # Apply best race only filtering if enabled
         if best_race_only:
             # Group by player_id and keep only the highest MMR entry (optimized groupby)
+            # Use last_played as tie-breaker for players with same MMR
             df = (df
-                .sort("mmr", descending=True)
+                .sort(["mmr", "last_played"], descending=[True, True])
                 .group_by("player_id")
                 .first()
             )
@@ -356,8 +359,9 @@ class LeaderboardService:
         if best_race_only:
             print(f"[Leaderboard Perf] Best race filter: {(perf_best_race - perf_filter)*1000:.2f}ms")
         
-        # Sort by MMR (multi-threaded, very fast)
-        df = df.sort("mmr", descending=True)
+        # Sort by MMR (descending), then by last_played (descending) for tie-breaking
+        # Players with same MMR will be ranked by who played more recently
+        df = df.sort(["mmr", "last_played"], descending=[True, True])
         
         perf_sort = time.time()
         print(f"[Leaderboard Perf] Sort by MMR: {(perf_sort - perf_best_race)*1000:.2f}ms")
