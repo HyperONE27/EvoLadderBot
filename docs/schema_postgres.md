@@ -120,6 +120,7 @@ CREATE INDEX idx_players_username ON players(discord_username);
 -- MMR queries (leaderboards, player stats)
 CREATE INDEX idx_mmrs_1v1_discord_uid ON mmrs_1v1(discord_uid);
 CREATE INDEX idx_mmrs_1v1_mmr ON mmrs_1v1(mmr);
+CREATE INDEX idx_mmrs_mmr_lastplayed_id_desc ON mmrs_1v1 (mmr DESC, last_played DESC, id DESC);
 
 -- Match history (player profiles, recent matches)
 CREATE INDEX idx_matches_1v1_player1 ON matches_1v1(player_1_discord_uid);

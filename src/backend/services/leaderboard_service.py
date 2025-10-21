@@ -18,6 +18,7 @@ Intended usage:
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from functools import lru_cache
 import time
+import polars as pl
 
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.races_service import RacesService
@@ -150,6 +151,7 @@ class LeaderboardService:
         Get leaderboard data with current filters applied.
         
         Uses in-memory caching to reduce database load. Cache expires after 60 seconds.
+        Optimized with multi-threaded filtering and sorting for large datasets.
         
         Args:
             page_size: Number of items per page (default: 20)
@@ -180,32 +182,46 @@ class LeaderboardService:
                 "rank": rank
             })
         
-        # Apply filters
-        filtered_players = self._apply_filters(formatted_players)
+        # Convert to DataFrame for fast filtering and sorting
+        df = pl.DataFrame(formatted_players)
         
-        # Sort by MMR (descending)
-        filtered_players.sort(key=lambda x: x["mmr"], reverse=True)
+        # Apply filters (multi-threaded, much faster than list comprehensions)
+        if self.country_filter:
+            df = df.filter(pl.col("country").is_in(self.country_filter))
+        
+        if self.race_filter:
+            df = df.filter(pl.col("race").is_in(self.race_filter))
+        
+        # Apply best race only filtering if enabled
+        if self.best_race_only:
+            # Group by player_id and keep only the highest MMR entry (optimized groupby)
+            df = (df
+                .sort("mmr", descending=True)
+                .group_by("player_id")
+                .first()
+            )
+        
+        # Sort by MMR (multi-threaded, very fast)
+        df = df.sort("mmr", descending=True)
         
         # Calculate pagination
-        total_players = len(filtered_players)
+        total_players = len(df)
         total_pages = max(1, (total_players + page_size - 1) // page_size)
         
         # Limit to 25 pages to avoid Discord dropdown limits
-        # This means we show max 25 * page_size players (e.g., 25 * 40 = 1000 players)
         max_pages = 25
         if total_pages > max_pages:
             total_pages = max_pages
-            # Truncate players to fit the page limit
             max_players = max_pages * page_size
-            filtered_players = filtered_players[:max_players]
+            df = df.head(max_players)
+            total_players = max_players
         
-        # Get page data
+        # Get page data (zero-copy slicing)
         start_idx = (self.current_page - 1) * page_size
-        end_idx = start_idx + page_size
-        page_players = filtered_players[start_idx:end_idx]
+        page_df = df.slice(start_idx, page_size)
         
-        # Update total_players to reflect any truncation
-        total_players = len(filtered_players)
+        # Convert back to list of dicts for compatibility
+        page_players = page_df.to_dicts()
         
         return {
             "players": page_players,
@@ -213,30 +229,6 @@ class LeaderboardService:
             "current_page": self.current_page,
             "total_players": total_players
         }
-    
-    def _apply_filters(self, players: List[Dict]) -> List[Dict]:
-        """Apply all current filters to the player data."""
-        filtered_players = players.copy()
-        
-        # Filter by country
-        if self.country_filter:
-            filtered_players = [p for p in filtered_players if p["country"] in self.country_filter]
-        
-        # Filter by race
-        if self.race_filter:
-            filtered_players = [p for p in filtered_players if p["race"] in self.race_filter]
-        
-        # Apply best race only filtering if enabled
-        if self.best_race_only:
-            # Group by player_id and keep only the highest MMR entry for each player
-            player_best_races = {}
-            for player in filtered_players:
-                player_id = player["player_id"]
-                if player_id not in player_best_races or player["mmr"] > player_best_races[player_id]["mmr"]:
-                    player_best_races[player_id] = player
-            filtered_players = list(player_best_races.values())
-        
-        return filtered_players
     
     def get_button_states(self, total_pages: int) -> Dict[str, bool]:
         """Get button states based on current page and total pages."""

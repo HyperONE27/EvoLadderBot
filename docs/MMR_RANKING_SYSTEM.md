@@ -49,6 +49,13 @@ The ranking system uses the service locator singleton pattern:
 - All components access the same instance
 - Ensures consistent ranking data across the application
 
+### Performance Optimizations
+The leaderboard service uses optimized filtering and sorting:
+- Multi-threaded operations for large datasets
+- Efficient grouping operations for "Best Race Only" mode
+- Zero-copy slicing for pagination
+- Optimized for 5,000+ player datasets
+
 ### Integration Points
 
 #### 1. RankingService (`src/backend/services/ranking_service.py`)

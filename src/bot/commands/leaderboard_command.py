@@ -321,7 +321,7 @@ class LeaderboardView(discord.ui.View):
         
         # Add leaderboard content using backend service
         players = data.get("players", [])
-        page_size = 40  # Discord-specific page size (4 sections of 10)
+        page_size = 40  # Discord-specific page size (8 sections of 5)
         formatted_players = self.leaderboard_service.get_leaderboard_data_formatted(players, page_size)
         
         if not formatted_players:
@@ -331,8 +331,8 @@ class LeaderboardView(discord.ui.View):
                 inline=False
             )
         else:
-            # Split players into chunks of 10 to avoid Discord's 1024 character limit
-            players_per_field = 10
+            # Split players into chunks of 5 to avoid Discord's 1024 character limit
+            players_per_field = 5
             
             # Calculate the maximum rank number to determine padding width
             max_rank = max(player['rank'] for player in formatted_players) if formatted_players else 0
@@ -360,7 +360,7 @@ class LeaderboardView(discord.ui.View):
                     # Format MMR in parentheses
                     mmr_value = player['mmr']
                     
-                    field_text += f"- `{rank_padded}.` {rank_emote} {race_emote} {flag_emote} `{player_name_padded}` `{mmr_value}`\n"
+                    field_text += f"`{rank_padded}.` {rank_emote} {race_emote} {flag_emote} `{player_name_padded}` `{mmr_value}`\n"
                 
                 # Create field name based on position and current page
                 current_page = self.leaderboard_service.current_page
@@ -370,13 +370,30 @@ class LeaderboardView(discord.ui.View):
                 
                 chunks.append((field_name, field_text))
             
-            # Add fields in 2x2 grid layout using line breaker method
-            for i, (field_name, field_text) in enumerate(chunks):
-                # Add the leaderboard field
-                embed.add_field(name=field_name, value=field_text, inline=True)
+            # Add fields in 2x4 grid layout
+            # Left column gets titles (1-10, 11-20, etc), right column gets invisible names
+            for i in range(0, len(chunks), 2):
+                left_field_name, left_field_text = chunks[i]
                 
-                # After the 2nd field, add a minimal separator to force a new row
-                if i == 1:  # After the 2nd field (0-indexed)
+                # Calculate pair index (0, 1, 2, 3...)
+                pair_index = i // 2
+                current_page = self.leaderboard_service.current_page
+                
+                # Each pair represents 10 players (2 chunks * 5 players)
+                pair_start = (current_page - 1) * page_size + pair_index * 10 + 1
+                pair_end = pair_start + 9
+                combined_field_name = f"Leaderboard ({pair_start}-{pair_end})"
+                
+                # Add left field with combined title
+                embed.add_field(name=combined_field_name, value=left_field_text, inline=True)
+                
+                # Add right field with invisible name (zero-width space)
+                if i + 1 < len(chunks):
+                    right_field_name, right_field_text = chunks[i + 1]
+                    embed.add_field(name="\u200b", value=right_field_text, inline=True)
+                
+                # Add row separator after each pair (except the last)
+                if i + 2 < len(chunks):
                     embed.add_field(
                         name=" ",  # Single space (minimal)
                         value=" ",  # Single space (minimal)
