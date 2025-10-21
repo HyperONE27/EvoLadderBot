@@ -38,6 +38,8 @@ class EvoLadderBot(commands.Bot):
         super().__init__(*args, **kwargs)
         self.process_pool: ProcessPoolExecutor = None
         self._leaderboard_cache_task = None
+        self._process_pool_monitor_task = None
+        self._process_pool_lock = asyncio.Lock()
 
     async def on_interaction(self, interaction: discord.Interaction):
         """
@@ -94,6 +96,82 @@ class EvoLadderBot(commands.Bot):
             # Log error but don't fail the command
             logger.error(f"Failed to log command {command} for user {discord_uid}: {e}")
     
+    async def _check_and_restart_process_pool(self) -> bool:
+        """
+        Check if the process pool is healthy and restart it if needed.
+        
+        Returns:
+            True if pool is healthy or was successfully restarted, False otherwise
+        """
+        if not self.process_pool:
+            logger.error("[Process Pool] Process pool is None, attempting restart...")
+            return await self._restart_process_pool()
+        
+        # Test pool health with a simple task
+        try:
+            loop = asyncio.get_running_loop()
+            # Submit a simple health check task
+            future = loop.run_in_executor(
+                self.process_pool,
+                lambda: True
+            )
+            # Wait up to 5 seconds for response
+            await asyncio.wait_for(future, timeout=5.0)
+            return True
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.error(f"[Process Pool] Health check failed: {e}")
+            logger.info("[Process Pool] Attempting to restart process pool...")
+            return await self._restart_process_pool()
+    
+    async def _restart_process_pool(self) -> bool:
+        """
+        Restart the process pool.
+        
+        Returns:
+            True if restart was successful, False otherwise
+        """
+        async with self._process_pool_lock:
+            try:
+                # Shutdown old pool
+                if self.process_pool:
+                    print("[Process Pool] Shutting down crashed pool...")
+                    try:
+                        self.process_pool.shutdown(wait=False, cancel_futures=True)
+                    except Exception as e:
+                        logger.warning(f"[Process Pool] Error during shutdown: {e}")
+                
+                # Create new pool
+                print(f"[Process Pool] Creating new pool with {WORKER_PROCESSES} worker(s)...")
+                self.process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
+                print("[Process Pool] ✅ Process pool restarted successfully")
+                return True
+                
+            except Exception as e:
+                logger.error(f"[Process Pool] ❌ Failed to restart process pool: {e}")
+                return False
+    
+    async def _monitor_process_pool_task(self):
+        """
+        Background task that monitors the process pool health.
+        
+        Checks every 30 seconds and restarts the pool if it's unhealthy.
+        """
+        await self.wait_until_ready()
+        print("[Process Pool Monitor] Starting process pool health monitoring...")
+        
+        while not self.is_closed():
+            try:
+                await asyncio.sleep(30)  # Check every 30 seconds
+                
+                is_healthy = await self._check_and_restart_process_pool()
+                if is_healthy:
+                    print("[Process Pool Monitor] ✅ Health check passed")
+                else:
+                    logger.error("[Process Pool Monitor] ❌ Health check failed after restart attempt")
+                    
+            except Exception as e:
+                logger.error(f"[Process Pool Monitor] Error in monitoring task: {e}")
+    
     async def _refresh_leaderboard_cache_task(self):
         """
         Background task that periodically refreshes the leaderboard cache.
@@ -128,6 +206,11 @@ class EvoLadderBot(commands.Bot):
             except Exception as e:
                 logger.error(f"[Background Task] Error refreshing leaderboard cache: {e}")
                 print(f"[Background Task] Error refreshing leaderboard cache: {e}")
+                
+                # If error involves the process pool, trigger a health check
+                if "process" in str(e).lower() or "pool" in str(e).lower():
+                    logger.info("[Background Task] Process pool error detected, triggering health check...")
+                    await self._check_and_restart_process_pool()
             
             # Wait 60 seconds before next refresh (matching cache TTL)
             await asyncio.sleep(60)
@@ -136,6 +219,10 @@ class EvoLadderBot(commands.Bot):
         """Start all background tasks for the bot."""
         print("[Background Tasks] Starting background tasks...")
         
+        # Start process pool monitor task
+        self._process_pool_monitor_task = asyncio.create_task(self._monitor_process_pool_task())
+        print("[Background Tasks] Process pool monitor task started")
+        
         # Start leaderboard cache refresh task
         self._leaderboard_cache_task = asyncio.create_task(self._refresh_leaderboard_cache_task())
         print("[Background Tasks] Leaderboard cache refresh task started")
@@ -143,6 +230,10 @@ class EvoLadderBot(commands.Bot):
     def stop_background_tasks(self):
         """Stop all background tasks for the bot."""
         print("[Background Tasks] Stopping background tasks...")
+        
+        if self._process_pool_monitor_task and not self._process_pool_monitor_task.done():
+            self._process_pool_monitor_task.cancel()
+            print("[Background Tasks] Process pool monitor task stopped")
         
         if self._leaderboard_cache_task and not self._leaderboard_cache_task.done():
             self._leaderboard_cache_task.cancel()

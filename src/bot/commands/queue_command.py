@@ -861,13 +861,24 @@ class MatchFoundView(discord.ui.View):
         p1_race_emote = get_race_emote(p1_race)
         p2_race_emote = get_race_emote(p2_race)
         
+        # Get rank information for both players
+        from src.backend.services.app_context import ranking_service
+        from src.bot.utils.discord_utils import get_rank_emote
+        
+        p1_rank = ranking_service.get_rank(self.match_result.player_1_discord_id, p1_race)
+        p2_rank = ranking_service.get_rank(self.match_result.player_2_discord_id, p2_race)
+        
+        # Get rank emotes
+        p1_rank_emote = get_rank_emote(p1_rank)
+        p2_rank_emote = get_rank_emote(p2_rank)
+        
         # Get MMR values from database
         match_data = db_reader.get_match_1v1(self.match_result.match_id)
         p1_mmr = int(match_data.get('player_1_mmr', 0)) if match_data else 0
         p2_mmr = int(match_data.get('player_2_mmr', 0)) if match_data else 0
         
-        # Create title with new format including races and MMR
-        title = f"Match #{self.match_result.match_id}: {p1_flag} {p1_race_emote} {p1_display_name} ({p1_mmr}) vs {p2_flag} {p2_race_emote} {p2_display_name} ({p2_mmr})"
+        # Create title with new format including races, ranks, and MMR
+        title = f"Match #{self.match_result.match_id}: {p1_flag} {p1_race_emote} {p1_rank_emote} {p1_display_name} ({p1_mmr}) vs {p2_flag} {p2_race_emote} {p2_rank_emote} {p2_display_name} ({p2_mmr})"
         
         # Get race names for display using races service
         p1_race_name = race_service.get_race_name(p1_race)
@@ -876,8 +887,8 @@ class MatchFoundView(discord.ui.View):
         # Get server information with region using regions service
         server_display = regions_service.format_server_with_region(self.match_result.server_choice)
         
-        # Build player information with alt IDs
-        p1_info_line = f"- Player 1: {p1_flag} {p1_race_emote} {p1_display_name} ({p1_race_name})"
+        # Build player information with alt IDs and rank letters
+        p1_info_line = f"- Player 1: {p1_flag} {p1_race_emote} {p1_rank_emote} {p1_display_name} ({p1_race_name})"
         if p1_info:
             alt_ids_1 = []
             if p1_info.get('alt_player_name_1'):
@@ -887,7 +898,7 @@ class MatchFoundView(discord.ui.View):
             if alt_ids_1:
                 p1_info_line += f"\n  - a.k.a. {', '.join(alt_ids_1)}"
         
-        p2_info_line = f"- Player 2: {p2_flag} {p2_race_emote} {p2_display_name} ({p2_race_name})"
+        p2_info_line = f"- Player 2: {p2_flag} {p2_race_emote} {p2_rank_emote} {p2_display_name} ({p2_race_name})"
         if p2_info:
             alt_ids_2 = []
             if p2_info.get('alt_player_name_1'):

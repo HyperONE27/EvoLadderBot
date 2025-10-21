@@ -67,13 +67,13 @@
   - ✅ Implement service locator pattern for global service instances
 - Activation
   - ⏰ De-activate the outdated /activation command
-
-## PRE-BETA
-
 - Admin stuff:
   - ⏰ Add automatic logging/pinging of admins when a match disagreement arises
     - ⏰ Send replay data to admins
   - ⏰ Add an interface to allow admins to view conflicts in matches and resolve with 1 click
+
+## PRE-BETA
+
 - Command timeouts:
   - ⏰ Check that everyone lasts as long as it needs to
 - Gamemodes:
