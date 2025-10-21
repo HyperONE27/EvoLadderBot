@@ -594,24 +594,15 @@ class QueueSearchingView(discord.ui.View):
                     # Store the interaction reference for later updates
                     match_view.last_interaction = self.last_interaction
                 
-				# Update the message if we have a stored interaction
-				if self.last_interaction:
-					try:
-						await self.last_interaction.edit_original_response(
-							embed=match_view.get_embed(),
-							view=match_view
-						)
-						print(f"[Match Notification] Successfully displayed match view for player {self.player.discord_user_id}")
-					except discord.NotFound:
-						print(f"[Match Notification] Interaction expired for player {self.player.discord_user_id}, attempting fallback...")
-						# TODO: Send DM as fallback
-					except discord.HTTPException as e:
-						print(f"[Match Notification] Discord API error for player {self.player.discord_user_id}: {e}")
-						# TODO: Retry logic
-					except Exception as e:
-						print(f"[Match Notification] Unexpected error for player {self.player.discord_user_id}: {e}")
-						import traceback
-						traceback.print_exc()
+                # Update the message if we have a stored interaction
+                if self.last_interaction:
+                    try:
+                        await self.last_interaction.edit_original_response(
+                            embed=match_view.get_embed(),
+                            view=match_view
+                        )
+                    except:
+                        pass  # Interaction might be expired
                 
                 # Clean up
                 del match_results[self.player.discord_user_id]

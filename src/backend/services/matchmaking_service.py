@@ -662,9 +662,8 @@ class Matchmaker:
 				if not self.running:
 					break
 
-			# Update last match time to the EXPECTED tick time for accurate timer display
-			# This keeps the timer aligned with 45-second Unix epochs
-			self.last_match_time = next_tick
+			# Update last match time for display purposes
+			self.last_match_time = time.time()
 
 			# Prune stale activity data periodically
 			current_time = time.time()
