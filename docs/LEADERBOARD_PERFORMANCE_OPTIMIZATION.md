@@ -9,14 +9,21 @@ Database Query → Rank Calculation → DataFrame Creation → Filtering → Pag
    ~50-100ms      ~10-20ms           ~5-10ms         ~1-10ms     ~0.1ms    ~1-2ms
 ```
 
+**Key Insight**: The entire leaderboard is kept in memory as a Polars DataFrame. This is **intentionally faster** than database queries because:
+- **Memory access**: ~1-10ms vs **Database query**: ~50-100ms
+- **Polars slicing**: ~0.1ms vs **Database LIMIT/OFFSET**: ~10-50ms
+- **In-memory filtering**: ~1-10ms vs **Database WHERE clauses**: ~20-100ms
+
 ### Current Bottlenecks (20k player-races)
-1. **Database Query**: 50-100ms (biggest bottleneck)
-2. **Rank Calculation**: 10-20ms 
-3. **DataFrame Creation**: 5-10ms
-4. **Filtering Operations**: 1-10ms
-5. **Pagination**: 0.1ms (excellent)
+1. **Database Query**: 50-100ms (biggest bottleneck, but only during cache refresh)
+2. **Rank Calculation**: 10-20ms (only during cache refresh)
+3. **DataFrame Creation**: 5-10ms (only during cache refresh)
+4. **Filtering Operations**: 1-10ms (real-time, very fast)
+5. **Pagination**: 0.1ms (real-time, excellent)
 
 ## Easy Performance Improvements
+
+**Note**: All optimizations focus on the **cache refresh phase** (every 60s) since real-time operations are already very fast due to in-memory Polars DataFrame.
 
 ### 1. Database Query Optimization ⭐⭐⭐ (High Impact, Easy)
 
@@ -206,14 +213,13 @@ def _get_cached_leaderboard_dataframe(self) -> pl.DataFrame:
 
 ## Expected Performance Improvements
 
-| Optimization | Current (20k) | Optimized (20k) | Current (30k) | Optimized (30k) |
-|--------------|---------------|-----------------|---------------|-----------------|
-| **Database Query** | 50-100ms | 30-60ms | 75-150ms | 45-90ms |
-| **Rank Calculation** | 10-20ms | 6-12ms | 15-30ms | 9-18ms |
-| **DataFrame Creation** | 5-10ms | 3-6ms | 8-15ms | 5-9ms |
-| **Filtering** | 1-10ms | 1-7ms | 2-15ms | 1-10ms |
-| **Total Cache Refresh** | 65-130ms | 40-80ms | 100-200ms | 60-120ms |
-| **Per-Page View** | 7-19ms | 5-15ms | 10-25ms | 7-20ms |
+| Operation | Current (20k) | Optimized (20k) | Current (30k) | Optimized (30k) |
+|-----------|---------------|-----------------|---------------|-----------------|
+| **Cache Refresh (60s)** | 65-130ms | 40-80ms | 100-200ms | 60-120ms |
+| **Per-Page View (real-time)** | 7-19ms | 5-15ms | 10-25ms | 7-20ms |
+| **Memory Usage** | 5-6MB | 3-4MB | 8-12MB | 5-8MB |
+
+**Key Point**: Real-time operations (filtering, pagination) are already extremely fast due to in-memory Polars DataFrame. Optimizations primarily improve the **cache refresh phase**.
 
 ## Monitoring and Metrics
 
@@ -258,6 +264,12 @@ async def _get_cached_leaderboard_dataframe(self):
 With these optimizations, the leaderboard should easily handle **30k+ player-races** with:
 - **Cache refresh**: 60-120ms (every 60s)
 - **Per-page view**: 7-20ms (real-time)
-- **Memory usage**: 30-50MB (reasonable)
+- **Memory usage**: 5-8MB (very reasonable)
 
-The most impactful optimizations are **database index improvements** and **connection pooling**, which can be implemented quickly and provide significant performance gains.
+**Why This Architecture Works Well:**
+- **In-memory Polars DataFrame** is 10-50x faster than database queries for filtering/pagination
+- **Cache refresh** happens only every 60s, so even 100-200ms is acceptable
+- **Real-time operations** are already sub-20ms due to memory access
+- **Memory usage** scales linearly and stays reasonable (5-8MB for 30k records)
+
+The most impactful optimizations are **database index improvements** and **connection pooling**, which can be implemented quickly and provide significant performance gains for the cache refresh phase.
