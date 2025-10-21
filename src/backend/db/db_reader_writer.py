@@ -937,7 +937,7 @@ class DatabaseWriter:
                     WHERE 
                         id = :match_id 
                         AND match_result IS NULL
-                        AND (strftime('%s', 'now') - strftime('%s', played_at)) < :abort_timer_seconds
+                        AND (EXTRACT(EPOCH FROM NOW()) - EXTRACT(EPOCH FROM played_at)) < :abort_timer_seconds
                 """
             else:
                 update_query = """
@@ -949,7 +949,7 @@ class DatabaseWriter:
                     WHERE 
                         id = :match_id 
                         AND match_result IS NULL
-                        AND (strftime('%s', 'now') - strftime('%s', played_at)) < :abort_timer_seconds
+                        AND (EXTRACT(EPOCH FROM NOW()) - EXTRACT(EPOCH FROM played_at)) < :abort_timer_seconds
                 """
             
             rowcount = self.adapter.execute_write(update_query, {"match_id": match_id, "abort_timer_seconds": abort_timer_seconds})

@@ -26,6 +26,15 @@ from src.backend.services.performance_service import FlowTracker, performance_mo
 logger = logging.getLogger(__name__)
 
 
+def _health_check_worker():
+    """
+    Simple health check function for process pool.
+    
+    This function can be pickled and sent to worker processes.
+    """
+    return True
+
+
 class EvoLadderBot(commands.Bot):
     """
     Custom bot class with lifecycle management and global event handlers.
@@ -113,7 +122,7 @@ class EvoLadderBot(commands.Bot):
             # Submit a simple health check task
             future = loop.run_in_executor(
                 self.process_pool,
-                lambda: True
+                _health_check_worker
             )
             # Wait up to 5 seconds for response
             await asyncio.wait_for(future, timeout=5.0)
