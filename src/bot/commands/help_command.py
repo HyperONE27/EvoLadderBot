@@ -87,47 +87,20 @@ async def help_command(interaction: discord.Interaction):
         inline=False
     )
     
-    # How the system works
-    embed.add_field(
-        name="🎯 **How It Works**",
-        value=(
-            "**Matchmaking:**\n"
-            "• You join `/queue` to find opponents\n"
-            "• System matches you with similar skill players\n"
-            "• You get 2 minutes to accept or decline\n"
-            "• Play your match and report the result\n\n"
-            
-            "**Ranking System:**\n"
-            "• Start at 1500 MMR (F-rank)\n"
-            "• Win matches to gain MMR and rank up\n"
-            "• Lose matches to lose MMR\n"
-            "• Ranks: F → E → D → C → B → A → S\n\n"
-            
-            "**Cross-Game Play:**\n"
-            "• Brood War players vs StarCraft II players\n"
-            "• Same ranking system for both games\n"
-            "• Fair matchmaking across both games"
-        ),
-        inline=False
-    )
-    
     # Tips and troubleshooting
     embed.add_field(
         name="💡 **Tips & Troubleshooting**",
         value=(
             "**Getting Started:**\n"
             "• All commands work in DMs for privacy\n"
-            "• You must `/setup` before you can `/queue`\n"
-            "• Check `/leaderboard` to see if others are online\n\n"
+            "• You must `/setup` before you can `/queue`\n\n"
             
             "**Common Issues:**\n"
             "• Can't queue? Make sure you've done `/setup`\n"
-            "• No matches? Try again in 45 seconds\n"
-            "• Channel cluttered? Use `/prune` to clean up\n\n"
+            "• DMs cluttered? Use `/prune` to clean up\n\n"
             
             "**Need More Help?**\n"
             "• Contact server admins for technical issues\n"
-            "• Check if other players are online with `/leaderboard`\n"
             "• All commands work in private DMs"
         ),
         inline=False
