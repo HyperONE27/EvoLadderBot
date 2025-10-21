@@ -21,6 +21,7 @@ from src.backend.db.test_connection_startup import test_database_connection
 from src.backend.services.app_context import command_guard_service, db_writer, leaderboard_service
 from src.backend.services.cache_service import static_cache
 from src.backend.services.command_guard_service import DMOnlyError
+from src.backend.services.memory_monitor import initialize_memory_monitor, log_memory
 from src.backend.services.performance_service import FlowTracker, performance_monitor
 from src.backend.services.process_pool_health import set_bot_instance
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
@@ -60,6 +61,7 @@ class EvoLadderBot(commands.Bot):
         self.process_pool: ProcessPoolExecutor = None
         # self._leaderboard_cache_task = None  # DISABLED: No longer using periodic refresh
         self._process_pool_monitor_task = None
+        self._memory_monitor_task = None
         self._process_pool_lock = asyncio.Lock()
         self._active_work_count = 0  # Track number of active tasks
         self._last_work_time = 0  # Track when work was last submitted
@@ -244,9 +246,48 @@ class EvoLadderBot(commands.Bot):
     #     """
     #     pass
     
+    async def _memory_monitor_task_loop(self):
+        """
+        Background task that periodically reports memory usage.
+        
+        Reports every 5 minutes and checks for potential memory leaks.
+        """
+        await self.wait_until_ready()
+        print("[Memory Monitor] Starting periodic memory monitoring...")
+        
+        from src.backend.services.memory_monitor import get_memory_monitor
+        
+        while not self.is_closed():
+            try:
+                await asyncio.sleep(300)  # Report every 5 minutes
+                
+                monitor = get_memory_monitor()
+                if monitor:
+                    # Log current memory usage
+                    monitor.log_memory_usage("Periodic check")
+                    
+                    # Check for potential leak
+                    if monitor.check_memory_leak(threshold_mb=100.0):
+                        # Generate detailed report
+                        report = monitor.generate_report(include_allocations=True)
+                        print(report)
+                        logger.warning("[Memory Monitor] Memory leak detected - see report above")
+                        
+                        # Force garbage collection
+                        collected, freed = monitor.force_garbage_collection()
+                        logger.info(f"[Memory Monitor] Forced GC: collected {collected} objects, "
+                                   f"freed {freed:.2f} MB")
+                
+            except Exception as e:
+                logger.error(f"[Memory Monitor] Error in monitoring task: {e}")
+    
     def start_background_tasks(self):
         """Start all background tasks for the bot."""
         print("[Background Tasks] Starting background tasks...")
+        
+        # Start memory monitoring task
+        self._memory_monitor_task = asyncio.create_task(self._memory_monitor_task_loop())
+        print("[Background Tasks] Memory monitor task started")
         
         # DISABLED: Process pool monitor task removed for resource optimization
         # Process pool health is now checked on-demand when work is submitted
@@ -260,6 +301,11 @@ class EvoLadderBot(commands.Bot):
     def stop_background_tasks(self):
         """Stop all background tasks for the bot."""
         print("[Background Tasks] Stopping background tasks...")
+        
+        # Stop memory monitor task
+        if self._memory_monitor_task and not self._memory_monitor_task.done():
+            self._memory_monitor_task.cancel()
+            print("[Background Tasks] Memory monitor task stopped")
         
         # DISABLED: Process pool monitor task removed for resource optimization
         # Process pool health is now checked on-demand when work is submitted
@@ -286,18 +332,24 @@ def initialize_bot_resources(bot: EvoLadderBot) -> None:
     """
     print("[Startup] Initializing application resources...")
     
-    # 1. Initialize Database Connection Pool
+    # 1. Initialize Memory Monitor
+    print("[Startup] Initializing memory monitor...")
+    initialize_memory_monitor(enable_tracemalloc=True)
+    log_memory("Startup - baseline")
+    
+    # 2. Initialize Database Connection Pool
     try:
         initialize_pool(
             dsn=DATABASE_URL,
             min_conn=DB_POOL_MIN_CONNECTIONS,
             max_conn=DB_POOL_MAX_CONNECTIONS
         )
+        log_memory("After DB pool init")
     except Exception as e:
         print(f"\n[FATAL] Failed to initialize connection pool: {e}")
         sys.exit(1)
     
-    # 2. Test Database Connection
+    # 3. Test Database Connection
     success, message = test_database_connection()
     if not success:
         print(f"\n[FATAL] Database connection test failed: {message}")
@@ -305,25 +357,27 @@ def initialize_bot_resources(bot: EvoLadderBot) -> None:
         print("[FATAL] Please fix the database configuration and try again.\n")
         sys.exit(1)
         
-    # 3. Initialize Static Data Cache
+    # 4. Initialize Static Data Cache
     print("[Startup] Initializing static data cache...")
     try:
         static_cache.initialize()
+        log_memory("After static cache init")
     except Exception as e:
         print(f"\n[FATAL] Failed to initialize static data cache: {e}")
         print("[FATAL] Bot cannot start without static data.")
         print("[FATAL] Please check that data/misc/*.json files exist.\n")
         sys.exit(1)
         
-    # 4. Create and Attach Process Pool
+    # 5. Create and Attach Process Pool
     bot.process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
     print(f"[INFO] Initialized Process Pool with {WORKER_PROCESSES} worker process(es)")
+    log_memory("After process pool init")
     
-    # 5. Register bot instance for global process pool health checking
+    # 6. Register bot instance for global process pool health checking
     set_bot_instance(bot)
     print("[INFO] Process pool health checker registered")
     
-    # 6. Performance monitoring is active
+    # 7. Performance monitoring is active
     print("[INFO] Performance monitoring ACTIVE - All commands will be tracked")
     print("[INFO] Performance thresholds configured:")
     for cmd, threshold in performance_monitor.alert_thresholds.items():

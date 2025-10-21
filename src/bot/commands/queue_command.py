@@ -1738,6 +1738,10 @@ async def on_message(message: discord.Message, bot=None):
                         if hasattr(bot, '_track_work_start'):
                             bot._track_work_start()
                         
+                        # Log memory before replay parsing
+                        from src.backend.services.memory_monitor import log_memory
+                        log_memory("Before replay parse")
+                        
                         try:
                             replay_info = await loop.run_in_executor(
                                 bot.process_pool, parse_replay_data_blocking, replay_bytes
@@ -1746,6 +1750,9 @@ async def on_message(message: discord.Message, bot=None):
                             # Track work end
                             if hasattr(bot, '_track_work_end'):
                                 bot._track_work_end()
+                            
+                            # Log memory after replay parsing
+                            log_memory("After replay parse")
                 except Exception as e:
                     print(f"[WARN] Process pool health check failed with error: {e}")
                     # Continue with process pool usage - let the executor handle the error
