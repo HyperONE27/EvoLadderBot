@@ -606,8 +606,12 @@ class QueueSearchingView(discord.ui.View):
             # Update the message if we have a stored interaction
             if self.last_interaction:
                 try:
+                    # Offload the embed generation to executor to avoid blocking on ranking refresh
+                    loop = asyncio.get_running_loop()
+                    embed = await loop.run_in_executor(None, match_view.get_embed)
+                    
                     await self.last_interaction.edit_original_response(
-                        embed=match_view.get_embed(),
+                        embed=embed,
                         view=match_view
                     )
                     print(f"[Match Notification] Successfully displayed match view for player {self.player.discord_user_id}")
