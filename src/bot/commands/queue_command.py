@@ -265,6 +265,9 @@ class JoinQueueButton(discord.ui.Button):
         )
     
     async def callback(self, interaction: discord.Interaction):
+        # Defer the interaction immediately to prevent timeouts
+        await interaction.response.defer()
+
         # Validate that at least one race is selected
         if not self.view.get_selected_race_codes():
             # Create error exception with restart button only
@@ -287,9 +290,10 @@ class JoinQueueButton(discord.ui.Button):
             for button in restart_buttons:
                 error_view.add_item(button)
             
-            await interaction.response.edit_message(
+            await interaction.followup.send(
                 embed=error_view.embed,
-                view=error_view
+                view=error_view,
+                ephemeral=True
             )
             return
         
@@ -304,7 +308,7 @@ class JoinQueueButton(discord.ui.Button):
                 description="You cannot queue more than once, or while a match is active."
             )
             error_view = create_error_view_from_exception(error)
-            await interaction.response.edit_message(embed=error_view.embed, view=error_view)
+            await interaction.followup.send(embed=error_view.embed, view=error_view, ephemeral=True)
             return
         
         # Create queue preferences
@@ -337,7 +341,7 @@ class JoinQueueButton(discord.ui.Button):
         
         searching_view.start_status_updates()
         
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             embed=searching_view.build_searching_embed(),
             view=searching_view
         )
