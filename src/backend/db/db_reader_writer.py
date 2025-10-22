@@ -9,7 +9,7 @@ Supports both SQLite and PostgreSQL via database adapters.
 """
 
 from typing import Optional, List, Dict, Any, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 import asyncio
 
@@ -56,12 +56,18 @@ def invalidate_leaderboard_on_mmr_change(func):
 
 def get_timestamp() -> str:
     """
-    Get current timestamp formatted to second precision.
+    Get current UTC timestamp formatted to second precision in ISO 8601 format.
+    
+    This function generates timezone-aware timestamps in UTC, which are compatible
+    with PostgreSQL's TIMESTAMPTZ type. The format includes the timezone offset
+    (e.g., "2025-10-22T12:00:00+00:00").
+    
+    For SQLite compatibility, the same ISO 8601 format is used but stored as TEXT.
     
     Returns:
-        ISO format timestamp string truncated to seconds.
+        ISO format timestamp string with timezone offset (e.g., "YYYY-MM-DDTHH:MM:SS+00:00").
     """
-    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S%z")
 
 
 class Database:
@@ -310,12 +316,15 @@ class DatabaseWriter:
         Returns:
             The ID of the newly created player.
         """
+        current_timestamp = get_timestamp()
         return self.adapter.execute_insert(
             """
             INSERT INTO players (
-                discord_uid, discord_username, player_name, battletag, country, region, activation_code
+                discord_uid, discord_username, player_name, battletag, country, region, activation_code,
+                created_at, updated_at
             )
-            VALUES (:discord_uid, :discord_username, :player_name, :battletag, :country, :region, :activation_code)
+            VALUES (:discord_uid, :discord_username, :player_name, :battletag, :country, :region, :activation_code,
+                    :created_at, :updated_at)
             """,
             {
                 "discord_uid": discord_uid,
@@ -324,7 +333,9 @@ class DatabaseWriter:
                 "battletag": battletag,
                 "country": country,
                 "region": region,
-                "activation_code": activation_code
+                "activation_code": activation_code,
+                "created_at": current_timestamp,
+                "updated_at": current_timestamp
             }
         )
     
@@ -471,14 +482,15 @@ class DatabaseWriter:
         Returns:
             The ID of the newly created log entry.
         """
-        # Log the action
+        # Log the action with explicit timestamp
+        current_timestamp = get_timestamp()
         log_id = self.adapter.execute_insert(
             """
             INSERT INTO player_action_logs (
                 discord_uid, player_name, setting_name,
-                old_value, new_value, changed_by
+                old_value, new_value, changed_by, changed_at
             )
-            VALUES (:discord_uid, :player_name, :setting_name, :old_value, :new_value, :changed_by)
+            VALUES (:discord_uid, :player_name, :setting_name, :old_value, :new_value, :changed_by, :changed_at)
             """,
             {
                 "discord_uid": discord_uid,
@@ -486,7 +498,8 @@ class DatabaseWriter:
                 "setting_name": setting_name,
                 "old_value": old_value,
                 "new_value": new_value,
-                "changed_by": changed_by
+                "changed_by": changed_by,
+                "changed_at": current_timestamp
             }
         )
         
@@ -668,19 +681,20 @@ class DatabaseWriter:
         Returns:
             The ID of the newly created match.
         """
+        current_timestamp = get_timestamp()
         return self.adapter.execute_insert(
             """
             INSERT INTO matches_1v1 (
                 player_1_discord_uid, player_2_discord_uid,
                 player_1_race, player_2_race,
                 player_1_mmr, player_2_mmr,
-                mmr_change, map_played, server_used
+                mmr_change, map_played, server_used, played_at
             )
             VALUES (
                 :player_1_discord_uid, :player_2_discord_uid,
                 :player_1_race, :player_2_race,
                 :player_1_mmr, :player_2_mmr,
-                :mmr_change, :map_played, :server_used
+                :mmr_change, :map_played, :server_used, :played_at
             )
             """,
             {
@@ -692,7 +706,8 @@ class DatabaseWriter:
                 "player_2_mmr": player_2_mmr,
                 "mmr_change": mmr_change,
                 "map_played": map_played,
-                "server_used": server_used
+                "server_used": server_used,
+                "played_at": current_timestamp
             }
         )
     
@@ -1044,15 +1059,17 @@ class DatabaseWriter:
         Logs a command call to the command_calls table.
         """
         try:
+            current_timestamp = get_timestamp()
             self.adapter.execute_insert(
                 """
-                INSERT INTO command_calls (discord_uid, player_name, command)
-                VALUES (:discord_uid, :player_name, :command)
+                INSERT INTO command_calls (discord_uid, player_name, command, called_at)
+                VALUES (:discord_uid, :player_name, :command, :called_at)
                 """,
                 {
                     "discord_uid": discord_uid,
                     "player_name": player_name,
-                    "command": command
+                    "command": command,
+                    "called_at": current_timestamp
                 }
             )
             return True

@@ -1,7 +1,9 @@
 ```sql
 -- =============================================
--- CORE TABLES (SQLite-compatible with PostgreSQL benefits)
+-- CORE TABLES (PostgreSQL with timezone-aware timestamps)
 -- =============================================
+-- NOTE: All timestamp columns use TIMESTAMPTZ to store UTC timestamps
+-- with timezone information. This ensures proper handling across timezones.
 
 CREATE TABLE players (
     id                      SERIAL PRIMARY KEY,
@@ -14,12 +16,12 @@ CREATE TABLE players (
     country                 TEXT,
     region                  TEXT,
     accepted_tos            BOOLEAN DEFAULT FALSE,
-    accepted_tos_date       TIMESTAMP,
+    accepted_tos_date       TIMESTAMPTZ,
     completed_setup         BOOLEAN DEFAULT FALSE,
-    completed_setup_date    TIMESTAMP,
+    completed_setup_date    TIMESTAMPTZ,
     activation_code         TEXT,
-    created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     remaining_aborts        INTEGER DEFAULT 3
 );
 
@@ -30,7 +32,7 @@ CREATE TABLE player_action_logs (
     setting_name            TEXT NOT NULL,
     old_value               TEXT,
     new_value               TEXT,
-    changed_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    changed_at              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     changed_by              TEXT DEFAULT 'player' NOT NULL,
     FOREIGN KEY (discord_uid) REFERENCES players(discord_uid)
 );
@@ -40,7 +42,7 @@ CREATE TABLE command_calls (
     discord_uid             BIGINT NOT NULL,
     player_name             TEXT NOT NULL,
     command                 TEXT NOT NULL,
-    called_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    called_at               TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (discord_uid) REFERENCES players(discord_uid)
 );
 
@@ -48,7 +50,7 @@ CREATE TABLE replays (
     id                      SERIAL PRIMARY KEY,
     replay_path             TEXT NOT NULL UNIQUE,
     replay_hash             TEXT NOT NULL,
-    replay_date             TIMESTAMP NOT NULL,
+    replay_date             TIMESTAMPTZ NOT NULL,
     player_1_name           TEXT NOT NULL,
     player_2_name           TEXT NOT NULL,
     player_1_race           TEXT NOT NULL,
@@ -59,7 +61,7 @@ CREATE TABLE replays (
     observers               TEXT NOT NULL,
     map_name                TEXT NOT NULL,
     duration                INTEGER NOT NULL,
-    uploaded_at             TIMESTAMP NOT NULL
+    uploaded_at             TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE mmrs_1v1 (
@@ -72,7 +74,7 @@ CREATE TABLE mmrs_1v1 (
     games_won               INTEGER DEFAULT 0,
     games_lost              INTEGER DEFAULT 0,
     games_drawn             INTEGER DEFAULT 0,
-    last_played             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_played             TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (discord_uid) REFERENCES players(discord_uid),
     UNIQUE(discord_uid, race)
 );
@@ -91,11 +93,11 @@ CREATE TABLE matches_1v1 (
     mmr_change              INTEGER,
     map_played              TEXT NOT NULL,
     server_used             TEXT NOT NULL,
-    played_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    played_at               TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     player_1_replay_path    TEXT,
-    player_1_replay_time    TIMESTAMP,
+    player_1_replay_time    TIMESTAMPTZ,
     player_2_replay_path    TEXT,
-    player_2_replay_time    TIMESTAMP,
+    player_2_replay_time    TIMESTAMPTZ,
     FOREIGN KEY (player_1_discord_uid) REFERENCES players(discord_uid),
     FOREIGN KEY (player_2_discord_uid) REFERENCES players(discord_uid)
 );
