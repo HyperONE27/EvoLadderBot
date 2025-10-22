@@ -101,7 +101,7 @@ class StaticDataCache:
         """
         self._ensure_initialized()
         name_lower = name.lower()
-        return next((m for m in self._maps if m.get('name', '').lower() == name_lower), None)
+        return next((m for m in self._maps if m['name'].lower() == name_lower), None)
     
     # ========== Races ==========
     
@@ -140,7 +140,7 @@ class StaticDataCache:
         """
         self._ensure_initialized()
         name_lower = name.lower()
-        return next((r for r in self._races if r.get('name', '').lower() == name_lower), None)
+        return next((r for r in self._races if r['name'].lower() == name_lower), None)
     
     # ========== Regions ==========
     
@@ -179,7 +179,7 @@ class StaticDataCache:
         """
         self._ensure_initialized()
         name_lower = name.lower()
-        return next((r for r in self._regions if r.get('name', '').lower() == name_lower), None)
+        return next((r for r in self._regions if r['name'].lower() == name_lower), None)
     
     # ========== Countries ==========
     
@@ -218,7 +218,7 @@ class StaticDataCache:
         """
         self._ensure_initialized()
         name_lower = name.lower()
-        return next((c for c in self._countries if c.get('name', '').lower() == name_lower), None)
+        return next((c for c in self._countries if c['name'].lower() == name_lower), None)
     
     # ========== Utilities ==========
     

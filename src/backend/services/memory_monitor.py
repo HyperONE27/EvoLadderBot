@@ -201,7 +201,6 @@ class MemoryMonitor:
             log_msg += f" - {context}"
         
         logger.info(log_msg)
-        print(log_msg)
     
     def check_memory_leak(self, threshold_mb: float = 50.0) -> bool:
         """

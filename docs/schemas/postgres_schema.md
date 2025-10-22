@@ -55,9 +55,11 @@ CREATE TABLE replays (
     player_2_race           TEXT NOT NULL,
     result                  INTEGER NOT NULL,
     player_1_handle         TEXT NOT NULL,
+    player_2_handle         TEXT NOT NULL,
     observers               TEXT NOT NULL,
     map_name                TEXT NOT NULL,
-    duration                INTEGER NOT NULL
+    duration                INTEGER NOT NULL,
+    uploaded_at             TIMESTAMP NOT NULL
 );
 
 CREATE TABLE mmrs_1v1 (

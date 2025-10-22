@@ -6,8 +6,7 @@ from src.backend.services.app_context import (
     user_info_service,
     countries_service,
     regions_service,
-    races_service,
-    db_reader
+    races_service
 )
 from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote, get_flag_emote, get_game_emote
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
@@ -45,9 +44,11 @@ async def profile_command(interaction: discord.Interaction):
     
     flow.checkpoint("fetch_player_data_complete")
     
-    # Get MMR data for all races
+    # Get MMR data for all races from DataAccessService (in-memory, instant)
     flow.checkpoint("fetch_mmr_data_start")
-    mmr_data = db_reader.get_all_player_mmrs_1v1(interaction.user.id)
+    from src.backend.services.data_access_service import DataAccessService
+    data_service = DataAccessService()
+    mmr_data = data_service.get_all_player_mmrs(interaction.user.id)
     flow.checkpoint("fetch_mmr_data_complete")
     
     # Create profile embed
@@ -86,8 +87,8 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
     # Basic Information
     basic_info_parts = [
         f"- **User ID:** {user.mention}",
-        f"- **Player Name:** {player_data.get('player_name', 'Not set')}",
-        f"- **BattleTag:** {player_data.get('battletag', 'Not set')}"
+        f"- **Player Name:** {player_data['player_name']}",
+        f"- **BattleTag:** {player_data['battletag']}"
     ]
     
     # Alternative IDs if they exist
@@ -131,6 +132,9 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
         # Get the canonical race order
         race_order = races_service.get_race_order()
         
+        # Convert dict to list of dicts for processing
+        mmr_list = [{"race": race, "mmr": mmr} for race, mmr in mmr_data.items()]
+        
         # Sort MMR data by race order
         def race_sort_key(mmr_entry):
             race_code = mmr_entry['race']
@@ -139,7 +143,7 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
             except ValueError:
                 return len(race_order)  # Put unknown races at the end
         
-        sorted_mmr_data = sorted(mmr_data, key=race_sort_key)
+        sorted_mmr_data = sorted(mmr_list, key=race_sort_key)
         
         # Separate BW and SC2 races (already in correct order)
         bw_mmrs = [m for m in sorted_mmr_data if m['race'].startswith('bw_')]

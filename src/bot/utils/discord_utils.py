@@ -141,6 +141,8 @@ def followup_ephemeral_response(
 
 def country_to_flag(code: str) -> str:
     """Convert 2-letter country code to 🇨🇦 style flag emoji."""
+    if not code or code is None:
+        return "🏳️"  # Default flag for missing country
     code = code.upper()
     return chr(127397 + ord(code[0])) + chr(127397 + ord(code[1]))
 
@@ -169,6 +171,9 @@ def get_race_emote(race: str) -> str:
 
 def get_flag_emote(country_code: str) -> str:
     """Get the appropriate flag emote for a country code."""
+    if not country_code or country_code is None:
+        return "🏳️"  # Default flag for missing country
+    
     if country_code in ["XX", "ZZ"]:
         # Use custom emotes for non-representing and other
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -245,7 +250,7 @@ def get_game_emote(game: str) -> str:
         # Find the emote for the game
         for emote in emotes_data:
             if emote.get("name") == emote_name:
-                return emote.get("markdown", "🎮")
+                return emote["markdown"]
         
         # Fallback to generic game emoji if not found
         return "🎮"

@@ -247,56 +247,79 @@ async def prune_command(interaction: discord.Interaction):
     try:
         # Fetch up to 100 messages (Discord limit)
         total_messages = 0
-        bot_messages = 0
-        too_new = 0
-        protected = 0
+        # Track message counts by type
+        message_counts = {
+            "total": 0,
+            "bot_messages": 0,
+            "protected_legacy": 0,
+            "protected_prune": 0,
+            "protected_recent": 0,
+            "protected_queue": 0,
+            "to_delete": 0
+        }
+        
+        # Track message IDs by type for detailed logging
+        protected_legacy_ids = []
+        protected_prune_ids = []
+        protected_recent_ids = []
+        protected_queue_ids = []
+        delete_ids = []
         
         async for message in channel.history(limit=100):
-            total_messages += 1
+            message_counts["total"] += 1
             
             # Only consider bot's own messages
             if message.author.id != bot_user_id:
                 continue
             
-            bot_messages += 1
+            message_counts["bot_messages"] += 1
             
             # Skip if message is associated with an active queue view (legacy protection)
             if message.id in _active_queue_message_ids:
-                protected += 1
-                print(f"[Prune Debug] Message protected (legacy queue): {message.id}")
+                message_counts["protected_legacy"] += 1
+                protected_legacy_ids.append(message.id)
                 continue
             
             # Skip if message contains prune-related content (protect prune command messages)
             if is_prune_related_message(message):
-                protected += 1
-                print(f"[Prune Debug] Message protected (prune command): {message.id}")
-                print(f"[Prune Debug] - Title: {message.embeds[0].title if message.embeds else 'No embeds'}")
-                print(f"[Prune Debug] - Description: {message.embeds[0].description[:100] if message.embeds and message.embeds[0].description else 'No description'}")
+                message_counts["protected_prune"] += 1
+                protected_prune_ids.append(message.id)
                 continue
             
             # Skip very recent messages (within configured protection period) as they might be prune-related
             recent_cutoff = datetime.now(timezone.utc) - timedelta(minutes=RECENT_MESSAGE_PROTECTION_MINUTES)
             if message.created_at > recent_cutoff:
-                protected += 1
-                print(f"[Prune Debug] Message protected (recent message): {message.id} (created: {message.created_at})")
+                message_counts["protected_recent"] += 1
+                protected_recent_ids.append(message.id)
                 continue
             
             # Skip if message contains queue-related content (programmatic detection)
             # Only protects queue messages less than the configured protection period
             if is_queue_related_message(message):
-                protected += 1
-                print(f"[Prune Debug] Message protected (queue content < {QUEUE_MESSAGE_PROTECTION_DAYS} days): {message.id}")
+                message_counts["protected_queue"] += 1
+                protected_queue_ids.append(message.id)
                 continue
             
             messages_to_delete.append(message)
-            print(f"[Prune Debug] Message queued for deletion: {message.id} (created: {message.created_at})")
+            message_counts["to_delete"] += 1
+            delete_ids.append(message.id)
         
-        # Debug summary
-        print(f"[Prune Debug] Summary:")
-        print(f"  - Total messages fetched: {total_messages}")
-        print(f"  - Bot messages: {bot_messages}")
-        print(f"  - Protected (queue): {protected}")
-        print(f"  - Queued for deletion: {len(messages_to_delete)}")
+        # Compact summary logging
+        print(f"[Prune] Summary: {message_counts['total']} total, {message_counts['bot_messages']} bot messages")
+        print(f"[Prune] Protected: {message_counts['protected_legacy']} legacy, {message_counts['protected_prune']} prune, {message_counts['protected_recent']} recent, {message_counts['protected_queue']} queue")
+        print(f"[Prune] To delete: {message_counts['to_delete']} messages")
+        
+        # Show detailed IDs only if there are any
+        if protected_legacy_ids:
+            print(f"[Prune] Protected (legacy): {', '.join(map(str, protected_legacy_ids))}")
+        if protected_prune_ids:
+            print(f"[Prune] Protected (prune): {', '.join(map(str, protected_prune_ids))}")
+        if protected_recent_ids:
+            print(f"[Prune] Protected (recent): {', '.join(map(str, protected_recent_ids))}")
+        if protected_queue_ids:
+            print(f"[Prune] Protected (queue): {', '.join(map(str, protected_queue_ids))}")
+        if delete_ids:
+            print(f"[Prune] To delete: {', '.join(map(str, delete_ids))}")
     
     except discord.Forbidden:
         error_embed = discord.Embed(
@@ -428,6 +451,26 @@ async def prune_command(interaction: discord.Interaction):
                 description=f"Successfully deleted {deleted_count} old bot message(s).",
                 color=discord.Color.green()
             )
+            
+            # Add protection summary
+            total_protected = message_counts.get("protected_legacy", 0) + message_counts.get("protected_prune", 0) + message_counts.get("protected_recent", 0) + message_counts.get("protected_queue", 0)
+            if total_protected > 0:
+                protection_details = []
+                if message_counts.get("protected_legacy", 0) > 0:
+                    protection_details.append(f"{message_counts['protected_legacy']} legacy")
+                if message_counts.get("protected_prune", 0) > 0:
+                    protection_details.append(f"{message_counts['protected_prune']} prune")
+                if message_counts.get("protected_recent", 0) > 0:
+                    protection_details.append(f"{message_counts['protected_recent']} recent")
+                if message_counts.get("protected_queue", 0) > 0:
+                    protection_details.append(f"{message_counts['protected_queue']} queue")
+                
+                success_embed.add_field(
+                    name="🛡️ Protected Messages",
+                    value=f"{total_protected} message(s) protected: {', '.join(protection_details)}",
+                    inline=False
+                )
+            
             if failed_count > 0:
                 success_embed.add_field(
                     name="⚠️ Failed to Delete",

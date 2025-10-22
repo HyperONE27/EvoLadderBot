@@ -9,7 +9,6 @@ import asyncio
 from asyncio import Lock
 from typing import Callable, Dict, List, Optional, Set
 
-from src.backend.db.db_reader_writer import DatabaseReader
 from src.backend.services.leaderboard_service import LeaderboardService
 
 
@@ -21,7 +20,6 @@ class MatchCompletionService:
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super(MatchCompletionService, cls).__new__(cls)
-            cls._instance.db_reader = DatabaseReader()
             cls._instance.monitored_matches = set()
             cls._instance.monitoring_tasks = {}
             cls._instance.processed_matches = set()
@@ -116,6 +114,8 @@ class MatchCompletionService:
 
     async def check_match_completion(self, match_id: int):
         """Manually check if a match is complete and handle it."""
+        import time
+        start_time = time.perf_counter()
         
         lock = self._get_lock(match_id)
         async with lock:
@@ -126,10 +126,12 @@ class MatchCompletionService:
                     return True
                     
                 print(f"🔍 CHECK: Manual completion check for match {match_id}")
-                match_data = self.db_reader.get_match_1v1(match_id)
+                # Get match data from DataAccessService (in-memory, instant)
+                from src.backend.services.data_access_service import DataAccessService
+                data_service = DataAccessService()
+                match_data = data_service.get_match(match_id)
                 if not match_data:
-                    print(f"❌ Match {match_id} not found for completion check")
-                    return
+                    raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
                 
                 # Check if both players have reported
                 p1_report = match_data.get('player_1_report')
@@ -178,6 +180,12 @@ class MatchCompletionService:
             except Exception as e:
                 print(f"❌ Error checking match completion for {match_id}: {e}")
                 return False
+            finally:
+                duration_ms = (time.perf_counter() - start_time) * 1000
+                if duration_ms > 100:
+                    print(f"⚠️ [MatchCompletion PERF] check_match_completion for match {match_id} took {duration_ms:.2f}ms")
+                elif duration_ms > 50:
+                    print(f"🟡 [MatchCompletion PERF] check_match_completion for match {match_id} took {duration_ms:.2f}ms")
     
     async def _monitor_match_completion(self, match_id: int):
         """Monitor a specific match for completion."""
@@ -186,10 +194,12 @@ class MatchCompletionService:
                 # Check if match is complete
                 lock = self._get_lock(match_id)
                 async with lock:
-                    match_data = self.db_reader.get_match_1v1(match_id)
+                    # Get match data from DataAccessService (in-memory, instant)
+                    from src.backend.services.data_access_service import DataAccessService
+                    data_service = DataAccessService()
+                    match_data = data_service.get_match(match_id)
                     if not match_data:
-                        print(f"❌ Match {match_id} not found, stopping monitoring")
-                        break
+                        raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
                     
                     # Check if both players have reported
                     p1_report = match_data.get('player_1_report')
@@ -224,15 +234,25 @@ class MatchCompletionService:
     
     async def _handle_match_completion(self, match_id: int, match_data: dict):
         """Handle a completed match."""
+        import time
+        start_time = time.perf_counter()
+        
         try:
             from src.backend.services.matchmaking_service import matchmaker
             
+            checkpoint1 = time.perf_counter()
             # Calculate and write MMR changes
             await matchmaker._calculate_and_write_mmr(match_id, match_data)
+            checkpoint2 = time.perf_counter()
+            mmr_time = (checkpoint2-checkpoint1)*1000
             # Cache invalidation is now handled automatically by the database decorator
 
+            checkpoint3 = time.perf_counter()
             # Re-fetch match data to ensure it's the absolute latest
             final_match_data = await self._get_match_final_results(match_id)
+            checkpoint4 = time.perf_counter()
+            results_time = (checkpoint4-checkpoint3)*1000
+            
             if not final_match_data:
                 print(f"❌ Could not get final results for match {match_id} during handling.")
                 return
@@ -244,15 +264,34 @@ class MatchCompletionService:
                     self.completion_waiters[match_id].set()
                     del self.completion_waiters[match_id]
 
+            # Release queue lock for both players so they can re-queue
+            p1_uid = final_match_data.get('player_1_discord_uid')
+            p2_uid = final_match_data.get('player_2_discord_uid')
+            if p1_uid and p2_uid:
+                await matchmaker.release_queue_lock_for_players([p1_uid, p2_uid])
+                print(f"🔓 Released queue locks for players {p1_uid} and {p2_uid} after completion")
+
+            checkpoint5 = time.perf_counter()
             # Notify/update all player views with the final data
             await self._notify_players_match_complete(match_id, final_match_data)
+            checkpoint6 = time.perf_counter()
+            notify_time = (checkpoint6-checkpoint5)*1000
+            
+            # Compact performance logging
+            print(f"[MC] MMR:{mmr_time:.1f}ms Results:{results_time:.1f}ms Notify:{notify_time:.1f}ms")
             
         except Exception as e:
             print(f"❌ Error handling match completion for {match_id}: {e}")
+        finally:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            print(f"🏁 [MatchCompletion PERF] Total _handle_match_completion for match {match_id}: {duration_ms:.2f}ms")
     
     async def _handle_match_abort(self, match_id: int, match_data: dict):
         """Handle an aborted match."""
         try:
+            # Import matchmaker for queue lock release
+            from src.backend.services.matchmaking_service import matchmaker
+            
             # Re-fetch to ensure we have the latest state
             final_match_data = await self._get_match_final_results(match_id)
             if not final_match_data:
@@ -265,6 +304,13 @@ class MatchCompletionService:
                     self.completion_waiters[match_id].set()
                     del self.completion_waiters[match_id]
 
+            # Release queue lock for both players so they can re-queue
+            p1_uid = final_match_data.get('player_1_discord_uid')
+            p2_uid = final_match_data.get('player_2_discord_uid')
+            if p1_uid and p2_uid:
+                await matchmaker.release_queue_lock_for_players([p1_uid, p2_uid])
+                print(f"🔓 Released queue locks for players {p1_uid} and {p2_uid} after abort")
+
             # Notify all callbacks with abort status
             callbacks = self.notification_callbacks.pop(match_id, [])
             print(f"  -> Notifying {len(callbacks)} callbacks for match {match_id} abort.")
@@ -276,6 +322,8 @@ class MatchCompletionService:
 
         except Exception as e:
             print(f"❌ Error handling match abort for {match_id}: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             # Clean up monitoring for this match
             self.stop_monitoring_match(match_id)
@@ -353,8 +401,10 @@ class MatchCompletionService:
     async def _release_queue_lock_for_conflict_match(self, match_id: int):
         """Release queue lock for both players when a match has a conflict."""
         try:
-            # Get match data to find both players
-            match_data = self.db_reader.get_match_1v1(match_id)
+            # Get match data from DataAccessService (in-memory, instant)
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+            match_data = data_service.get_match(match_id)
             if match_data:
                 p1_discord_uid = match_data.get('player_1_discord_uid')
                 p2_discord_uid = match_data.get('player_2_discord_uid')
@@ -378,14 +428,17 @@ class MatchCompletionService:
         and calculates MMR changes.
         """
         try:
-            match_data = self.db_reader.get_match_1v1(match_id)
+            # Get match data from DataAccessService (in-memory, instant)
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+            match_data = data_service.get_match(match_id)
             if not match_data:
-                return None
-            
+                raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
+
             # This part should be re-evaluated, as it's frontend-specific
             # For now, it's kept for data structure compatibility
-            p1_info = self.db_reader.get_player_by_discord_uid(match_data['player_1_discord_uid'])
-            p2_info = self.db_reader.get_player_by_discord_uid(match_data['player_2_discord_uid'])
+            p1_info = data_service.get_player_info(match_data['player_1_discord_uid'])
+            p2_info = data_service.get_player_info(match_data['player_2_discord_uid'])
 
             p1_name = p1_info.get('player_name', str(match_data['player_1_discord_uid']))
             p2_name = p2_info.get('player_name', str(match_data['player_2_discord_uid']))
@@ -397,7 +450,31 @@ class MatchCompletionService:
                 -1: "Aborted",
                 -2: "Conflict"
             }
-            result_text = result_text_map.get(match_data['match_result'], "Undetermined")
+            result_text = result_text_map[match_data['match_result']]
+
+            # Calculate MMR changes directly from the match result
+            # This ensures we get the correct values even if database writes are still pending
+            match_result = match_data['match_result']
+            p1_mmr_change = 0
+            p2_mmr_change = 0
+            
+            if match_result in [0, 1, 2]:  # Valid match results (draw, p1 win, p2 win)
+                # Calculate MMR changes using the MMR service
+                from src.backend.services.mmr_service import MMRService
+                mmr_service = MMRService()
+                
+                p1_current_mmr = match_data['player_1_mmr']
+                p2_current_mmr = match_data['player_2_mmr']
+                
+                if p1_current_mmr is not None and p2_current_mmr is not None:
+                    p1_mmr_change = mmr_service.calculate_mmr_change(
+                        p1_current_mmr, 
+                        p2_current_mmr, 
+                        match_result
+                    )
+                    p2_mmr_change = -p1_mmr_change  # Player 2's change is opposite of player 1's
+                    
+                    print(f"[MatchCompletion] Calculated MMR changes for match {match_id}: P1={p1_mmr_change:+.1f}, P2={p2_mmr_change:+.1f}")
 
             return {
                 "match_id": match_id,
@@ -411,8 +488,8 @@ class MatchCompletionService:
                 "p2_race": match_data.get('player_2_race'),
                 "p1_current_mmr": match_data['player_1_mmr'],
                 "p2_current_mmr": match_data['player_2_mmr'],
-                "p1_mmr_change": match_data.get('mmr_change', 0),
-                "p2_mmr_change": -match_data.get('mmr_change', 0),
+                "p1_mmr_change": p1_mmr_change,
+                "p2_mmr_change": p2_mmr_change,
                 "p1_report": match_data.get('player_1_report'),
                 "p2_report": match_data.get('player_2_report'),
                 "result_text": result_text,

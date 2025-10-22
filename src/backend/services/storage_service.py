@@ -240,6 +240,5 @@ class StorageService:
             return {}
 
 
-# Global singleton instance
-storage_service = StorageService()
+# Global singleton instance is created in app_context.py
 

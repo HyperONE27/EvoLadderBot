@@ -104,6 +104,9 @@ SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "replays")  # Default b
 # The current map pool season to be used by the matchmaking service
 CURRENT_SEASON = "season_alpha"
 
+# Queue searching view heartbeat timer (seconds) - how often to update the searching view
+QUEUE_SEARCHING_HEARTBEAT_SECONDS = 10
+
 # =============================================================================
 # PRUNE COMMAND PROTECTION TIMERS
 # =============================================================================

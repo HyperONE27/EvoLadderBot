@@ -131,7 +131,7 @@ class RegionsService(BaseConfigService):
         if not servers:
             return "USW"  # Fallback to a default server
         server = random.choice(servers)
-        return server.get("code", "USW")
+        return server["code"]
 
     def get_region_page_data(self, page: int, page_size: int) -> Tuple[List[Dict[str, Any]], int]:
         residential_regions = self.get_residential_regions()
@@ -152,7 +152,7 @@ class RegionsService(BaseConfigService):
         return self.get_region_names_for_codes(ordered_codes)
 
     def get_sorted_regions(self) -> List[Dict[str, Any]]:
-        return sorted(self.get_residential_regions(), key=lambda entry: entry.get("name", ""))
+        return sorted(self.get_residential_regions(), key=lambda entry: entry["name"])
 
     def search_regions(self, query: str, limit: int = 25) -> List[Dict[str, Any]]:
         return self.search_by_name(query, limit=limit)
