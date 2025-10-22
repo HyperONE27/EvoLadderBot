@@ -13,7 +13,9 @@ It contains methods for:
 
 from typing import Optional, Dict, Any
 import discord
+import asyncio
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
+from src.backend.services.data_access_service import DataAccessService
 from src.backend.services.cache_service import player_cache
 
 
@@ -79,9 +81,16 @@ def log_user_action(user_info: Dict[str, Any], action: str, details: str = "") -
 
 
 class UserInfoService:
-    """Service for managing user information and settings."""
+    """
+    Service for managing user information and settings.
+    
+    This service now delegates to DataAccessService for fast in-memory operations.
+    Legacy DatabaseReader/Writer are kept for backwards compatibility only.
+    """
     
     def __init__(self) -> None:
+        self.data_service = DataAccessService()
+        # Legacy - kept for backwards compatibility
         self.reader = DatabaseReader()
         self.writer = DatabaseWriter()
     
@@ -105,17 +114,21 @@ class UserInfoService:
         """
         Get player information by Discord UID.
         
+        Uses DataAccessService for sub-millisecond in-memory lookup.
+        
         Args:
             discord_uid: Discord user ID.
         
         Returns:
             Player data dictionary or None if not found.
         """
-        return self.reader.get_player_by_discord_uid(discord_uid)
+        return self.data_service.get_player_info(discord_uid)
     
     def player_exists(self, discord_uid: int) -> bool:
         """
         Check if a player exists.
+        
+        Uses DataAccessService for sub-millisecond in-memory lookup.
         
         Args:
             discord_uid: Discord user ID.
@@ -123,11 +136,11 @@ class UserInfoService:
         Returns:
             True if player exists, False otherwise.
         """
-        return self.reader.player_exists(discord_uid)
+        return self.data_service.player_exists(discord_uid)
     
     def ensure_player_exists(self, discord_uid: int, discord_username: str) -> Dict[str, Any]:
         """
-        Ensure a player record exists in the database.
+        Ensure a player record exists in memory and database.
         
         If the player doesn't exist, creates a minimal record with discord_uid and discord_username.
         If the player already exists but has a different username, updates the username and logs the change.
@@ -135,6 +148,8 @@ class UserInfoService:
         
         This should be called at the start of any slash command to ensure the user
         has a database record before any operations are performed.
+        
+        Uses DataAccessService for fast in-memory operations.
         
         Args:
             discord_uid: Discord user ID.
@@ -147,6 +162,7 @@ class UserInfoService:
         
         if player is None:
             # Create minimal player record with discord username
+            # Note: create_player is sync but will queue async write
             self.create_player(discord_uid=discord_uid, discord_username=discord_username)
             player = self.get_player(discord_uid)
         else:
@@ -154,6 +170,7 @@ class UserInfoService:
             current_username = player.get('discord_username')
             if current_username != discord_username:
                 # Update username and log the change
+                # Note: update_player is sync but will queue async write
                 self.update_player(
                     discord_uid=discord_uid,
                     discord_username=discord_username,
@@ -177,6 +194,8 @@ class UserInfoService:
         """
         Create a new player.
         
+        Uses DataAccessService for instant in-memory creation + async DB write.
+        
         Args:
             discord_uid: Discord user ID.
             discord_username: Discord username (e.g., "username" from username#1234 or @username).
@@ -185,20 +204,35 @@ class UserInfoService:
             battletag: Player's BattleTag.
             country: Country code.
             region: Region code.
-            activation_code: Activation code.
+            activation_code: Activation code (not supported by DataAccessService).
         
         Returns:
-            The ID of the newly created player.
+            The discord_uid (for backwards compatibility).
         """
-        return self.writer.create_player(
-            discord_uid=discord_uid,
-            discord_username=discord_username,
-            player_name=player_name,
-            battletag=battletag,
-            country=country,
-            region=region,
-            activation_code=activation_code
-        )
+        # Run async create in sync context
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If called from async context, just schedule it
+            asyncio.create_task(self.data_service.create_player(
+                discord_uid=discord_uid,
+                discord_username=discord_username,
+                player_name=player_name,
+                battletag=battletag,
+                country=country,
+                region=region
+            ))
+        else:
+            # If called from sync context, run it
+            loop.run_until_complete(self.data_service.create_player(
+                discord_uid=discord_uid,
+                discord_username=discord_username,
+                player_name=player_name,
+                battletag=battletag,
+                country=country,
+                region=region
+            ))
+        
+        return discord_uid
     
     def update_player(
         self,

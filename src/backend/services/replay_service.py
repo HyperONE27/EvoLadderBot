@@ -336,18 +336,14 @@ class ReplayService:
             print(f"Error storing replay upload: {e}")
             return {"success": False, "error": "An unexpected error occurred while storing the replay."}
     
-    def store_upload_from_parsed_dict(self, match_id: int, uploader_id: int, 
-                                       replay_bytes: bytes, parsed_dict: dict) -> dict:
+    async def store_upload_from_parsed_dict_async(self, match_id: int, uploader_id: int, 
+                                                    replay_bytes: bytes, parsed_dict: dict) -> dict:
         """
-        PRIMARY METHOD for production use with multiprocessing.
+        ASYNC PRIMARY METHOD for production use with multiprocessing.
         
         Saves a replay file and updates the database using pre-parsed replay data.
-        This method is designed to work with the output from parse_replay_data_blocking()
-        which should be executed in a worker process via run_in_executor().
-        
-        This method only performs fast I/O operations (file write, database updates)
-        and does NOT perform CPU-intensive parsing, making it safe to call in the
-        main event loop.
+        This method uses DataAccessService for non-blocking async writes, eliminating
+        the dropdown slowness issue after replay uploads.
         
         Args:
             match_id: The match ID to associate with this replay
@@ -365,6 +361,76 @@ class ReplayService:
             
             # Save the replay file (uploads to Supabase Storage, falls back to local)
             # Pass match_id and uploader_id for Supabase storage path
+            # Run this in executor since it may do I/O
+            import asyncio
+            loop = asyncio.get_running_loop()
+            replay_url = await loop.run_in_executor(
+                None,
+                self.save_replay,
+                replay_bytes,
+                match_id,
+                uploader_id
+            )
+            
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+
+            # Prepare replay data for database insertion
+            replay_data = {
+                "replay_hash": parsed_dict["replay_hash"],
+                "replay_date": parsed_dict["replay_date"],
+                "player_1_name": parsed_dict["player_1_name"],
+                "player_2_name": parsed_dict["player_2_name"],
+                "player_1_race": parsed_dict["player_1_race"],
+                "player_2_race": parsed_dict["player_2_race"],
+                "result": parsed_dict["result"],
+                "player_1_handle": parsed_dict["player_1_handle"],
+                "player_2_handle": parsed_dict["player_2_handle"],
+                "observers": json.dumps(parsed_dict["observers"]),  # Convert list to JSON
+                "map_name": parsed_dict["map_name"],
+                "duration": parsed_dict["duration"],
+                "replay_path": replay_url,  # Store URL (Supabase) or path (local fallback)
+                "uploaded_at": get_timestamp()  # Add uploaded_at timestamp (new column)
+            }
+            
+            # Insert into replays table (async, non-blocking)
+            await data_service.insert_replay(replay_data)
+
+            # Update match record with replay URL/path (async, non-blocking)
+            sql_timestamp = get_timestamp()
+            await data_service.update_match_replay(
+                match_id,
+                uploader_id,
+                replay_url,  # Store URL (Supabase) or path (local fallback)
+                sql_timestamp
+            )
+
+            return {
+                "success": True,
+                "unix_epoch": get_current_unix_timestamp(),
+                "replay_data": parsed_dict
+            }
+            
+        except Exception as e:
+            print(f"Error storing replay upload from parsed dict: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
+    
+    def store_upload_from_parsed_dict(self, match_id: int, uploader_id: int, 
+                                       replay_bytes: bytes, parsed_dict: dict) -> dict:
+        """
+        DEPRECATED: Synchronous version kept for backwards compatibility.
+        Use store_upload_from_parsed_dict_async() instead for better performance.
+        
+        This method performs BLOCKING database writes and should be avoided.
+        """
+        try:
+            # Check if parsing failed
+            if parsed_dict.get("error"):
+                return {"success": False, "error": parsed_dict["error"]}
+            
+            # Save the replay file (uploads to Supabase Storage, falls back to local)
             replay_url = self.save_replay(replay_bytes, match_id=match_id, player_discord_uid=uploader_id)
             
             db_writer = DatabaseWriter()

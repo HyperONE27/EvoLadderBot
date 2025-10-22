@@ -45,9 +45,11 @@ async def profile_command(interaction: discord.Interaction):
     
     flow.checkpoint("fetch_player_data_complete")
     
-    # Get MMR data for all races
+    # Get MMR data for all races from DataAccessService (in-memory, instant)
     flow.checkpoint("fetch_mmr_data_start")
-    mmr_data = db_reader.get_all_player_mmrs_1v1(interaction.user.id)
+    from src.backend.services.data_access_service import DataAccessService
+    data_service = DataAccessService()
+    mmr_data = data_service.get_all_player_mmrs(interaction.user.id)
     flow.checkpoint("fetch_mmr_data_complete")
     
     # Create profile embed

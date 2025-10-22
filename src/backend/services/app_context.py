@@ -41,6 +41,13 @@ from src.backend.services.validation_service import ValidationService
 # DATABASE LAYER - Create shared reader/writer instances
 # =============================================================================
 
+# ⚠️  LEGACY WARNING: These instances are kept for backwards compatibility only.
+# ⚠️  NEW CODE SHOULD USE DataAccessService INSTEAD:
+# ⚠️  from src.backend.services.data_access_service import DataAccessService
+# ⚠️  data_service = DataAccessService()
+# ⚠️  DataAccessService provides in-memory data access with async write-back to DB.
+# ⚠️  These legacy instances bypass the new architecture and should be avoided.
+
 db_reader = DatabaseReader()
 db_writer = DatabaseWriter()
 

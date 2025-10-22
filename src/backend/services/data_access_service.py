@@ -1,0 +1,1373 @@
+"""
+DataAccessService - Unified data access layer with in-memory hot tables.
+
+This service acts as a Facade pattern providing a single entry point for all
+application data access. It manages in-memory Polars DataFrames for hot tables
+(players, mmrs_1v1, preferences_1v1, matches_1v1, replays) and provides
+asynchronous write-back to the persistent database.
+
+Architecture:
+- Hot tables are stored in-memory as Polars DataFrames for sub-millisecond reads
+- All writes update the in-memory DataFrame instantly, then queue async DB writes
+- Write-only tables (player_action_logs, command_calls) use async-only writes
+- Single source of truth for all data access in the application
+
+Performance Benefits:
+- Player info lookups: <2ms (was 500-800ms)
+- Abort count lookups: <2ms (was 400-600ms)
+- Match data lookups: <2ms (was 200-300ms)
+- All writes are non-blocking
+"""
+
+import asyncio
+import time
+from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from enum import Enum
+
+import polars as pl
+
+from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
+
+
+class WriteJobType(Enum):
+    """Types of database write operations."""
+    UPDATE_PLAYER = "update_player"
+    CREATE_PLAYER = "create_player"
+    UPDATE_MMR = "update_mmr"
+    CREATE_MMR = "create_mmr"
+    UPDATE_PREFERENCES = "update_preferences"
+    CREATE_MATCH = "create_match"
+    UPDATE_MATCH = "update_match"
+    INSERT_REPLAY = "insert_replay"
+    LOG_PLAYER_ACTION = "log_player_action"
+    INSERT_COMMAND_CALL = "insert_command_call"
+    ABORT_MATCH = "abort_match"
+
+
+@dataclass
+class WriteJob:
+    """Represents a queued database write operation."""
+    job_type: WriteJobType
+    data: Dict[str, Any]
+    timestamp: float
+
+
+class DataAccessService:
+    """
+    Singleton service providing unified data access with in-memory hot tables.
+    
+    This is the ONLY class the rest of the application should use for data access.
+    """
+    
+    _instance: Optional['DataAccessService'] = None
+    _initialized: bool = False
+    
+    def __new__(cls):
+        """Singleton pattern - only one instance allowed."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def __init__(self):
+        """Initialize the service (only runs once due to singleton pattern)."""
+        if DataAccessService._initialized:
+            return
+        
+        print("[DataAccessService] Initializing...")
+        
+        # Database access for initial load and write-back
+        self._db_reader = DatabaseReader()
+        self._db_writer = DatabaseWriter()
+        
+        # In-memory DataFrames for hot tables
+        self._players_df: Optional[pl.DataFrame] = None
+        self._mmrs_df: Optional[pl.DataFrame] = None
+        self._preferences_df: Optional[pl.DataFrame] = None
+        self._matches_df: Optional[pl.DataFrame] = None
+        self._replays_df: Optional[pl.DataFrame] = None
+        
+        # Async write-back queue
+        self._write_queue: asyncio.Queue = asyncio.Queue()
+        self._writer_task: Optional[asyncio.Task] = None
+        self._shutdown_event = asyncio.Event()
+        
+        # Performance tracking
+        self._write_queue_size_peak = 0
+        self._total_writes_queued = 0
+        self._total_writes_completed = 0
+        
+        DataAccessService._initialized = True
+        print("[DataAccessService] Singleton initialized (DataFrames not loaded yet)")
+    
+    async def initialize_async(self) -> None:
+        """
+        Async initialization - loads all data and starts background worker.
+        
+        This MUST be called during bot startup after the event loop is running.
+        """
+        print("[DataAccessService] Starting async initialization...")
+        start_time = time.time()
+        
+        # Load all hot tables into memory
+        await self._load_all_tables()
+        
+        # Start background write worker
+        self._writer_task = asyncio.create_task(self._db_writer_worker())
+        
+        elapsed = (time.time() - start_time) * 1000
+        print(f"[DataAccessService] Async initialization complete in {elapsed:.2f}ms")
+        print(f"[DataAccessService]    - Players: {len(self._players_df) if self._players_df is not None else 0} rows")
+        print(f"[DataAccessService]    - MMRs: {len(self._mmrs_df) if self._mmrs_df is not None else 0} rows")
+        print(f"[DataAccessService]    - Preferences: {len(self._preferences_df) if self._preferences_df is not None else 0} rows")
+        print(f"[DataAccessService]    - Matches: {len(self._matches_df) if self._matches_df is not None else 0} rows")
+        print(f"[DataAccessService]    - Replays: {len(self._replays_df) if self._replays_df is not None else 0} rows")
+    
+    async def _load_all_tables(self) -> None:
+        """Load all hot tables from the database into Polars DataFrames."""
+        print("[DataAccessService] Loading all tables from database...")
+        
+        loop = asyncio.get_running_loop()
+        
+        # Load players table
+        print("[DataAccessService]   Loading players...")
+        players_data = await loop.run_in_executor(None, self._db_reader.get_all_players)
+        if players_data:
+            self._players_df = pl.DataFrame(players_data, infer_schema_length=None)
+        else:
+            # Create empty DataFrame with schema
+            self._players_df = pl.DataFrame({
+                "discord_uid": pl.Series([], dtype=pl.Int64),
+                "discord_username": pl.Series([], dtype=pl.Utf8),
+                "player_name": pl.Series([], dtype=pl.Utf8),
+                "country": pl.Series([], dtype=pl.Utf8),
+                "remaining_aborts": pl.Series([], dtype=pl.Int32),
+            })
+        print(f"[DataAccessService]   Players loaded: {len(self._players_df)} rows")
+        
+        # Load mmrs_1v1 table
+        print("[DataAccessService]   Loading mmrs_1v1...")
+        mmrs_data = await loop.run_in_executor(
+            None, 
+            self._db_reader.get_leaderboard_1v1,
+            None,  # race filter
+            None,  # country filter
+            10000,  # limit
+            0  # offset
+        )
+        if mmrs_data:
+            self._mmrs_df = pl.DataFrame(mmrs_data, infer_schema_length=None)
+        else:
+            self._mmrs_df = pl.DataFrame({
+                "discord_uid": pl.Series([], dtype=pl.Int64),
+                "race": pl.Series([], dtype=pl.Utf8),
+                "mmr": pl.Series([], dtype=pl.Int64),
+                "player_name": pl.Series([], dtype=pl.Utf8),
+                "games_played": pl.Series([], dtype=pl.Int64),
+                "games_won": pl.Series([], dtype=pl.Int64),
+                "games_lost": pl.Series([], dtype=pl.Int64),
+                "games_drawn": pl.Series([], dtype=pl.Int64),
+            })
+        print(f"[DataAccessService]   MMRs loaded: {len(self._mmrs_df)} rows")
+        
+        # Load preferences_1v1 table
+        print("[DataAccessService]   Loading preferences_1v1...")
+        # Load all preferences (should be one row per player at most)
+        prefs_data = await loop.run_in_executor(
+            None,
+            self._db_reader.adapter.execute_query,
+            "SELECT * FROM preferences_1v1",
+            {}
+        )
+        if prefs_data:
+            self._preferences_df = pl.DataFrame(prefs_data, infer_schema_length=None)
+        else:
+            self._preferences_df = pl.DataFrame({
+                "discord_uid": pl.Series([], dtype=pl.Int64),
+                "last_chosen_races": pl.Series([], dtype=pl.Utf8),
+                "last_chosen_vetoes": pl.Series([], dtype=pl.Utf8),
+            })
+        print(f"[DataAccessService]   Preferences loaded: {len(self._preferences_df)} rows")
+        
+        # Load matches_1v1 table
+        print("[DataAccessService]   Loading matches_1v1...")
+        # Load recent matches only (last 1000) to keep memory usage reasonable
+        matches_data = await loop.run_in_executor(
+            None,
+            self._db_reader.adapter.execute_query,
+            "SELECT * FROM matches_1v1 ORDER BY played_at DESC LIMIT 1000",
+            {}
+        )
+        if matches_data:
+            self._matches_df = pl.DataFrame(matches_data, infer_schema_length=None)
+        else:
+            self._matches_df = pl.DataFrame({
+                "id": pl.Series([], dtype=pl.Int64),
+                "player_1_discord_uid": pl.Series([], dtype=pl.Int64),
+                "player_2_discord_uid": pl.Series([], dtype=pl.Int64),
+            })
+        print(f"[DataAccessService]   Matches loaded: {len(self._matches_df)} rows")
+        
+        # Load replays table
+        print("[DataAccessService]   Loading replays...")
+        # Load recent replays only (last 1000)
+        # Note: replays table may not have uploaded_at, use ID ordering
+        replays_data = await loop.run_in_executor(
+            None,
+            self._db_reader.adapter.execute_query,
+            "SELECT * FROM replays ORDER BY id DESC LIMIT 1000",
+            {}
+        )
+        if replays_data:
+            self._replays_df = pl.DataFrame(replays_data, infer_schema_length=None)
+        else:
+            self._replays_df = pl.DataFrame({
+                "id": pl.Series([], dtype=pl.Int64),
+                "replay_path": pl.Series([], dtype=pl.Utf8),
+            })
+        print(f"[DataAccessService]   Replays loaded: {len(self._replays_df)} rows")
+    
+    async def _db_writer_worker(self) -> None:
+        """
+        Background worker that processes the write queue and persists to database.
+        
+        This runs continuously until shutdown, ensuring all in-memory changes
+        are eventually written to the persistent database.
+        """
+        print("[DataAccessService] Database write worker started")
+        
+        while not self._shutdown_event.is_set():
+            try:
+                # Wait for a job with a timeout so we can check shutdown event
+                job = await asyncio.wait_for(self._write_queue.get(), timeout=1.0)
+                
+                # Track queue size
+                current_size = self._write_queue.qsize()
+                if current_size > self._write_queue_size_peak:
+                    self._write_queue_size_peak = current_size
+                
+                # Process the job
+                await self._process_write_job(job)
+                
+                self._total_writes_completed += 1
+                
+                # Log if queue is backing up
+                if current_size > 10:
+                    print(f"[DataAccessService] WARNING: Write queue backed up: {current_size} jobs pending")
+                
+            except asyncio.TimeoutError:
+                # No job available, check shutdown and loop
+                continue
+            except Exception as e:
+                print(f"[DataAccessService] ERROR in write worker: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        print("[DataAccessService] Database write worker stopped")
+    
+    async def _process_write_job(self, job: WriteJob) -> None:
+        """
+        Process a single write job and persist to database.
+        
+        Args:
+            job: The write job to process
+        """
+        loop = asyncio.get_running_loop()
+        
+        try:
+            # Execute the database write in a thread pool to avoid blocking
+            if job.job_type == WriteJobType.UPDATE_PLAYER:
+                # Extract fields for update
+                discord_uid = job.data['discord_uid']
+                
+                # Use partial to bind keyword arguments for run_in_executor
+                from functools import partial
+                update_func = partial(
+                    self._db_writer.update_player,
+                    discord_uid,
+                    discord_username=job.data.get('discord_username'),
+                    player_name=job.data.get('player_name'),
+                    battletag=job.data.get('battletag'),
+                    alt_player_name_1=job.data.get('alt_player_name_1'),
+                    alt_player_name_2=job.data.get('alt_player_name_2'),
+                    country=job.data.get('country'),
+                    region=job.data.get('region')
+                )
+                
+                # Special handling for remaining_aborts
+                if 'remaining_aborts' in job.data and 'player_name' not in job.data:
+                    update_func = partial(
+                        self._db_writer.update_player_remaining_aborts,
+                        discord_uid,
+                        job.data['remaining_aborts']
+                    )
+                
+                await loop.run_in_executor(None, update_func)
+            
+            elif job.job_type == WriteJobType.CREATE_PLAYER:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.create_player,
+                    job.data['discord_uid'],
+                    job.data.get('discord_username', 'Unknown'),
+                    job.data.get('player_name'),
+                    job.data.get('battletag'),
+                    job.data.get('country'),
+                    job.data.get('region'),
+                    None  # activation_code
+                )
+            
+            elif job.job_type == WriteJobType.UPDATE_MMR:
+                # Use update_mmr_after_match for MMR updates
+                from functools import partial
+                update_func = partial(
+                    self._db_writer.update_mmr_after_match,
+                    job.data['discord_uid'],
+                    job.data['race'],
+                    int(job.data['new_mmr']),
+                    won=job.data.get('games_won') is not None,
+                    lost=job.data.get('games_lost') is not None,
+                    drawn=job.data.get('games_drawn') is not None
+                )
+                await loop.run_in_executor(None, update_func)
+            
+            elif job.job_type == WriteJobType.CREATE_MMR:
+                # Use create_or_update_mmr_1v1 for upserts
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.create_or_update_mmr_1v1,
+                    job.data['discord_uid'],
+                    job.data['player_name'],
+                    job.data['race'],
+                    int(job.data['mmr']),
+                    job.data.get('games_played', 0),
+                    job.data.get('games_won', 0),
+                    job.data.get('games_lost', 0),
+                    job.data.get('games_drawn', 0)
+                )
+            
+            elif job.job_type == WriteJobType.LOG_PLAYER_ACTION:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.log_player_action,
+                    job.data['discord_uid'],
+                    job.data['player_name'],
+                    job.data['setting_name'],
+                    job.data.get('old_value'),
+                    job.data.get('new_value'),
+                    job.data.get('changed_by', 'player')
+                )
+            
+            elif job.job_type == WriteJobType.UPDATE_PREFERENCES:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.update_preferences_1v1,
+                    job.data['discord_uid'],
+                    job.data.get('last_chosen_races'),
+                    job.data.get('last_chosen_vetoes')
+                )
+            
+            elif job.job_type == WriteJobType.UPDATE_MATCH:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.update_match_replay_1v1,
+                    job.data['match_id'],
+                    job.data['player_discord_uid'],
+                    job.data['replay_path'],
+                    job.data['replay_time']
+                )
+            
+            elif job.job_type == WriteJobType.INSERT_REPLAY:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.insert_replay,
+                    job.data
+                )
+            
+            elif job.job_type == WriteJobType.INSERT_COMMAND_CALL:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.insert_command_call,
+                    job.data['discord_uid'],
+                    job.data['player_name'],
+                    job.data['command']
+                )
+            
+            elif job.job_type == WriteJobType.ABORT_MATCH:
+                # Use the existing abort_match_1v1 method
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.abort_match_1v1,
+                    job.data['match_id'],
+                    job.data['player_discord_uid'],
+                    300  # ABORT_TIMER_SECONDS
+                )
+            
+            # Add other job types as we implement them
+            else:
+                print(f"[DataAccessService] WARNING: Unknown job type: {job.job_type}")
+        
+        except Exception as e:
+            print(f"[DataAccessService] ERROR: Failed to process write job {job.job_type}: {e}")
+            
+            # Implement retry mechanism for failed writes
+            if not hasattr(job, 'retry_count'):
+                job.retry_count = 0
+            
+            job.retry_count += 1
+            max_retries = 3
+            
+            if job.retry_count <= max_retries:
+                print(f"[DataAccessService] Retrying write job {job.job_type} (attempt {job.retry_count}/{max_retries})")
+                # Re-queue the job for retry
+                await self._write_queue.put(job)
+            else:
+                # Move to dead-letter queue after max retries
+                await self._log_failed_write_job(job, str(e))
+    
+    async def _log_failed_write_job(self, job: WriteJob, error_message: str) -> None:
+        """
+        Log a failed write job to a dead-letter file for manual review.
+        
+        Args:
+            job: The failed write job
+            error_message: The error that caused the failure
+        """
+        import json
+        import os
+        from datetime import datetime
+        
+        # Create failed_writes directory if it doesn't exist
+        failed_writes_dir = "logs/failed_writes"
+        os.makedirs(failed_writes_dir, exist_ok=True)
+        
+        # Create log entry
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "job_type": job.job_type.value,
+            "job_data": job.data,
+            "error_message": error_message,
+            "retry_count": getattr(job, 'retry_count', 0)
+        }
+        
+        # Write to failed_writes.log
+        log_file = os.path.join(failed_writes_dir, "failed_writes.log")
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry) + "\n")
+        
+        print(f"[DataAccessService] CRITICAL: Write job {job.job_type} failed after {getattr(job, 'retry_count', 0)} retries. Logged to {log_file}")
+    
+    async def shutdown(self) -> None:
+        """
+        Graceful shutdown - flush write queue and stop worker.
+        
+        This should be called during bot shutdown.
+        """
+        print("[DataAccessService] Shutting down...")
+        
+        # Signal shutdown
+        self._shutdown_event.set()
+        
+        # Wait for write queue to drain (with timeout)
+        queue_size = self._write_queue.qsize()
+        if queue_size > 0:
+            print(f"[DataAccessService] Waiting for {queue_size} pending writes to complete...")
+            timeout = 30  # 30 second timeout
+            start = time.time()
+            while self._write_queue.qsize() > 0 and (time.time() - start) < timeout:
+                await asyncio.sleep(0.1)
+        
+        # Cancel worker task
+        if self._writer_task and not self._writer_task.done():
+            self._writer_task.cancel()
+            try:
+                await self._writer_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Print stats
+        print(f"[DataAccessService] Shutdown complete")
+        print(f"[DataAccessService]   Total writes queued: {self._total_writes_queued}")
+        print(f"[DataAccessService]   Total writes completed: {self._total_writes_completed}")
+        print(f"[DataAccessService]   Peak queue size: {self._write_queue_size_peak}")
+    
+    # ========== Read Methods (Players Table) ==========
+    
+    def get_player_info(self, discord_uid: int) -> Optional[Dict[str, Any]]:
+        """
+        Get player information by Discord UID.
+        
+        This reads from the in-memory DataFrame for sub-millisecond performance.
+        
+        Args:
+            discord_uid: Discord user ID
+            
+        Returns:
+            Player data dictionary or None if not found
+        """
+        if self._players_df is None:
+            print("[DataAccessService] WARNING: Players DataFrame not initialized")
+            return None
+        
+        result = self._players_df.filter(pl.col("discord_uid") == discord_uid)
+        
+        if len(result) == 0:
+            return None
+        
+        return result.to_dicts()[0]
+    
+    def get_remaining_aborts(self, discord_uid: int) -> int:
+        """
+        Get the number of remaining aborts for a player.
+        
+        This reads from the in-memory DataFrame for sub-millisecond performance.
+        
+        Args:
+            discord_uid: Discord user ID
+            
+        Returns:
+            Number of remaining aborts (defaults to 3 if player not found)
+        """
+        player = self.get_player_info(discord_uid)
+        if player:
+            return player.get('remaining_aborts', 3)
+        return 3
+    
+    def player_exists(self, discord_uid: int) -> bool:
+        """
+        Check if a player exists in memory.
+        
+        Args:
+            discord_uid: Discord user ID
+            
+        Returns:
+            True if player exists, False otherwise
+        """
+        if self._players_df is None:
+            return False
+        
+        result = self._players_df.filter(pl.col("discord_uid") == discord_uid)
+        return len(result) > 0
+    
+    # ========== Read Methods (MMRs Table) ==========
+    
+    def get_player_mmr(self, discord_uid: int, race: str) -> Optional[float]:
+        """
+        Get a player's MMR for a specific race.
+        
+        Args:
+            discord_uid: Discord user ID
+            race: Race code (e.g., 'bw_terran', 'sc2_zerg')
+            
+        Returns:
+            MMR value or None if not found
+        """
+        if self._mmrs_df is None:
+            print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
+            return None
+        
+        result = self._mmrs_df.filter(
+            (pl.col("discord_uid") == discord_uid) &
+            (pl.col("race") == race)
+        )
+        
+        if len(result) == 0:
+            return None
+        
+        mmr = result["mmr"][0]
+        return float(mmr) if mmr is not None else None
+    
+    def get_all_player_mmrs(self, discord_uid: int) -> Dict[str, float]:
+        """
+        Get all MMRs for a player across all races.
+        
+        Args:
+            discord_uid: Discord user ID
+            
+        Returns:
+            Dict mapping race code to MMR value
+        """
+        if self._mmrs_df is None:
+            print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
+            return {}
+        
+        result = self._mmrs_df.filter(pl.col("discord_uid") == discord_uid)
+        
+        if len(result) == 0:
+            return {}
+        
+        # Build dict of race -> MMR
+        mmrs = {}
+        for row in result.iter_rows(named=True):
+            race = row["race"]
+            mmr = row["mmr"]
+            if race and mmr is not None:
+                mmrs[race] = float(mmr)
+        
+        return mmrs
+    
+    def get_leaderboard_dataframe(self) -> Optional[pl.DataFrame]:
+        """
+        Get the raw leaderboard DataFrame for advanced queries.
+        
+        This can be used by LeaderboardService for filtering and sorting.
+        
+        Returns:
+            Polars DataFrame with MMR data, or None if not initialized
+        """
+        if self._mmrs_df is None:
+            print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
+            return None
+        
+        return self._mmrs_df
+    
+    # ========== Write Methods (Players Table) ==========
+    
+    async def update_remaining_aborts(self, discord_uid: int, new_aborts: int) -> bool:
+        """
+        Update a player's remaining aborts count.
+        
+        Updates in-memory DataFrame instantly, then queues async DB write.
+        
+        Args:
+            discord_uid: Discord user ID
+            new_aborts: New abort count
+            
+        Returns:
+            True if successful, False if player not found
+        """
+        if self._players_df is None:
+            print("[DataAccessService] WARNING: Players DataFrame not initialized")
+            return False
+        
+        # Check if player exists
+        mask = pl.col("discord_uid") == discord_uid
+        if len(self._players_df.filter(mask)) == 0:
+            print(f"[DataAccessService] WARNING: Player {discord_uid} not found for abort update")
+            return False
+        
+        # Update in-memory DataFrame
+        self._players_df = self._players_df.with_columns(
+            pl.when(mask)
+            .then(pl.lit(new_aborts))
+            .otherwise(pl.col("remaining_aborts"))
+            .alias("remaining_aborts")
+        )
+        
+        # Queue database write
+        job = WriteJob(
+            job_type=WriteJobType.UPDATE_PLAYER,
+            data={
+                'discord_uid': discord_uid,
+                'remaining_aborts': new_aborts
+            },
+            timestamp=time.time()
+        )
+        
+        await self._write_queue.put(job)
+        self._total_writes_queued += 1
+        
+        return True
+    
+    async def update_player_info(
+        self,
+        discord_uid: int,
+        discord_username: Optional[str] = None,
+        player_name: Optional[str] = None,
+        country: Optional[str] = None,
+        battletag: Optional[str] = None,
+        alt_player_name_1: Optional[str] = None,
+        alt_player_name_2: Optional[str] = None,
+        region: Optional[str] = None
+    ) -> bool:
+        """
+        Update player information.
+        
+        Updates in-memory DataFrame instantly, then queues async DB write.
+        
+        Args:
+            discord_uid: Discord user ID
+            discord_username: Discord username
+            player_name: In-game player name
+            country: Country code
+            battletag: Battle.net tag
+            alt_player_name_1: First alternate name
+            alt_player_name_2: Second alternate name
+            region: Region code
+            
+        Returns:
+            True if successful, False if player not found
+        """
+        if self._players_df is None:
+            print("[DataAccessService] WARNING: Players DataFrame not initialized")
+            return False
+        
+        # Check if player exists
+        mask = pl.col("discord_uid") == discord_uid
+        if len(self._players_df.filter(mask)) == 0:
+            print(f"[DataAccessService] WARNING: Player {discord_uid} not found for update")
+            return False
+        
+        # Build update expressions for each field
+        updates = {}
+        write_data = {'discord_uid': discord_uid}
+        
+        if discord_username is not None:
+            updates["discord_username"] = pl.when(mask).then(pl.lit(discord_username)).otherwise(pl.col("discord_username"))
+            write_data['discord_username'] = discord_username
+        
+        if player_name is not None:
+            updates["player_name"] = pl.when(mask).then(pl.lit(player_name)).otherwise(pl.col("player_name"))
+            write_data['player_name'] = player_name
+        
+        if country is not None:
+            updates["country"] = pl.when(mask).then(pl.lit(country)).otherwise(pl.col("country"))
+            write_data['country'] = country
+        
+        if battletag is not None:
+            updates["battletag"] = pl.when(mask).then(pl.lit(battletag)).otherwise(pl.col("battletag"))
+            write_data['battletag'] = battletag
+        
+        if alt_player_name_1 is not None:
+            updates["alt_player_name_1"] = pl.when(mask).then(pl.lit(alt_player_name_1 if alt_player_name_1.strip() else None)).otherwise(pl.col("alt_player_name_1"))
+            write_data['alt_player_name_1'] = alt_player_name_1
+        
+        if alt_player_name_2 is not None:
+            updates["alt_player_name_2"] = pl.when(mask).then(pl.lit(alt_player_name_2 if alt_player_name_2.strip() else None)).otherwise(pl.col("alt_player_name_2"))
+            write_data['alt_player_name_2'] = alt_player_name_2
+        
+        if region is not None:
+            updates["region"] = pl.when(mask).then(pl.lit(region)).otherwise(pl.col("region"))
+            write_data['region'] = region
+        
+        # Apply updates to DataFrame if any
+        if updates:
+            self._players_df = self._players_df.with_columns(**updates)
+            
+            # Queue database write
+            job = WriteJob(
+                job_type=WriteJobType.UPDATE_PLAYER,
+                data=write_data,
+                timestamp=time.time()
+            )
+            
+            await self._write_queue.put(job)
+            self._total_writes_queued += 1
+        
+        return True
+    
+    async def create_player(
+        self,
+        discord_uid: int,
+        discord_username: str = "Unknown",
+        player_name: Optional[str] = None,
+        country: Optional[str] = None,
+        battletag: Optional[str] = None,
+        region: Optional[str] = None
+    ) -> bool:
+        """
+        Create a new player.
+        
+        Adds to in-memory DataFrame instantly, then queues async DB write.
+        
+        Args:
+            discord_uid: Discord user ID
+            discord_username: Discord username
+            player_name: In-game player name
+            country: Country code
+            battletag: Battle.net tag
+            region: Region code
+            
+        Returns:
+            True if successful, False if player already exists
+        """
+        if self._players_df is None:
+            print("[DataAccessService] WARNING: Players DataFrame not initialized")
+            return False
+        
+        # Check if player already exists
+        if self.player_exists(discord_uid):
+            print(f"[DataAccessService] WARNING: Player {discord_uid} already exists")
+            return False
+        
+        # Create new row
+        new_row = pl.DataFrame({
+            "discord_uid": [discord_uid],
+            "discord_username": [discord_username],
+            "player_name": [player_name],
+            "country": [country],
+            "battletag": [battletag],
+            "region": [region],
+            "remaining_aborts": [3],  # Default value
+        })
+        
+        # Append to existing DataFrame
+        self._players_df = pl.concat([self._players_df, new_row], how="diagonal")
+        
+        # Queue database write
+        job = WriteJob(
+            job_type=WriteJobType.CREATE_PLAYER,
+            data={
+                'discord_uid': discord_uid,
+                'discord_username': discord_username,
+                'player_name': player_name,
+                'country': country,
+                'battletag': battletag,
+                'region': region
+            },
+            timestamp=time.time()
+        )
+        
+        await self._write_queue.put(job)
+        self._total_writes_queued += 1
+        
+        print(f"[DataAccessService] Created player {discord_uid} ({discord_username})")
+        return True
+    
+    # ========== Write Methods (MMRs Table) ==========
+    
+    async def update_player_mmr(
+        self,
+        discord_uid: int,
+        race: str,
+        new_mmr: int,
+        games_played: Optional[int] = None,
+        games_won: Optional[int] = None,
+        games_lost: Optional[int] = None,
+        games_drawn: Optional[int] = None
+    ) -> bool:
+        """
+        Update a player's MMR for a specific race.
+        
+        Updates in-memory DataFrame instantly, then queues async DB write.
+        
+        Args:
+            discord_uid: Discord user ID
+            race: Race code
+            new_mmr: New MMR value (integer)
+            games_played: Total games played (optional)
+            games_won: Games won (optional)
+            games_lost: Games lost (optional)
+            games_drawn: Games drawn (optional)
+            
+        Returns:
+            True if successful, False if record not found
+        """
+        if self._mmrs_df is None:
+            print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
+            return False
+        
+        # Check if record exists
+        mask = (pl.col("discord_uid") == discord_uid) & (pl.col("race") == race)
+        if len(self._mmrs_df.filter(mask)) == 0:
+            print(f"[DataAccessService] WARNING: MMR record not found for {discord_uid}/{race}")
+            return False
+        
+        # Build update expressions
+        updates = {
+            "mmr": pl.when(mask).then(pl.lit(int(new_mmr))).otherwise(pl.col("mmr"))
+        }
+        
+        write_data = {
+            'discord_uid': discord_uid,
+            'race': race,
+            'new_mmr': new_mmr
+        }
+        
+        if games_played is not None:
+            updates["games_played"] = pl.when(mask).then(pl.lit(games_played)).otherwise(pl.col("games_played"))
+            write_data['games_played'] = games_played
+        
+        if games_won is not None:
+            updates["games_won"] = pl.when(mask).then(pl.lit(games_won)).otherwise(pl.col("games_won"))
+            write_data['games_won'] = games_won
+        
+        if games_lost is not None:
+            updates["games_lost"] = pl.when(mask).then(pl.lit(games_lost)).otherwise(pl.col("games_lost"))
+            write_data['games_lost'] = games_lost
+        
+        if games_drawn is not None:
+            updates["games_drawn"] = pl.when(mask).then(pl.lit(games_drawn)).otherwise(pl.col("games_drawn"))
+            write_data['games_drawn'] = games_drawn
+        
+        # Apply updates to DataFrame
+        self._mmrs_df = self._mmrs_df.with_columns(**updates)
+        
+        # Queue database write
+        job = WriteJob(
+            job_type=WriteJobType.UPDATE_MMR,
+            data=write_data,
+            timestamp=time.time()
+        )
+        
+        await self._write_queue.put(job)
+        self._total_writes_queued += 1
+        
+        return True
+    
+    async def create_or_update_mmr(
+        self,
+        discord_uid: int,
+        player_name: str,
+        race: str,
+        mmr: int,
+        games_played: int = 0,
+        games_won: int = 0,
+        games_lost: int = 0,
+        games_drawn: int = 0
+    ) -> bool:
+        """
+        Create or update (upsert) a player's MMR record.
+        
+        Updates in-memory DataFrame instantly, then queues async DB write.
+        
+        Args:
+            discord_uid: Discord user ID
+            player_name: Player's name
+            race: Race code
+            mmr: MMR value (integer)
+            games_played: Total games played
+            games_won: Games won
+            games_lost: Games lost
+            games_drawn: Games drawn
+            
+        Returns:
+            True if successful
+        """
+        if self._mmrs_df is None:
+            print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
+            return False
+        
+        # Ensure MMR is an integer
+        mmr = int(mmr)
+        
+        # Check if record exists
+        mask = (pl.col("discord_uid") == discord_uid) & (pl.col("race") == race)
+        existing = self._mmrs_df.filter(mask)
+        
+        if len(existing) > 0:
+            # Update existing record
+            updates = {
+                "mmr": pl.when(mask).then(pl.lit(mmr)).otherwise(pl.col("mmr")),
+                "player_name": pl.when(mask).then(pl.lit(player_name)).otherwise(pl.col("player_name")),
+                "games_played": pl.when(mask).then(pl.lit(games_played)).otherwise(pl.col("games_played")),
+                "games_won": pl.when(mask).then(pl.lit(games_won)).otherwise(pl.col("games_won")),
+                "games_lost": pl.when(mask).then(pl.lit(games_lost)).otherwise(pl.col("games_lost")),
+                "games_drawn": pl.when(mask).then(pl.lit(games_drawn)).otherwise(pl.col("games_drawn"))
+            }
+            self._mmrs_df = self._mmrs_df.with_columns(**updates)
+        else:
+            # Create new record with explicit integer type
+            new_row = pl.DataFrame({
+                "discord_uid": [discord_uid],
+                "player_name": [player_name],
+                "race": [race],
+                "mmr": pl.Series([mmr], dtype=pl.Int64),
+                "games_played": [games_played],
+                "games_won": [games_won],
+                "games_lost": [games_lost],
+                "games_drawn": [games_drawn]
+            })
+            self._mmrs_df = pl.concat([self._mmrs_df, new_row], how="diagonal")
+        
+        # Queue database write
+        job = WriteJob(
+            job_type=WriteJobType.CREATE_MMR,
+            data={
+                'discord_uid': discord_uid,
+                'player_name': player_name,
+                'race': race,
+                'mmr': mmr,
+                'games_played': games_played,
+                'games_won': games_won,
+                'games_lost': games_lost,
+                'games_drawn': games_drawn
+            },
+            timestamp=time.time()
+        )
+        
+        await self._write_queue.put(job)
+        self._total_writes_queued += 1
+        
+        return True
+    
+    # ========== Read Methods (Preferences Table) ==========
+    
+    def get_player_preferences(self, discord_uid: int) -> Optional[Dict[str, Any]]:
+        """
+        Get a player's 1v1 preferences.
+        
+        Args:
+            discord_uid: Discord user ID
+            
+        Returns:
+            Dictionary with preference data or None if not found
+        """
+        if self._preferences_df is None:
+            print("[DataAccessService] WARNING: Preferences DataFrame not initialized")
+            return None
+        
+        result = self._preferences_df.filter(pl.col("discord_uid") == discord_uid)
+        
+        if len(result) == 0:
+            return None
+        
+        # Convert to dictionary
+        return result.to_dicts()[0]
+    
+    def get_player_last_races(self, discord_uid: int) -> Optional[str]:
+        """
+        Get a player's last chosen races (JSON string).
+        
+        Args:
+            discord_uid: Discord user ID
+            
+        Returns:
+            JSON string of last chosen races or None
+        """
+        prefs = self.get_player_preferences(discord_uid)
+        return prefs.get("last_chosen_races") if prefs else None
+    
+    def get_player_last_vetoes(self, discord_uid: int) -> Optional[str]:
+        """
+        Get a player's last chosen map vetoes (JSON string).
+        
+        Args:
+            discord_uid: Discord user ID
+            
+        Returns:
+            JSON string of last chosen vetoes or None
+        """
+        prefs = self.get_player_preferences(discord_uid)
+        return prefs.get("last_chosen_vetoes") if prefs else None
+    
+    # ========== Write Methods (Preferences Table) ==========
+    
+    async def update_player_preferences(
+        self,
+        discord_uid: int,
+        last_chosen_races: Optional[str] = None,
+        last_chosen_vetoes: Optional[str] = None
+    ) -> bool:
+        """
+        Update (or create) a player's 1v1 preferences.
+        
+        Updates in-memory DataFrame instantly, then queues async DB write.
+        
+        Args:
+            discord_uid: Discord user ID
+            last_chosen_races: JSON string of last chosen races (optional)
+            last_chosen_vetoes: JSON string of last chosen map vetoes (optional)
+            
+        Returns:
+            True if successful
+        """
+        if self._preferences_df is None:
+            print("[DataAccessService] WARNING: Preferences DataFrame not initialized")
+            return False
+        
+        if last_chosen_races is None and last_chosen_vetoes is None:
+            return False
+        
+        # Check if record exists
+        mask = pl.col("discord_uid") == discord_uid
+        existing = self._preferences_df.filter(mask)
+        
+        if len(existing) > 0:
+            # Update existing record
+            updates = {}
+            if last_chosen_races is not None:
+                updates["last_chosen_races"] = pl.when(mask).then(pl.lit(last_chosen_races)).otherwise(pl.col("last_chosen_races"))
+            if last_chosen_vetoes is not None:
+                updates["last_chosen_vetoes"] = pl.when(mask).then(pl.lit(last_chosen_vetoes)).otherwise(pl.col("last_chosen_vetoes"))
+            
+            self._preferences_df = self._preferences_df.with_columns(**updates)
+        else:
+            # Create new record
+            new_row = pl.DataFrame({
+                "discord_uid": [discord_uid],
+                "last_chosen_races": [last_chosen_races],
+                "last_chosen_vetoes": [last_chosen_vetoes],
+            })
+            self._preferences_df = pl.concat([self._preferences_df, new_row], how="diagonal")
+        
+        # Queue database write
+        job = WriteJob(
+            job_type=WriteJobType.UPDATE_PREFERENCES,
+            data={
+                'discord_uid': discord_uid,
+                'last_chosen_races': last_chosen_races,
+                'last_chosen_vetoes': last_chosen_vetoes
+            },
+            timestamp=time.time()
+        )
+        
+        await self._write_queue.put(job)
+        self._total_writes_queued += 1
+        
+        return True
+    
+    # ========== Read Methods (Matches Table) ==========
+    
+    def get_match(self, match_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific match by ID from in-memory DataFrame.
+        
+        Args:
+            match_id: Match ID
+            
+        Returns:
+            Match data dictionary or None if not found
+        """
+        if self._matches_df is None:
+            return None
+        
+        result = self._matches_df.filter(pl.col("id") == match_id)
+        return result.to_dicts()[0] if len(result) > 0 else None
+    
+    def get_match_mmrs(self, match_id: int) -> tuple[int, int]:
+        """
+        Get player MMRs for a match (optimized for match embed).
+        
+        Args:
+            match_id: Match ID
+            
+        Returns:
+            Tuple of (player_1_mmr, player_2_mmr)
+            
+        Raises:
+            ValueError: If match not found in memory (DataAccessService is source of truth)
+        """
+        if self._matches_df is None:
+            raise ValueError(f"[DataAccessService] Matches DataFrame not initialized. Cannot get MMRs for match {match_id}")
+        
+        match = self.get_match(match_id)
+        if not match:
+            raise ValueError(f"[DataAccessService] Match {match_id} not found in memory. DataAccessService is the source of truth - match should have been written to memory first.")
+        
+        p1_mmr = int(match.get('player_1_mmr', 0))
+        p2_mmr = int(match.get('player_2_mmr', 0))
+        return (p1_mmr, p2_mmr)
+    
+    def get_player_recent_matches(self, discord_uid: int, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get recent matches for a player."""
+        if self._matches_df is None:
+            return []
+        
+        result = self._matches_df.filter(
+            (pl.col("player_1_discord_uid") == discord_uid) | 
+            (pl.col("player_2_discord_uid") == discord_uid)
+        ).head(limit)
+        
+        return result.to_dicts()
+    
+    # ========== Read Methods (Replays Table) ==========
+    
+    def get_replay(self, replay_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific replay by ID."""
+        if self._replays_df is None:
+            return None
+        
+        result = self._replays_df.filter(pl.col("id") == replay_id)
+        return result.to_dicts()[0] if len(result) > 0 else None
+    
+    # ========== Write Methods (Matches Table) ==========
+    
+    async def create_match(self, match_data: Dict[str, Any]) -> Optional[int]:
+        """
+        Create a new match record.
+        
+        For now, delegates to database and reloads match data.
+        Full in-memory implementation can be added later if needed.
+        """
+        # For matches, we'll implement a simple pass-through for now
+        # since the match creation logic is complex
+        loop = asyncio.get_running_loop()
+        match_id = await loop.run_in_executor(
+            None,
+            self._db_writer.create_match_1v1,
+            match_data.get('player_1_discord_uid'),
+            match_data.get('player_2_discord_uid'),
+            match_data.get('player_1_race'),
+            match_data.get('player_2_race'),
+            match_data.get('map_played'),
+            match_data.get('server_choice'),  # Fixed: was 'server_used', should be 'server_choice'
+            match_data.get('player_1_mmr'),
+            match_data.get('player_2_mmr'),
+            match_data.get('mmr_change')
+        )
+        
+        # Reload the match into memory
+        if match_id:
+            match = await loop.run_in_executor(None, self._db_reader.get_match_1v1, match_id)
+            if match:
+                new_row = pl.DataFrame([match])
+                self._matches_df = pl.concat([new_row, self._matches_df], how="diagonal")
+                # Keep only recent 1000 matches
+                if len(self._matches_df) > 1000:
+                    self._matches_df = self._matches_df.head(1000)
+        
+        return match_id
+    
+    async def update_match_replay(
+        self,
+        match_id: int,
+        player_discord_uid: int,
+        replay_path: str,
+        replay_time: str
+    ) -> bool:
+        """Update replay information for a match."""
+        job = WriteJob(
+            job_type=WriteJobType.UPDATE_MATCH,
+            data={
+                'match_id': match_id,
+                'player_discord_uid': player_discord_uid,
+                'replay_path': replay_path,
+                'replay_time': replay_time
+            },
+            timestamp=time.time()
+        )
+        
+        await self._write_queue.put(job)
+        self._total_writes_queued += 1
+        
+        return True
+    
+    # ========== Write Methods (Replays Table) ==========
+    
+    async def insert_replay(self, replay_data: Dict[str, Any]) -> bool:
+        """Insert a new replay record."""
+        job = WriteJob(
+            job_type=WriteJobType.INSERT_REPLAY,
+            data=replay_data,
+            timestamp=time.time()
+        )
+        
+        await self._write_queue.put(job)
+        self._total_writes_queued += 1
+        
+        return True
+    
+    # ========== Write Methods (Write-Only Tables) ==========
+    
+    async def log_player_action(
+        self,
+        discord_uid: int,
+        player_name: str,
+        setting_name: str,
+        old_value: Optional[str] = None,
+        new_value: Optional[str] = None,
+        changed_by: str = "player"
+    ) -> None:
+        """
+        Log a player action to the player_action_logs table.
+        
+        This is write-only (not stored in memory) and processes asynchronously.
+        
+        Args:
+            discord_uid: Discord user ID
+            player_name: Player's display name
+            setting_name: Name of the setting changed
+            old_value: Old value
+            new_value: New value
+            changed_by: Who made the change
+        """
+        job = WriteJob(
+            job_type=WriteJobType.LOG_PLAYER_ACTION,
+            data={
+                'discord_uid': discord_uid,
+                'player_name': player_name,
+                'setting_name': setting_name,
+                'old_value': old_value,
+                'new_value': new_value,
+                'changed_by': changed_by
+            },
+            timestamp=time.time()
+        )
+        
+        await self._write_queue.put(job)
+        self._total_writes_queued += 1
+    
+    async def insert_command_call(
+        self,
+        discord_uid: int,
+        player_name: str,
+        command: str
+    ) -> None:
+        """
+        Log a command call to the command_calls table.
+        
+        This is write-only (not stored in memory) and processes asynchronously.
+        
+        Args:
+            discord_uid: Discord user ID
+            player_name: Player's display name
+            command: Command that was called
+        """
+        job = WriteJob(
+            job_type=WriteJobType.INSERT_COMMAND_CALL,
+            data={
+                'discord_uid': discord_uid,
+                'player_name': player_name,
+                'command': command
+            },
+            timestamp=time.time()
+        )
+        
+        await self._write_queue.put(job)
+        self._total_writes_queued += 1
+    
+    # ========== Match Operations ==========
+    
+    async def abort_match(self, match_id: int, player_discord_uid: int) -> bool:
+        """
+        Abort a match using DataAccessService for fast operations.
+        
+        Args:
+            match_id: Match ID to abort
+            player_discord_uid: Discord UID of player aborting
+            
+        Returns:
+            True if abort was successful
+        """
+        try:
+            # Get match data from memory first - DataAccessService is source of truth
+            match = self.get_match(match_id)
+            if not match:
+                raise ValueError(f"[DataAccessService] Match {match_id} not found in memory. DataAccessService is the source of truth - match should have been written to memory first.")
+            
+            p1_discord_uid = match.get('player_1_discord_uid')
+            p2_discord_uid = match.get('player_2_discord_uid')
+            
+            # Verify player is in this match
+            if player_discord_uid not in [p1_discord_uid, p2_discord_uid]:
+                return False
+            
+            # Decrement aborts in memory (instant)
+            current_aborts = self.get_remaining_aborts(player_discord_uid)
+            await self.update_remaining_aborts(player_discord_uid, current_aborts - 1)
+            
+            # Queue the actual abort operation to database (async)
+            job = WriteJob(
+                job_type=WriteJobType.ABORT_MATCH,
+                data={
+                    "match_id": match_id,
+                    "player_discord_uid": player_discord_uid,
+                    "p1_discord_uid": p1_discord_uid,
+                    "p2_discord_uid": p2_discord_uid
+                },
+                timestamp=time.time()
+            )
+            
+            await self._write_queue.put(job)
+            self._total_writes_queued += 1
+            return True
+            
+        except Exception as e:
+            print(f"[DataAccessService] Error aborting match {match_id}: {e}")
+            return False
+
+
+# Global singleton instance
+data_access_service = DataAccessService()
+

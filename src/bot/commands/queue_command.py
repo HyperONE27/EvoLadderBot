@@ -180,9 +180,11 @@ async def queue_command(interaction: discord.Interaction):
     
     flow.checkpoint("check_existing_queue_complete")
     
-    # Get user's saved preferences from database
+    # Get user's saved preferences from DataAccessService (in-memory, instant)
     flow.checkpoint("load_preferences_start")
-    user_preferences = db_reader.get_preferences_1v1(interaction.user.id)
+    from src.backend.services.data_access_service import DataAccessService
+    data_service = DataAccessService()
+    user_preferences = data_service.get_player_preferences(interaction.user.id)
     
     if user_preferences:
         # Parse saved preferences from database
@@ -456,11 +458,25 @@ class QueueView(discord.ui.View):
 
         def _write_preferences() -> None:
             try:
-                db_writer.update_preferences_1v1(
-                    discord_uid=self.discord_user_id,
-                    last_chosen_races=races_payload,
-                    last_chosen_vetoes=vetoes_payload,
-                )
+                # Use DataAccessService for async write
+                import asyncio
+                from src.backend.services.data_access_service import DataAccessService
+                data_service = DataAccessService()
+                
+                # Run async update in sync context
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(data_service.update_player_preferences(
+                        discord_uid=self.discord_user_id,
+                        last_chosen_races=races_payload,
+                        last_chosen_vetoes=vetoes_payload
+                    ))
+                else:
+                    loop.run_until_complete(data_service.update_player_preferences(
+                        discord_uid=self.discord_user_id,
+                        last_chosen_races=races_payload,
+                        last_chosen_vetoes=vetoes_payload
+                    ))
             except Exception as exc:  # pragma: no cover — log and continue
                 logger.error("Failed to update 1v1 preferences for user %s: %s", self.discord_user_id, exc)
 
@@ -905,28 +921,22 @@ class MatchFoundView(discord.ui.View):
         from src.backend.services.app_context import leaderboard_service
         start_time = time.perf_counter()
         
-        # Get player 1 info - try cache first (MUCH faster: <5ms vs 500-800ms)
+        # Get player 1 info from DataAccessService (sub-millisecond, in-memory)
         checkpoint1 = time.perf_counter()
-        p1_info = leaderboard_service.get_player_info_from_cache(self.match_result.player_1_discord_id)
-        if p1_info is None:
-            # Cache miss - fallback to DB (rare: only for brand new players)
-            print(f"[Cache MISS] Player info not in cache for {self.match_result.player_1_discord_id}, falling back to DB")
-            p1_info = db_reader.get_player_by_discord_uid(self.match_result.player_1_discord_id)
+        from src.backend.services.data_access_service import DataAccessService
+        data_service = DataAccessService()
+        p1_info = data_service.get_player_info(self.match_result.player_1_discord_id)
         
         p1_name = p1_info.get('player_name') if p1_info else None
         p1_country = p1_info.get('country') if p1_info else None
         p1_display_name = p1_name if p1_name else str(self.match_result.player_1_discord_id)
         p1_flag = get_flag_emote(p1_country) if p1_country else get_flag_emote("XX")
         
-        # Get player 2 info - try cache first
-        p2_info = leaderboard_service.get_player_info_from_cache(self.match_result.player_2_discord_id)
-        if p2_info is None:
-            # Cache miss - fallback to DB
-            print(f"[Cache MISS] Player info not in cache for {self.match_result.player_2_discord_id}, falling back to DB")
-            p2_info = db_reader.get_player_by_discord_uid(self.match_result.player_2_discord_id)
+        # Get player 2 info from DataAccessService (sub-millisecond, in-memory)
+        p2_info = data_service.get_player_info(self.match_result.player_2_discord_id)
         
         checkpoint2 = time.perf_counter()
-        print(f"  [MatchEmbed PERF] Player info lookup: {(checkpoint2-checkpoint1)*1000:.2f}ms")
+        print(f"⏱️ [MatchEmbed PERF] Player info lookup: {(checkpoint2-checkpoint1)*1000:.2f}ms")
         
         p2_name = p2_info.get('player_name') if p2_info else None
         p2_country = p2_info.get('country') if p2_info else None
@@ -955,10 +965,8 @@ class MatchFoundView(discord.ui.View):
         p2_rank_emote = get_rank_emote(p2_rank)
         
         checkpoint5 = time.perf_counter()
-        # Get MMR values from database
-        match_data = db_reader.get_match_1v1(self.match_result.match_id)
-        p1_mmr = int(match_data.get('player_1_mmr', 0)) if match_data else 0
-        p2_mmr = int(match_data.get('player_2_mmr', 0)) if match_data else 0
+        # Get MMR values from DataAccessService (in-memory, sub-millisecond)
+        p1_mmr, p2_mmr = data_service.get_match_mmrs(self.match_result.match_id)
         checkpoint6 = time.perf_counter()
         print(f"  [MatchEmbed PERF] Match data lookup: {(checkpoint6-checkpoint5)*1000:.2f}ms")
         
@@ -1049,10 +1057,15 @@ class MatchFoundView(discord.ui.View):
             result_display = "Conflict"
             mmr_display = "- MMR Awarded: :x: Report Conflict Detected"
         elif self.match_result.match_result == 'aborted':
-            # Pull fresh data so we know who initiated the abort
-            match_data = db_reader.get_match_1v1(self.match_result.match_id)
-            p1_report = match_data.get("player_1_report") if match_data else None
-            p2_report = match_data.get("player_2_report") if match_data else None
+            # Get match data from DataAccessService (in-memory, instant)
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+            match_data = data_service.get_match(self.match_result.match_id)
+            if not match_data:
+                raise ValueError(f"[MatchFoundView] Match {self.match_result.match_id} not found in DataAccessService memory")
+            
+            p1_report = match_data.get("player_1_report")
+            p2_report = match_data.get("player_2_report")
 
             if p1_report == -3:
                 aborted_by = p1_display_name
@@ -1329,12 +1342,15 @@ class MatchFoundView(discord.ui.View):
         if not self.last_interaction:
             return
 
-        match_data = db_reader.get_match_1v1(self.match_result.match_id)
+        # Get match data from DataAccessService (in-memory, instant)
+        from src.backend.services.data_access_service import DataAccessService
+        data_service = DataAccessService()
+        match_data = data_service.get_match(self.match_result.match_id)
         if not match_data:
-            return
+            raise ValueError(f"[MatchFoundView] Match {self.match_result.match_id} not found in DataAccessService memory")
 
-        p1_info = db_reader.get_player_by_discord_uid(match_data['player_1_discord_uid'])
-        p2_info = db_reader.get_player_by_discord_uid(match_data['player_2_discord_uid'])
+        p1_info = data_service.get_player_info(match_data['player_1_discord_uid'])
+        p2_info = data_service.get_player_info(match_data['player_2_discord_uid'])
 
         p1_name = p1_info.get('player_name') if p1_info else str(match_data['player_1_discord_uid'])
         p2_name = p2_info.get('player_name') if p2_info else str(match_data['player_2_discord_uid'])
@@ -1563,11 +1579,13 @@ class MatchResultSelect(discord.ui.Select):
         self.is_player1 = is_player1
         self.parent_view = parent_view
         
-        # Get player names from database
-        p1_info = db_reader.get_player_by_discord_uid(match_result.player_1_discord_id)
+        # Get player names from DataAccessService (in-memory, instant)
+        from src.backend.services.data_access_service import DataAccessService
+        data_service = DataAccessService()
+        p1_info = data_service.get_player_info(match_result.player_1_discord_id)
         self.p1_name = p1_info.get('player_name') if p1_info else str(match_result.player_1_user_id)
         
-        p2_info = db_reader.get_player_by_discord_uid(match_result.player_2_discord_id)
+        p2_info = data_service.get_player_info(match_result.player_2_discord_id)
         self.p2_name = p2_info.get('player_name') if p2_info else str(match_result.player_2_user_id)
         
         # Create options for the dropdown
@@ -1972,8 +1990,8 @@ async def on_message(message: discord.Message, bot=None):
             return
         
         flow.checkpoint("store_replay_start")
-        # Use the new method that accepts pre-parsed data
-        result = replay_service.store_upload_from_parsed_dict(
+        # Use the async method for non-blocking database writes
+        result = await replay_service.store_upload_from_parsed_dict_async(
             match_view.match_result.match_id,
             message.author.id,
             replay_bytes,

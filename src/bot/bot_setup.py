@@ -21,6 +21,7 @@ from src.backend.db.test_connection_startup import test_database_connection
 from src.backend.services.app_context import command_guard_service, db_writer, leaderboard_service, ranking_service
 from src.backend.services.cache_service import static_cache
 from src.backend.services.command_guard_service import DMOnlyError
+from src.backend.services.data_access_service import DataAccessService
 from src.backend.services.memory_monitor import initialize_memory_monitor, log_memory
 from src.backend.services.performance_service import FlowTracker, performance_monitor
 from src.backend.services.process_pool_health import set_bot_instance
@@ -59,7 +60,7 @@ class EvoLadderBot(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.process_pool: ProcessPoolExecutor = None
-        # self._leaderboard_cache_task = None  # DISABLED: No longer using periodic refresh
+        # Leaderboard cache task removed - DataAccessService handles this now
         self._process_pool_monitor_task = None
         self._memory_monitor_task = None
         self._process_pool_lock = asyncio.Lock()
@@ -109,14 +110,9 @@ class EvoLadderBot(commands.Bot):
             command: Command name
         """
         try:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None,
-                db_writer.insert_command_call,
-                discord_uid,
-                player_name,
-                command
-            )
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+            await data_service.insert_command_call(discord_uid, player_name, command)
         except Exception as e:
             # Log error but don't fail the command
             logger.error(f"Failed to log command {command} for user {discord_uid}: {e}")
@@ -235,16 +231,7 @@ class EvoLadderBot(commands.Bot):
             logger.info("[Process Pool] Attempting to restart process pool...")
             return await self._restart_process_pool()
     
-    # DISABLED: Periodic leaderboard cache refresh task removed for resource optimization
-    # Cache will now be invalidated only when MMR changes occur
-    # async def _refresh_leaderboard_cache_task(self):
-    #     """
-    #     DISABLED: Background task that periodically refreshes the leaderboard cache.
-    #     
-    #     This was removed to reduce idle CPU usage. Cache is now invalidated
-    #     only when MMR changes occur, making it more efficient.
-    #     """
-    #     pass
+    # _refresh_leaderboard_cache_task() removed - DataAccessService handles this now
     
     async def _memory_monitor_task_loop(self):
         """
@@ -289,17 +276,7 @@ class EvoLadderBot(commands.Bot):
         self._memory_monitor_task = asyncio.create_task(self._memory_monitor_task_loop())
         print("[Background Tasks] Memory monitor task started")
 
-        # Start ranking service background refresh
-        asyncio.create_task(ranking_service.start_background_refresh(interval_seconds=300))
-        print("[Background Tasks] Ranking service refresh task started")
-        
-        # DISABLED: Process pool monitor task removed for resource optimization
-        # Process pool health is now checked on-demand when work is submitted
-        
-        # DISABLED: Leaderboard cache refresh task removed for resource optimization
-        # Cache will be invalidated only when MMR changes occur
-        # self._leaderboard_cache_task = asyncio.create_task(self._refresh_leaderboard_cache_task())
-        # print("[Background Tasks] Leaderboard cache refresh task started")
+        # Background refresh tasks removed - DataAccessService handles this now
     
     def stop_background_tasks(self):
         """Stop all background tasks for the bot."""
@@ -310,14 +287,7 @@ class EvoLadderBot(commands.Bot):
             self._memory_monitor_task.cancel()
             print("[Background Tasks] Memory monitor task stopped")
         
-        # Stop ranking service background refresh
-        ranking_service.stop_background_refresh()
-        
-        # DISABLED: Process pool monitor task removed for resource optimization
-        # Process pool health is now checked on-demand when work is submitted
-        
-        # DISABLED: Leaderboard cache refresh task removed for resource optimization
-        # Cache will be invalidated only when MMR changes occur
+        # Background refresh tasks removed - DataAccessService handles this now
 
 
 def initialize_bot_resources(bot: EvoLadderBot) -> None:
@@ -383,7 +353,25 @@ def initialize_bot_resources(bot: EvoLadderBot) -> None:
     set_bot_instance(bot)
     print("[INFO] Process pool health checker registered")
     
-    # 7. Performance monitoring is active
+    # 7. Initialize DataAccessService
+    print("[Startup] Initializing DataAccessService...")
+    try:
+        data_access_service = DataAccessService()
+        # Run async initialization in sync context by creating an event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(data_access_service.initialize_async())
+        loop.close()
+        log_memory("After DataAccessService init")
+        print("[INFO] DataAccessService initialized successfully")
+    except Exception as e:
+        print(f"\n[FATAL] Failed to initialize DataAccessService: {e}")
+        import traceback
+        traceback.print_exc()
+        print("[FATAL] Bot cannot start without in-memory data access layer.")
+        sys.exit(1)
+    
+    # 8. Performance monitoring is active
     print("[INFO] Performance monitoring ACTIVE - All commands will be tracked")
     print("[INFO] Performance thresholds configured:")
     for cmd, threshold in performance_monitor.alert_thresholds.items():
@@ -396,8 +384,9 @@ def shutdown_bot_resources(bot: EvoLadderBot) -> None:
     
     This should be called when the bot is shutting down. It cleans up:
     1. Background tasks
-    2. Database connection pool
-    3. Process pool for CPU-bound tasks
+    2. DataAccessService
+    3. Database connection pool
+    4. Process pool for CPU-bound tasks
     
     Args:
         bot: The EvoLadderBot instance to clean up
@@ -407,10 +396,21 @@ def shutdown_bot_resources(bot: EvoLadderBot) -> None:
     # 1. Stop Background Tasks
     bot.stop_background_tasks()
     
-    # 2. Close Database Connection Pool
+    # 2. Shutdown DataAccessService
+    try:
+        data_access_service = DataAccessService()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(data_access_service.shutdown())
+        loop.close()
+        print("[Shutdown] DataAccessService shutdown complete.")
+    except Exception as e:
+        print(f"[Shutdown] Error shutting down DataAccessService: {e}")
+    
+    # 3. Close Database Connection Pool
     close_pool()
     
-    # 3. Shutdown Process Pool
+    # 4. Shutdown Process Pool
     if bot.process_pool:
         print("[Shutdown] Shutting down process pool...")
         bot.process_pool.shutdown(wait=True)

@@ -128,10 +128,12 @@ class MatchCompletionService:
                     return True
                     
                 print(f"🔍 CHECK: Manual completion check for match {match_id}")
-                match_data = self.db_reader.get_match_1v1(match_id)
+                # Get match data from DataAccessService (in-memory, instant)
+                from src.backend.services.data_access_service import DataAccessService
+                data_service = DataAccessService()
+                match_data = data_service.get_match(match_id)
                 if not match_data:
-                    print(f"❌ Match {match_id} not found for completion check")
-                    return
+                    raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
                 
                 # Check if both players have reported
                 p1_report = match_data.get('player_1_report')
@@ -194,10 +196,12 @@ class MatchCompletionService:
                 # Check if match is complete
                 lock = self._get_lock(match_id)
                 async with lock:
-                    match_data = self.db_reader.get_match_1v1(match_id)
+                    # Get match data from DataAccessService (in-memory, instant)
+                    from src.backend.services.data_access_service import DataAccessService
+                    data_service = DataAccessService()
+                    match_data = data_service.get_match(match_id)
                     if not match_data:
-                        print(f"❌ Match {match_id} not found, stopping monitoring")
-                        break
+                        raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
                     
                     # Check if both players have reported
                     p1_report = match_data.get('player_1_report')
@@ -377,8 +381,10 @@ class MatchCompletionService:
     async def _release_queue_lock_for_conflict_match(self, match_id: int):
         """Release queue lock for both players when a match has a conflict."""
         try:
-            # Get match data to find both players
-            match_data = self.db_reader.get_match_1v1(match_id)
+            # Get match data from DataAccessService (in-memory, instant)
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+            match_data = data_service.get_match(match_id)
             if match_data:
                 p1_discord_uid = match_data.get('player_1_discord_uid')
                 p2_discord_uid = match_data.get('player_2_discord_uid')
@@ -402,14 +408,17 @@ class MatchCompletionService:
         and calculates MMR changes.
         """
         try:
-            match_data = self.db_reader.get_match_1v1(match_id)
+            # Get match data from DataAccessService (in-memory, instant)
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+            match_data = data_service.get_match(match_id)
             if not match_data:
-                return None
-            
+                raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
+
             # This part should be re-evaluated, as it's frontend-specific
             # For now, it's kept for data structure compatibility
-            p1_info = self.db_reader.get_player_by_discord_uid(match_data['player_1_discord_uid'])
-            p2_info = self.db_reader.get_player_by_discord_uid(match_data['player_2_discord_uid'])
+            p1_info = data_service.get_player_info(match_data['player_1_discord_uid'])
+            p2_info = data_service.get_player_info(match_data['player_2_discord_uid'])
 
             p1_name = p1_info.get('player_name', str(match_data['player_1_discord_uid']))
             p2_name = p2_info.get('player_name', str(match_data['player_2_discord_uid']))

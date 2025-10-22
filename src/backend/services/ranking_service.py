@@ -56,7 +56,7 @@ class RankingService:
         self._rankings: Dict[Tuple[int, str], str] = {}
         self._total_entries: int = 0
         self._refresh_lock = Lock()
-        self._background_task: Optional[asyncio.Task] = None
+        # _background_task removed - DataAccessService handles this now
 
     def refresh_rankings(self) -> None:
         """
@@ -108,34 +108,7 @@ class RankingService:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self.refresh_rankings)
 
-    async def start_background_refresh(self, interval_seconds: int) -> None:
-        """
-        Start a background task to periodically refresh rankings.
-        
-        Args:
-            interval_seconds: How often to refresh the rankings.
-        """
-        if self._background_task:
-            print("[Ranking Service] Background refresh is already running.")
-            return
-
-        print(f"[Ranking Service] Starting background refresh every {interval_seconds} seconds.")
-        # Perform an initial refresh immediately
-        await self.trigger_refresh()
-
-        async def _periodic_refresh():
-            while True:
-                await asyncio.sleep(interval_seconds)
-                await self.trigger_refresh()
-
-        self._background_task = asyncio.create_task(_periodic_refresh())
-
-    def stop_background_refresh(self) -> None:
-        """Stop the background refresh task."""
-        if self._background_task:
-            self._background_task.cancel()
-            self._background_task = None
-            print("[Ranking Service] Stopped background refresh task.")
+    # start_background_refresh() and stop_background_refresh() removed - DataAccessService handles this now
 
     def get_rank(self, discord_uid: int, race: str) -> str:
         """
@@ -152,7 +125,7 @@ class RankingService:
 
     def _load_all_mmr_data(self) -> List[Dict]:
         """
-        Load all MMR data from the database, sorted by MMR DESC, last_played DESC, id DESC.
+        Load all MMR data from DataAccessService (in-memory), sorted by MMR DESC, last_played DESC, id DESC.
         
         In case of MMR ties, more recently active players get higher ranks.
         
@@ -160,39 +133,13 @@ class RankingService:
             List of dictionaries containing discord_uid, race, mmr, last_played, and id.
         """
         try:
-            # Query to get all player-race combinations sorted by MMR, then last_played
-            # This matches the index: idx_mmrs_mmr_lastplayed_id_desc
-            query = """
-                SELECT discord_uid, race, mmr, last_played, id
-                FROM mmrs_1v1
-                ORDER BY mmr DESC, last_played DESC, id DESC
-            """
+            # Get MMR data from DataAccessService (in-memory, instant)
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+            mmr_df = data_service.get_leaderboard_dataframe()
             
-            results = self.db_reader.adapter.execute_query(query, {})
-            
-            # Convert to list of dicts if results are tuples
-            all_data = []
-            for row in results:
-                # Check if row is already a dict or a tuple/list
-                if isinstance(row, dict):
-                    all_data.append({
-                        "discord_uid": row.get("discord_uid"),
-                        "race": row.get("race"),
-                        "mmr": row.get("mmr"),
-                        "last_played": row.get("last_played"),
-                        "id": row.get("id")
-                    })
-                else:
-                    # Assume it's a tuple/list with (discord_uid, race, mmr, last_played, id)
-                    all_data.append({
-                        "discord_uid": row[0],
-                        "race": row[1],
-                        "mmr": row[2],
-                        "last_played": row[3],
-                        "id": row[4]
-                    })
-            
-            return all_data
+            # Convert to list of dicts, already sorted by MMR DESC, last_played DESC, id DESC
+            return mmr_df.to_dicts()
             
         except Exception as e:
             print(f"[Ranking Service] Error loading MMR data: {e}")

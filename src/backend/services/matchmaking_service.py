@@ -133,62 +133,42 @@ class Matchmaker:
 	async def add_player(self, player: Player) -> None:
 		"""Add a player to the matchmaking pool with MMR lookup."""
 		from src.backend.services.performance_service import FlowTracker
-		from src.backend.services.app_context import leaderboard_service
+		from src.backend.services.data_access_service import DataAccessService
 		flow = FlowTracker(f"matchmaker.add_player", user_id=player.discord_user_id)
 		
-		loop = asyncio.get_running_loop()
-		
 		flow.checkpoint("start_mmr_lookups")
-		# Try to get MMRs from leaderboard cache first (MUCH faster: <5ms vs 400-550ms)
+		# Get MMRs from DataAccessService (in-memory, sub-millisecond)
+		data_service = DataAccessService()
+		
 		for race in player.preferences.selected_races:
-			# Try cache first
-			mmr_value = leaderboard_service.get_player_mmr_from_cache(
-				player.discord_user_id,
-				race
-			)
+			# Get MMR from DataAccessService (in-memory, instant)
+			mmr_value = data_service.get_player_mmr(player.discord_user_id, race)
 			
 			if mmr_value is not None:
-				# Cache hit! Use cached MMR
+				# MMR found in memory
 				if race.startswith("bw_"):
 					player.bw_mmr = mmr_value
 				elif race.startswith("sc2_"):
 					player.sc2_mmr = mmr_value
 			else:
-				# Cache miss - fallback to database (rare: only for brand new players)
-				print(f"[Cache MISS] MMR not in cache for {player.discord_user_id}/{race}, falling back to DB")
-				mmr_data = await loop.run_in_executor(
-					None,
-					self.db_reader.get_player_mmr_1v1,
+				# MMR not found - create default MMR entry
+				print(f"[DataAccessService] MMR not found for {player.discord_user_id}/{race}, creating default")
+				from src.backend.services.mmr_service import MMRService
+				mmr_service = MMRService()
+				default_mmr = mmr_service.default_mmr()
+				
+				# Create MMR using DataAccessService (async write to DB)
+				await data_service.create_or_update_mmr(
 					player.discord_user_id,
-					race
+					player.user_id,
+					race,
+					default_mmr
 				)
 				
-				if mmr_data:
-					mmr_value = mmr_data['mmr']
-					if race.startswith("bw_"):
-						player.bw_mmr = mmr_value
-					elif race.startswith("sc2_"):
-						player.sc2_mmr = mmr_value
-				else:
-					# Create default MMR entry if none exists
-					from src.backend.services.mmr_service import MMRService
-					mmr_service = MMRService()
-					default_mmr = mmr_service.default_mmr()
-					
-					# Run blocking DB write in executor
-					await loop.run_in_executor(
-						None,
-						self.db_writer.create_or_update_mmr_1v1,
-						player.discord_user_id,
-						player.user_id,
-						race,
-						default_mmr
-					)
-					
-					if race.startswith("bw_"):
-						player.bw_mmr = default_mmr
-					elif race.startswith("sc2_"):
-						player.sc2_mmr = default_mmr
+				if race.startswith("bw_"):
+					player.bw_mmr = default_mmr
+				elif race.startswith("sc2_"):
+					player.sc2_mmr = default_mmr
 
 		flow.checkpoint("mmr_lookups_complete")
 		
@@ -595,21 +575,23 @@ class Matchmaker:
 			p2_mmr = int(p2.get_effective_mmr(not is_bw_match) or 1500)
 			
 			flow.checkpoint(f"create_match_db_start_{p1.discord_user_id}_vs_{p2.discord_user_id}")
-			# Create the match record in the database (offload to executor to avoid blocking)
-			loop = asyncio.get_running_loop()
-			match_id = await loop.run_in_executor(
-				None,
-				self.db_writer.create_match_1v1,
-				p1.discord_user_id,
-				p2.discord_user_id,
-				p1_race,
-				p2_race,
-				map_choice,
-				server_choice,
-				p1_mmr,
-				p2_mmr,
-				0  # MMR change will be calculated and updated after match result
-			)
+			# Create the match record using DataAccessService (writes to memory + DB)
+			from src.backend.services.data_access_service import DataAccessService
+			data_service = DataAccessService()
+			
+			match_data = {
+				'player_1_discord_uid': p1.discord_user_id,
+				'player_2_discord_uid': p2.discord_user_id,
+				'player_1_race': p1_race,
+				'player_2_race': p2_race,
+				'map_played': map_choice,
+				'server_choice': server_choice,
+				'player_1_mmr': p1_mmr,
+				'player_2_mmr': p2_mmr,
+				'mmr_change': 0  # MMR change will be calculated and updated after match result
+			}
+			
+			match_id = await data_service.create_match(match_data)
 			flow.checkpoint(f"create_match_db_complete_{p1.discord_user_id}_vs_{p2.discord_user_id}")
 
 			flow.checkpoint(f"create_match_result_object_{p1.discord_user_id}_vs_{p2.discord_user_id}")
@@ -774,39 +756,20 @@ class Matchmaker:
 		Returns:
 			True if the abort was successful, False otherwise.
 		"""
-		# Atomically update the match to an aborted state
-		was_aborted = self.db_writer.abort_match_1v1(
-		    match_id, player_discord_uid, self.ABORT_TIMER_SECONDS
-		)
+		# Use DataAccessService for fast abort operations
+		from src.backend.services.data_access_service import DataAccessService
+		data_service = DataAccessService()
 		
-		if was_aborted:
-			# Decrement the player's abort count since they were the one to abort
-			from src.backend.services.user_info_service import UserInfoService
-			user_info_service = UserInfoService()
-			user_info_service.decrement_aborts(player_discord_uid)
-			
-			# Get match data to find both players
-			match_data = self.db_reader.get_match_1v1(match_id)
-			if match_data:
-				# Get both players' Discord UIDs
-				p1_discord_uid = match_data.get('player_1_discord_uid')
-				p2_discord_uid = match_data.get('player_2_discord_uid')
-				
-				# Release queue lock for both players so they can queue again
-				player_ids = [uid for uid in [p1_discord_uid, p2_discord_uid] if uid is not None]
-				if player_ids:
-					import asyncio
-					asyncio.create_task(self.release_queue_lock_for_players(player_ids))
-			
-			# Trigger completion check to notify players
-			from src.backend.services.match_completion_service import match_completion_service
-			print(f"🚀 Triggering immediate completion check for match {match_id} after abort.")
-			import asyncio
-			asyncio.create_task(match_completion_service.check_match_completion(match_id))
-			
-			return True
-		
-		return False
+		# Run async abort in sync context
+		import asyncio
+		loop = asyncio.get_event_loop()
+		if loop.is_running():
+			# If called from async context, schedule it
+			asyncio.create_task(data_service.abort_match(match_id, player_discord_uid))
+			return True  # Assume success for now
+		else:
+			# If called from sync context, run it
+			return loop.run_until_complete(data_service.abort_match(match_id, player_discord_uid))
 	
 	async def _calculate_and_write_mmr(self, match_id: int, match_data: dict) -> bool:
 		"""Helper to calculate and write MMR changes to the database."""

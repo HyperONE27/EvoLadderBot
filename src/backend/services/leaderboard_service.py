@@ -35,142 +35,16 @@ if TYPE_CHECKING:
     from src.backend.services.ranking_service import RankingService
 
 
-# Global cache for leaderboard data with timestamp
-_leaderboard_cache = {
-    "data": None,
-    "dataframe": None,  # Store as Polars DataFrame for fast filtering
-    "timestamp": 0,
-    "ttl": 60  # Cache for 60 seconds
-}
+# Global cache removed - DataAccessService handles this now
 
-# Cache for non-common country codes
+# Cache for non-common country codes (still used)
 _non_common_countries_cache = None
 
 
-def invalidate_leaderboard_cache():
-    """
-    Invalidate the leaderboard cache to force a refresh on next access.
-    
-    This should be called whenever MMR changes occur to ensure the leaderboard
-    reflects the latest data without waiting for cache expiration.
-    """
-    global _leaderboard_cache
-    _leaderboard_cache["data"] = None
-    _leaderboard_cache["dataframe"] = None
-    _leaderboard_cache["timestamp"] = 0
-    print("[Leaderboard Cache] Invalidated due to MMR changes")
+# invalidate_leaderboard_cache() removed - DataAccessService handles this now
 
 
-def _refresh_leaderboard_worker(database_url: str) -> bytes:
-    """
-    Blocking worker function to refresh leaderboard data in a separate process.
-    
-    This function:
-    1. Initializes database connection pool for this worker process
-    2. Fetches all player data from the database
-    3. Calculates ranks using the ranking service
-    4. Converts to a Polars DataFrame
-    5. Closes the connection pool
-    6. Returns the pickled DataFrame
-    
-    Args:
-        database_url: Database connection URL (DSN)
-        
-    Returns:
-        Pickled Polars DataFrame containing all leaderboard data with ranks
-    """
-    print("[Leaderboard Worker] Starting refresh in worker process...")
-    
-    # Track memory usage in worker
-    import os
-    try:
-        import psutil
-        process = psutil.Process(os.getpid())
-        mem_before = process.memory_info().rss / 1024 / 1024  # MB
-        print(f"[Leaderboard Worker] Memory before refresh: {mem_before:.2f} MB")
-    except:
-        mem_before = None
-        process = None
-    
-    # Import here to avoid circular imports and ensure fresh imports in worker
-    from src.backend.db.connection_pool import initialize_pool, close_pool
-    from src.backend.db.db_reader_writer import DatabaseReader
-    from src.backend.services.ranking_service import RankingService
-    
-    try:
-        # Initialize connection pool for this worker process
-        # Each worker process needs its own pool since processes don't share memory
-        print("[Leaderboard Worker] Initializing connection pool...")
-        from src.bot.config import DB_POOL_MIN_CONNECTIONS, DB_POOL_MAX_CONNECTIONS
-        initialize_pool(
-            dsn=database_url,
-            min_conn=DB_POOL_MIN_CONNECTIONS,
-            max_conn=DB_POOL_MAX_CONNECTIONS,
-            force=True  # Force reinitialization in worker process
-        )
-        
-        # Create fresh instances for this worker process
-        db_reader = DatabaseReader()
-        ranking_service = RankingService(db_reader=db_reader)
-        
-        # Fetch all players
-        all_players = db_reader.get_leaderboard_1v1(limit=10000)
-        print(f"[Leaderboard Worker] Fetched {len(all_players)} players from database")
-        
-        # Refresh rankings
-        print("[Leaderboard Worker] Refreshing rankings...")
-        ranking_service.refresh_rankings()
-        
-        # Convert database format to expected format and add rank information
-        formatted_players = []
-        for player in all_players:
-            discord_uid = player.get("discord_uid")
-            race = player.get("race", "Unknown")
-            
-            # Get rank from ranking service
-            rank = "u_rank"  # Default to unranked
-            if discord_uid is not None and race != "Unknown":
-                rank = ranking_service.get_rank(discord_uid, race)
-            
-            formatted_players.append({
-                "player_id": player.get("player_name", "Unknown"),
-                "mmr": player.get("mmr", 0),
-                "race": race,
-                "country": player.get("country", "Unknown"),
-                "discord_uid": discord_uid,
-                "rank": rank,
-                "last_played": player.get("last_played", "1970-01-01T00:00:00Z"),  # Default to epoch for sorting
-                "alt_player_name_1": player.get("alt_player_name_1"),
-                "alt_player_name_2": player.get("alt_player_name_2")
-            })
-        
-        # Convert to DataFrame with explicit schema to handle Unicode
-        # This prevents schema inference errors with international characters (Korean, Chinese, etc.)
-        df = pl.DataFrame(
-            formatted_players,
-            infer_schema_length=None  # Scan all rows for schema inference
-        )
-        print(f"[Leaderboard Worker] Created DataFrame with {len(df)} rows")
-        
-        # Pickle the DataFrame for transfer back to main process
-        pickled_df = pickle.dumps(df)
-        print(f"[Leaderboard Worker] Pickled DataFrame size: {len(pickled_df) / 1024:.1f} KB")
-        
-        # Log memory usage after refresh
-        if mem_before is not None and process is not None:
-            try:
-                mem_after = process.memory_info().rss / 1024 / 1024
-                mem_delta = mem_after - mem_before
-                print(f"[Leaderboard Worker] Memory after refresh: {mem_after:.2f} MB (Δ {mem_delta:+.2f} MB)")
-            except:
-                pass
-        
-        return pickled_df
-        
-    finally:
-        # Always close the connection pool when done to prevent stale connections
-        print("[Leaderboard Worker] Closing connection pool...")
-        close_pool()
+# _refresh_leaderboard_worker() removed - DataAccessService handles this now
 
 
 class LeaderboardService:
@@ -206,146 +80,20 @@ class LeaderboardService:
     
     def _get_cached_leaderboard_dataframe(self) -> pl.DataFrame:
         """
-        Get leaderboard data as a Polars DataFrame from cache or database.
+        Get leaderboard data as a Polars DataFrame from DataAccessService.
         
-        Cache is global and shared across all LeaderboardService instances.
-        This dramatically reduces database load and includes pre-computed ranks.
-        
-        NOTE: This is a synchronous method. For async contexts, use the async version
-        which can optionally offload to a worker process.
+        DataAccessService is now the single source of truth - no caching needed.
+        All data is already in memory and up-to-date.
         
         Returns:
             Polars DataFrame with all player data including ranks
         """
-        current_time = time.time()
-        
-        # Check if cache is valid
-        if (_leaderboard_cache["dataframe"] is not None and 
-            current_time - _leaderboard_cache["timestamp"] < _leaderboard_cache["ttl"]):
-            print(f"[Leaderboard Cache] HIT - Age: {current_time - _leaderboard_cache['timestamp']:.1f}s")
-            return _leaderboard_cache["dataframe"]
-        
-        # Cache miss or expired - fetch from database (synchronous path)
-        print("[Leaderboard Cache] MISS - Fetching from database (sync)...")
-        all_players = self.db_reader.get_leaderboard_1v1(limit=10000)
-        
-        # Refresh rankings FIRST before processing players
-        print("[Leaderboard Cache] Refreshing rankings...")
-        self.ranking_service.refresh_rankings()
-        
-        # Convert database format to expected format and add rank information
-        formatted_players = []
-        for player in all_players:
-            discord_uid = player.get("discord_uid")
-            race = player.get("race", "Unknown")
-            
-            # Get rank from ranking service
-            rank = "u_rank"
-            if discord_uid is not None and race != "Unknown":
-                rank = self.ranking_service.get_rank(discord_uid, race)
-            
-            formatted_players.append({
-                "player_id": player.get("player_name", "Unknown"),
-                "mmr": player.get("mmr", 0),
-                "race": race,
-                "country": player.get("country", "Unknown"),
-                "discord_uid": discord_uid,
-                "rank": rank,
-                "last_played": player.get("last_played", "1970-01-01T00:00:00Z"),  # Default to epoch for sorting
-                "alt_player_name_1": player.get("alt_player_name_1"),
-                "alt_player_name_2": player.get("alt_player_name_2")
-            })
-        
-        # Convert to DataFrame ONCE and cache it with explicit schema to handle Unicode
-        # This prevents schema inference errors with international characters (Korean, Chinese, etc.)
-        df = pl.DataFrame(
-            formatted_players,
-            infer_schema_length=None  # Scan all rows for schema inference
-        )
-        
-        # Update cache
-        _leaderboard_cache["data"] = all_players
-        _leaderboard_cache["dataframe"] = df
-        _leaderboard_cache["timestamp"] = current_time
-        print(f"[Leaderboard Cache] Updated - Cached {len(all_players)} players as DataFrame")
-        
-        return df
+        # Get data directly from DataAccessService (in-memory, always current)
+        from src.backend.services.data_access_service import DataAccessService
+        data_service = DataAccessService()
+        return data_service.get_leaderboard_dataframe()
     
-    async def _get_cached_leaderboard_dataframe_async(self, process_pool=None) -> pl.DataFrame:
-        """
-        Async version of _get_cached_leaderboard_dataframe that can optionally use
-        a process pool to offload the heavy computation.
-        
-        Args:
-            process_pool: Optional ProcessPoolExecutor for offloading work
-            
-        Returns:
-            Polars DataFrame with all player data including ranks
-        """
-        current_time = time.time()
-        
-        # Check if cache is valid
-        if (_leaderboard_cache["dataframe"] is not None and 
-            current_time - _leaderboard_cache["timestamp"] < _leaderboard_cache["ttl"]):
-            print(f"[Leaderboard Cache] HIT - Age: {current_time - _leaderboard_cache['timestamp']:.1f}s")
-            return _leaderboard_cache["dataframe"]
-        
-        # Cache miss or expired - use process pool if available
-        if process_pool is not None:
-            print("[Leaderboard Cache] MISS - Offloading to worker process...")
-            import asyncio
-            from src.bot.config import DATABASE_URL
-            loop = asyncio.get_running_loop()
-            
-            # Event-driven process pool health check
-            # Only check when we actually need to use the pool
-            try:
-                from src.backend.services.process_pool_health import ensure_process_pool_healthy
-                is_healthy = await ensure_process_pool_healthy()
-                if not is_healthy:
-                    print("[WARN] Process pool health check failed, falling back to synchronous refresh")
-                    # Fallback to synchronous refresh
-                    return self._get_cached_leaderboard_dataframe()
-            except Exception as e:
-                print(f"[WARN] Process pool health check failed with error: {e}")
-                # Continue with process pool usage - let the executor handle the error
-            
-            # Track work start (try to get bot instance for tracking)
-            bot = None
-            try:
-                from src.backend.services.process_pool_health import _bot_instance
-                bot = _bot_instance
-            except:
-                pass
-            
-            if bot and hasattr(bot, '_track_work_start'):
-                bot._track_work_start()
-            
-            try:
-                # Offload to worker process
-                # Pass DATABASE_URL so worker can initialize its own connection pool
-                pickled_df = await loop.run_in_executor(
-                    process_pool,
-                    _refresh_leaderboard_worker,
-                    DATABASE_URL
-                )
-            finally:
-                # Track work end
-                if bot and hasattr(bot, '_track_work_end'):
-                    bot._track_work_end()
-            
-            # Unpickle the DataFrame in the main process
-            df = pickle.loads(pickled_df)
-            print(f"[Leaderboard Cache] Received DataFrame from worker: {len(df)} rows")
-            
-            # Update cache
-            _leaderboard_cache["dataframe"] = df
-            _leaderboard_cache["timestamp"] = current_time
-            
-            return df
-        else:
-            # Process pool is required for async leaderboard operations
-            raise RuntimeError("Process pool is required for async leaderboard operations. No synchronous fallback available.")
+    # _get_cached_leaderboard_dataframe_async() removed - DataAccessService handles this now
     
     async def get_leaderboard_data(
         self,
@@ -378,8 +126,8 @@ class LeaderboardService:
         perf_start = time.time()
         
         # Get cached DataFrame (already has ranks computed)
-        # Use async version to optionally offload to process pool
-        df = await self._get_cached_leaderboard_dataframe_async(process_pool=process_pool)
+        # DataAccessService provides data directly from memory
+        df = self._get_cached_leaderboard_dataframe()
         
         perf_cache = time.time()
         print(f"[Leaderboard Perf] Cache fetch: {(perf_cache - perf_start)*1000:.2f}ms")
@@ -561,134 +309,10 @@ class LeaderboardService:
             "total_players": total_players
         }
     
-    def get_player_mmr_from_cache(
-        self,
-        discord_uid: int,
-        race: str
-    ) -> Optional[float]:
-        """
-        Get player's MMR for a specific race from the leaderboard cache.
-        
-        This is MUCH faster than a database query (< 5ms vs 400-550ms).
-        Cache is kept fresh automatically (60s TTL, invalidates on MMR changes).
-        
-        Args:
-            discord_uid: Discord user ID
-            race: Race code (e.g., 'bw_terran', 'sc2_zerg')
-            
-        Returns:
-            MMR value or None if not found in cache
-        """
-        try:
-            df = self._get_cached_leaderboard_dataframe()
-            
-            # Filter for this player and race
-            result = df.filter(
-                (pl.col("discord_uid") == discord_uid) &
-                (pl.col("race") == race)
-            )
-            
-            if len(result) == 0:
-                return None
-            
-            # Extract MMR value
-            mmr = result["mmr"][0]
-            return float(mmr) if mmr is not None else None
-            
-        except Exception as e:
-            print(f"[Cache ERROR] Failed to get MMR from cache: {e}")
-            return None
+    # get_player_mmr_from_cache() removed - use DataAccessService.get_player_mmr() directly
     
-    def get_player_info_from_cache(
-        self,
-        discord_uid: int
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Get player info (name, country, alt names) from the leaderboard cache.
-        
-        This is MUCH faster than a database query (< 5ms vs 500-800ms).
-        Cache is kept fresh automatically (60s TTL, invalidates on MMR changes).
-        
-        Args:
-            discord_uid: Discord user ID
-            
-        Returns:
-            Dict with player_name, country, and alt names, or None if not found
-        """
-        try:
-            df = self._get_cached_leaderboard_dataframe()
-            
-            # Filter for this player (any race, we just want name/country/alt names)
-            result = df.filter(pl.col("discord_uid") == discord_uid)
-            
-            if len(result) == 0:
-                return None
-            
-            # Get first row as a dict (player info is same across all races)
-            # Use to_dicts() to convert Polars types to Python types
-            row_dict = result.to_dicts()[0]
-            
-            return {
-                "player_name": row_dict["player_id"],
-                "country": row_dict["country"],
-                "discord_uid": discord_uid,
-                "alt_player_name_1": row_dict.get("alt_player_name_1"),
-                "alt_player_name_2": row_dict.get("alt_player_name_2")
-            }
-            
-        except Exception as e:
-            print(f"[Cache ERROR] Failed to get player info from cache: {e}")
-            return None
+    # get_player_info_from_cache() removed - use DataAccessService.get_player_info() directly
     
-    def get_player_all_mmrs_from_cache(
-        self,
-        discord_uid: int
-    ) -> Dict[str, float]:
-        """
-        Get all MMRs for a player across all races from cache.
-        
-        This is MUCH faster than multiple database queries.
-        
-        Args:
-            discord_uid: Discord user ID
-            
-        Returns:
-            Dict mapping race code to MMR value (e.g., {'bw_terran': 1500, 'sc2_zerg': 1600})
-        """
-        try:
-            df = self._get_cached_leaderboard_dataframe()
-            
-            # Filter for this player
-            result = df.filter(pl.col("discord_uid") == discord_uid)
-            
-            if len(result) == 0:
-                return {}
-            
-            # Build dict of race -> MMR
-            mmrs = {}
-            for row in result.iter_rows(named=True):
-                race = row["race"]
-                mmr = row["mmr"]
-                if race and mmr is not None:
-                    mmrs[race] = float(mmr)
-            
-            return mmrs
-            
-        except Exception as e:
-            print(f"[Cache ERROR] Failed to get all MMRs from cache: {e}")
-            return {}
+    # get_player_all_mmrs_from_cache() removed - use DataAccessService.get_all_player_mmrs() directly
     
-    @staticmethod
-    def invalidate_cache() -> None:
-        """
-        Invalidate the leaderboard cache.
-        
-        Call this when MMR values change (e.g., after a match is completed)
-        to ensure the leaderboard reflects the latest data.
-        """
-        global _non_common_countries_cache
-        _leaderboard_cache["data"] = None
-        _leaderboard_cache["dataframe"] = None
-        _leaderboard_cache["timestamp"] = 0
-        _non_common_countries_cache = None
-        print("[Leaderboard Cache] Invalidated")
+    # invalidate_cache() removed - DataAccessService handles this automatically

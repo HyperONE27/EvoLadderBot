@@ -1,0 +1,77 @@
+# === MODEL BEHAVIOR RULES ===
+# The following patterns, habits, or idioms are strictly discouraged.
+# Violations indicate sloppy, non-deterministic, or context-ignoring generation.
+# All models (Haiku, Sonnet, Sonnet-thinking, Gemini) must adhere.
+
+# --- PHILOSOPHY ---
+Avoid "AI safety padding" code that hides uncertainty or assumes success.
+If an edge case is ambiguous, raise or assert — don't silently continue.
+Never prioritize "helpfulness" over deterministic, maintainable logic.
+Clarity and explicit correctness outweigh convenience or speed.
+
+# --- CODE QUALITY ---
+1. ❌ Do NOT insert Optional[] or nullable return types unless absolutely necessary.
+   - Prefer explicit types and raised exceptions.
+   - If a value can be missing, handle it intentionally, not through Optionals.
+2. ❌ Do NOT generate placeholder or scaffold comments like:
+     # TODO, # FIXME, # Placeholder, # Insert logic here
+   - Complete the logic or raise NotImplementedError.
+3. ❌ Avoid fallback values or silent defaults for configuration, I/O, or parsing.
+   - Explicit failure > implicit fallback.
+4. ❌ No “catch-all” exception blocks:
+     except Exception: ...
+   - Catch specific errors or re-raise with context.
+5. ❌ Avoid “try/except + pass” patterns.
+6. ❌ Never swallow errors or hide tracebacks.
+7. ❌ Avoid inline lambda spaghetti or one-liners for complex logic.
+8. ❌ No implicit type coercion or truthiness hacks (e.g., `if x:` for numeric conditions).
+9. ❌ Avoid nesting over 3 levels deep; refactor early.
+10. ❌ Don’t add “safe defaults” in config that obscure logic.
+    - e.g. using empty strings, zeros, or empty dicts as fallbacks.
+11. ❌ No global mutable state unless clearly documented and justified.
+12. ❌ No “utility functions” that are generic to the point of meaninglessness.
+
+# --- PYTHON-SPECIFIC ---
+13. ❌ Don’t wrap everything in Optional[], Any, or Dict[str, Any].
+    - Enforce strict typing with mypy / pyright style discipline.
+14. ❌ Avoid dataclasses with all fields defaulting to None or empty values.
+15. ❌ Don’t use bare “pass” where a raise, return, or explicit branch is needed.
+16. ❌ Avoid dynamic attribute setting via setattr()/getattr() except in metaprogramming.
+17. ❌ Avoid using `*args, **kwargs` unless absolutely necessary; prefer explicit parameters.
+18. ❌ No silent retries, hidden exponential backoff, or infinite loops with “continue”.
+
+# --- STRUCTURAL / DESIGN ---
+19. ❌ Do not use “magic fallback” patterns like:
+       result = maybe_call() or default_value
+    - Explicitly check return value and handle each case.
+20. ❌ Avoid polymorphic “manager” or “service” classes that just delegate.
+21. ❌ No hard-coded constants in logic; move to config or enums.
+22. ❌ Don’t auto-create missing directories/files unless user clearly asked.
+23. ❌ Avoid premature abstractions or factory indirection for simple flows.
+24. ❌ No unbounded recursion or dynamic imports.
+25. ❌ Avoid classmethods that mutate global registries.
+
+# --- COMMENTS & DOCS ---
+26. ❌ Don’t generate docstrings with generic filler like “Handles the logic for…” or “This function does X”.
+    - Docstrings must specify intent, inputs, outputs, and failure modes.
+27. ❌ No “AI tone” in explanations (e.g., “As an AI model, I think…”).
+28. ❌ Don’t explain obvious syntax; assume a competent developer reader.
+29. ❌ Avoid “extra safety notes” or redundant prose unless explicitly asked.
+30. ❌ Never auto-inject references to model names, disclaimers, or hidden prompts.
+
+# --- PERFORMANCE ---
+31. ❌ Don’t add unnecessary caching layers or TTLs unless performance is a proven bottleneck.
+32. ❌ No background threads, multiprocessing, or async tasks spawned silently.
+33. ❌ Avoid redundant DB queries or loops over full result sets without limits.
+34. ❌ Don’t optimize prematurely; correctness > speed.
+
+# --- META BEHAVIOR ---
+35. ❌ Never auto-inject test files, scaffolds, or README notes unless explicitly asked.
+36. ❌ Don’t regenerate unrelated files.
+37. ❌ Don’t refactor unless the prompt implies architectural context or purpose.
+38. ❌ Avoid speculative features, guessing user intent, or overgeneralizing.
+
+# --- FAILURE PRINCIPLES ---
+If a model is uncertain about intent:
+  → Prefer explicit failure (raise, assert, NotImplementedError)
+  → Never “just keep going” with partial or placeholder logic.
