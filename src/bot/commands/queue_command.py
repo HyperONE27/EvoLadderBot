@@ -634,32 +634,43 @@ class QueueSearchingView(discord.ui.View):
             # Create match found view
             match_view = MatchFoundView(match_result, is_player1)
             
-            flow.checkpoint("register_for_replay_detection")
-            # Register the view for replay detection
-            if self.last_interaction:
-                channel_id = self.last_interaction.channel_id
-                await match_view.register_for_replay_detection(channel_id)
-                # Store the interaction reference for later updates
-                match_view.last_interaction = self.last_interaction
-            
-            flow.checkpoint("generate_match_embed_start")
-            # Update the message if we have a stored interaction
+            flow.checkpoint("send_match_dm_start")
+            # Send the match DM using bot token (not interaction) for permanent access
             if self.last_interaction:
                 try:
-                    # Offload the embed generation to executor to avoid blocking on ranking refresh
+                    # Acknowledge the interaction quickly
+                    await self.last_interaction.response.defer(ephemeral=True)
+                    
+                    # Get or create DM channel
+                    dm_channel = self.last_interaction.user.dm_channel
+                    if not dm_channel:
+                        dm_channel = await self.last_interaction.user.create_dm()
+                    
+                    # Offload the embed generation to executor
                     loop = asyncio.get_running_loop()
                     embed = await loop.run_in_executor(None, match_view.get_embed)
                     flow.checkpoint("generate_match_embed_complete")
                     
-                    flow.checkpoint("update_discord_message_start")
-                    await self.last_interaction.edit_original_response(
-                        embed=embed,
-                        view=match_view
-                    )
-                    flow.checkpoint("update_discord_message_complete")
-                    print(f"[Match Notification] Successfully displayed match view for player {self.player.discord_user_id}")
-                except discord.NotFound:
-                    print(f"[Match Notification] Interaction expired for player {self.player.discord_user_id}")
+                    # Send via bot token (permanent access, never expires!)
+                    flow.checkpoint("send_dm_via_bot_token")
+                    message = await dm_channel.send(embed=embed, view=match_view)
+                    
+                    # Store channel and message ID for future edits
+                    match_view.channel = dm_channel
+                    match_view.original_message_id = message.id
+                    
+                    # Register for replay detection
+                    await match_view.register_for_replay_detection(dm_channel.id)
+                    
+                    flow.checkpoint("send_match_dm_complete")
+                    print(f"[Match Notification] Successfully sent match DM for player {self.player.discord_user_id}")
+                    
+                    # Send ephemeral confirmation
+                    await self.last_interaction.followup.send("Match found! Check your DMs.", ephemeral=True)
+                    
+                except discord.Forbidden:
+                    print(f"[Match Notification] Cannot send DM to player {self.player.discord_user_id} (DMs disabled)")
+                    await self.last_interaction.followup.send("❌ Could not send you a DM. Please enable DMs from server members.", ephemeral=True)
                 except discord.HTTPException as e:
                     print(f"[Match Notification] Discord API error for player {self.player.discord_user_id}: {e}")
                 except Exception as e:
@@ -806,8 +817,8 @@ class MatchFoundView(discord.ui.View):
         self.is_player1 = is_player1
         self.selected_result = match_result.match_result
         self.confirmation_status = match_result.match_result_confirmation_status
-        self.channel_id = None  # Will be set when the view is sent
-        self.last_interaction = None  # Store reference to last interaction for updates
+        self.channel: Optional[discord.TextChannel] = None  # Store channel for long-running updates
+        self.original_message_id: Optional[int] = None  # Store message ID for persistent editing
         self.edit_lock = asyncio.Lock()
         
         # Performance tracking
@@ -848,14 +859,33 @@ class MatchFoundView(discord.ui.View):
 
         # Try to update the message
         async with self.edit_lock:
-            if self.last_interaction:
-                try:
-                    # Update the embed to notify the user
-                    embed = self.get_embed() # Get the current embed state
-                    embed.add_field(name="⚠️ Abort Window Closed", value="The time to abort this match has expired.", inline=False)
-                    await self.last_interaction.edit_original_response(embed=embed, view=self)
-                except discord.HTTPException as e:
-                    print(f"Failed to edit message to disable abort button: {e}")
+            # Update the embed to notify the user
+            embed = self.get_embed()  # Get the current embed state
+            embed.add_field(name="⚠️ Abort Window Closed", value="The time to abort this match has expired.", inline=False)
+            
+            # Edit the original message using bot token (never expires!)
+            await self._edit_original_message(embed, self)
+    
+    async def _edit_original_message(self, embed: discord.Embed, view: discord.ui.View = None) -> bool:
+        """
+        Edit the original match message using the stored message ID.
+        This uses the bot's permanent token, not the temporary interaction token.
+        
+        Returns True if successful, False otherwise.
+        """
+        if not self.channel or not self.original_message_id:
+            return False
+        
+        try:
+            # Fetch the original message by ID using the bot's permanent token
+            message = await self.channel.fetch_message(self.original_message_id)
+            
+            # Edit it using the bot's permanent token (never expires!)
+            await message.edit(embed=embed, view=view or self)
+            return True
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+            print(f"Failed to edit original message: {e}")
+            return False
     
     def _update_dropdown_states(self):
         """Update the state of the dropdowns based on the current view state"""
@@ -1179,11 +1209,9 @@ class MatchFoundView(discord.ui.View):
             
             flow.checkpoint("update_embed_start")
             async with self.edit_lock:
-                if self.last_interaction:
-                    await self.last_interaction.edit_original_response(
-                        embed=self.get_embed(),
-                        view=self
-                    )
+                # Edit the original message using bot token (never expires!)
+                embed = self.get_embed()
+                await self._edit_original_message(embed, self)
             flow.checkpoint("update_embed_complete")
             
             flow.checkpoint("send_final_embed_start")
@@ -2000,11 +2028,10 @@ async def on_message(message: discord.Message, bot=None):
             # Update the match view to show "Replay Invalid"
             match_view.match_result.replay_uploaded = "Replay Invalid"
             match_view._update_dropdown_states()
-            if match_view.last_interaction:
-                with suppress(discord.NotFound, discord.InteractionResponded):
-                    await match_view.last_interaction.edit_original_response(
-                        embed=match_view.get_embed(), view=match_view
-                    )
+            
+            # Edit the original message using bot token (never expires!)
+            embed = match_view.get_embed()
+            await match_view._edit_original_message(embed, match_view)
             
             print(f"❌ Failed to parse replay for match {match_view.match_result.match_id}: {error_message}")
             return
@@ -2018,11 +2045,10 @@ async def on_message(message: discord.Message, bot=None):
         # Update ONLY the view for the player who uploaded the replay
         # Each player should only see their own replay status
         match_view._update_dropdown_states()
-        if match_view.last_interaction:
-            with suppress(discord.NotFound, discord.InteractionResponded):
-                await match_view.last_interaction.edit_original_response(
-                    embed=match_view.get_embed(), view=match_view
-                )
+        
+        # Edit the original message using bot token (never expires!)
+        embed = match_view.get_embed()
+        await match_view._edit_original_message(embed, match_view)
         flow.checkpoint("immediate_ui_update_complete")
         
         # Start background storage task (non-blocking)
