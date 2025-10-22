@@ -14,8 +14,8 @@ class ReplayDetailsEmbed:
         # Extract data
         p1_name = replay_data.get('player_1_name')
         p2_name = replay_data.get('player_2_name')
-        p1_race_str = replay_data.get('player_1_race', 'Unknown')
-        p2_race_str = replay_data.get('player_2_race', 'Unknown')
+        p1_race_str = replay_data['player_1_race']
+        p2_race_str = replay_data['player_2_race']
         winner_result = replay_data.get('result')
         map_name = replay_data.get('map_name')
         duration_seconds = replay_data.get('duration')

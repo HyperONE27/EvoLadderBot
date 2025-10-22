@@ -13,7 +13,9 @@ It contains methods for:
 
 from typing import Optional, Dict, Any
 import discord
+import asyncio
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
+from src.backend.services.data_access_service import DataAccessService
 from src.backend.services.cache_service import player_cache
 
 
@@ -79,11 +81,18 @@ def log_user_action(user_info: Dict[str, Any], action: str, details: str = "") -
 
 
 class UserInfoService:
-    """Service for managing user information and settings."""
+    """
+    Service for managing user information and settings.
+    
+    This service now delegates to DataAccessService for fast in-memory operations.
+    Legacy DatabaseReader/Writer are kept for backwards compatibility only.
+    """
     
     def __init__(self) -> None:
+        self.data_service = DataAccessService()
+        # Legacy - kept for backwards compatibility
         self.reader = DatabaseReader()
-        self.writer = DatabaseWriter()
+        self.writer = DatabaseWriter()  # Still needed for operations not yet in DataAccessService
     
     def _get_player_display_name(self, player: Dict[str, Any]) -> str:
         """
@@ -97,13 +106,13 @@ class UserInfoService:
         """
         if not player:
             return "Unknown"
-        return (player.get("player_name") 
-                or player.get("discord_username") 
-                or "Unknown")
+        return player["player_name"] or player["discord_username"]
     
     def get_player(self, discord_uid: int) -> Optional[Dict[str, Any]]:
         """
         Get player information by Discord UID.
+        
+        Uses DataAccessService for sub-millisecond in-memory lookup.
         
         Args:
             discord_uid: Discord user ID.
@@ -111,11 +120,13 @@ class UserInfoService:
         Returns:
             Player data dictionary or None if not found.
         """
-        return self.reader.get_player_by_discord_uid(discord_uid)
+        return self.data_service.get_player_info(discord_uid)
     
     def player_exists(self, discord_uid: int) -> bool:
         """
         Check if a player exists.
+        
+        Uses DataAccessService for sub-millisecond in-memory lookup.
         
         Args:
             discord_uid: Discord user ID.
@@ -123,11 +134,11 @@ class UserInfoService:
         Returns:
             True if player exists, False otherwise.
         """
-        return self.reader.player_exists(discord_uid)
+        return self.data_service.player_exists(discord_uid)
     
     def ensure_player_exists(self, discord_uid: int, discord_username: str) -> Dict[str, Any]:
         """
-        Ensure a player record exists in the database.
+        Ensure a player record exists in memory and database.
         
         If the player doesn't exist, creates a minimal record with discord_uid and discord_username.
         If the player already exists but has a different username, updates the username and logs the change.
@@ -135,6 +146,8 @@ class UserInfoService:
         
         This should be called at the start of any slash command to ensure the user
         has a database record before any operations are performed.
+        
+        Uses DataAccessService for fast in-memory operations.
         
         Args:
             discord_uid: Discord user ID.
@@ -147,6 +160,7 @@ class UserInfoService:
         
         if player is None:
             # Create minimal player record with discord username
+            # Note: create_player is sync but will queue async write
             self.create_player(discord_uid=discord_uid, discord_username=discord_username)
             player = self.get_player(discord_uid)
         else:
@@ -154,6 +168,7 @@ class UserInfoService:
             current_username = player.get('discord_username')
             if current_username != discord_username:
                 # Update username and log the change
+                # Note: update_player is sync but will queue async write
                 self.update_player(
                     discord_uid=discord_uid,
                     discord_username=discord_username,
@@ -177,6 +192,8 @@ class UserInfoService:
         """
         Create a new player.
         
+        Uses DataAccessService for instant in-memory creation + async DB write.
+        
         Args:
             discord_uid: Discord user ID.
             discord_username: Discord username (e.g., "username" from username#1234 or @username).
@@ -185,20 +202,35 @@ class UserInfoService:
             battletag: Player's BattleTag.
             country: Country code.
             region: Region code.
-            activation_code: Activation code.
+            activation_code: Activation code (not supported by DataAccessService).
         
         Returns:
-            The ID of the newly created player.
+            The discord_uid (for backwards compatibility).
         """
-        return self.writer.create_player(
-            discord_uid=discord_uid,
-            discord_username=discord_username,
-            player_name=player_name,
-            battletag=battletag,
-            country=country,
-            region=region,
-            activation_code=activation_code
-        )
+        # Run async create in sync context
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If called from async context, just schedule it
+            asyncio.create_task(self.data_service.create_player(
+                discord_uid=discord_uid,
+                discord_username=discord_username,
+                player_name=player_name,
+                battletag=battletag,
+                country=country,
+                region=region
+            ))
+        else:
+            # If called from sync context, run it
+            loop.run_until_complete(self.data_service.create_player(
+                discord_uid=discord_uid,
+                discord_username=discord_username,
+                player_name=player_name,
+                battletag=battletag,
+                country=country,
+                region=region
+            ))
+        
+        return discord_uid
     
     def update_player(
         self,
@@ -233,100 +265,60 @@ class UserInfoService:
         old_player = None
         if log_changes:
             old_player = self.get_player(discord_uid)
-        
-        # Perform the update
-        success = self.writer.update_player(
-            discord_uid=discord_uid,
-            discord_username=discord_username,
-            player_name=player_name,
-            battletag=battletag,
-            alt_player_name_1=alt_player_name_1,
-            alt_player_name_2=alt_player_name_2,
-            country=country,
-            region=region
-        )
-        
+
+        # Use a dictionary to hold updates
+        update_payload = {
+            "discord_username": discord_username,
+            "player_name": player_name,
+            "battletag": battletag,
+            "alt_player_name_1": alt_player_name_1,
+            "alt_player_name_2": alt_player_name_2,
+            "country": country,
+            "region": region,
+        }
+        # Filter out None values so we only update provided fields
+        update_payload = {k: v for k, v in update_payload.items() if v is not None}
+
+        # Perform the update via DataAccessService (async)
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(
+                self.data_service.update_player_info(discord_uid, **update_payload)
+            )
+        else:
+            loop.run_until_complete(
+                self.data_service.update_player_info(discord_uid, **update_payload)
+            )
+
         # Log each field change individually
-        if success and log_changes and old_player:
-            # Use updated player_name if provided, otherwise use old value, fallback to discord_username
-            current_player_name = (player_name if player_name is not None 
-                                 else old_player.get("player_name") 
-                                 or old_player.get("discord_username", "Unknown"))
+        if log_changes and old_player:
+            current_player_name = (
+                player_name
+                if player_name is not None
+                else old_player.get("player_name")
+                or old_player["discord_username"]
+            )
             
-            # Log each field that was provided and actually changed
-            if discord_username is not None and old_player.get("discord_username") != discord_username:
-                self.writer.log_player_action(
-                    discord_uid=discord_uid,
-                    player_name=current_player_name,
-                    setting_name="discord_username",
-                    old_value=old_player.get("discord_username"),
-                    new_value=discord_username
-                )
-            
-            if player_name is not None and old_player.get("player_name") != player_name:
-                self.writer.log_player_action(
-                    discord_uid=discord_uid,
-                    player_name=current_player_name,
-                    setting_name="player_name",
-                    old_value=old_player.get("player_name"),
-                    new_value=player_name
-                )
-            
-            if battletag is not None and old_player.get("battletag") != battletag:
-                self.writer.log_player_action(
-                    discord_uid=discord_uid,
-                    player_name=current_player_name,
-                    setting_name="battletag",
-                    old_value=old_player.get("battletag"),
-                    new_value=battletag
-                )
-            
-            if alt_player_name_1 is not None:
-                # Normalize: empty string becomes None for comparison
-                normalized_new = alt_player_name_1.strip() if alt_player_name_1 else None
-                normalized_old = old_player.get("alt_player_name_1") or None
-                if normalized_old != normalized_new:
-                    self.writer.log_player_action(
+            for key, new_value in update_payload.items():
+                old_value = old_player.get(key)
+                # Normalize empty strings to None for comparison
+                if isinstance(new_value, str) and not new_value.strip():
+                    new_value = None
+                if isinstance(old_value, str) and not old_value.strip():
+                    old_value = None
+
+                if old_value != new_value:
+                    asyncio.create_task(self.data_service.log_player_action(
                         discord_uid=discord_uid,
                         player_name=current_player_name,
-                        setting_name="alt_player_name_1",
-                        old_value=old_player.get("alt_player_name_1"),
-                        new_value=normalized_new
-                    )
-            
-            if alt_player_name_2 is not None:
-                # Normalize: empty string becomes None for comparison
-                normalized_new = alt_player_name_2.strip() if alt_player_name_2 else None
-                normalized_old = old_player.get("alt_player_name_2") or None
-                if normalized_old != normalized_new:
-                    self.writer.log_player_action(
-                        discord_uid=discord_uid,
-                        player_name=current_player_name,
-                        setting_name="alt_player_name_2",
-                        old_value=old_player.get("alt_player_name_2"),
-                        new_value=normalized_new
-                    )
-            
-            if country is not None and old_player.get("country") != country:
-                self.writer.log_player_action(
-                    discord_uid=discord_uid,
-                    player_name=current_player_name,
-                    setting_name="country",
-                    old_value=old_player.get("country"),
-                    new_value=country
-                )
-            
-            if region is not None and old_player.get("region") != region:
-                self.writer.log_player_action(
-                    discord_uid=discord_uid,
-                    player_name=current_player_name,
-                    setting_name="region",
-                    old_value=old_player.get("region"),
-                    new_value=region
-                )
-        
-        return success
-    
+                        setting_name=key,
+                        old_value=str(old_value) if old_value is not None else None,
+                        new_value=str(new_value) if new_value is not None else None,
+                    ))
+
+        return True
+
+
     def update_country(self, discord_uid: int, country: str) -> bool:
         """
         Update player's country.
@@ -338,27 +330,31 @@ class UserInfoService:
         Returns:
             True if successful, False otherwise.
         """
-        player = self.get_player(discord_uid)
-        old_country = player.get("country") if player else None
+        old_player = self.get_player(discord_uid)
         
-        success = self.writer.update_player_country(discord_uid, country)
-        
-        if success:
-            # Invalidate cache since player record changed
-            player_cache.invalidate(discord_uid)
-            
-            if player:
-                player_name = self._get_player_display_name(player)
-                self.writer.log_player_action(
+        # Perform update via DataAccessService
+        loop = asyncio.get_event_loop()
+        task = self.data_service.update_player_info(discord_uid, country=country)
+        if loop.is_running():
+            asyncio.create_task(task)
+        else:
+            loop.run_until_complete(task)
+
+        # Log the change
+        if old_player:
+            player_name = self._get_player_display_name(old_player)
+            old_country = old_player.get("country")
+            if old_country != country:
+                asyncio.create_task(self.data_service.log_player_action(
                     discord_uid=discord_uid,
                     player_name=player_name,
                     setting_name="country",
                     old_value=old_country,
-                    new_value=country
-                )
+                    new_value=country,
+                ))
         
-        return success
-    
+        return True
+
     def submit_activation_code(self, discord_uid: int, activation_code: str) -> Dict[str, Any]:
         """
         DISABLED: Submit an activation code for a player.
@@ -426,6 +422,8 @@ class UserInfoService:
             self.create_player(discord_uid=discord_uid)
             player = self.get_player(discord_uid)
         
+        # This operation is not performance-critical and has no equivalent in DataAccessService yet.
+        # It can be migrated later if needed. For now, we leave the legacy writer.
         success = self.writer.accept_terms_of_service(discord_uid)
         
         if success:
@@ -434,13 +432,13 @@ class UserInfoService:
             
             if player:
                 player_name = self._get_player_display_name(player)
-                self.writer.log_player_action(
+                asyncio.create_task(self.data_service.log_player_action(
                     discord_uid=discord_uid,
                     player_name=player_name,
                     setting_name="accepted_tos",
                     old_value="False",
-                    new_value="True"
-                )
+                    new_value="True",
+                ))
         
         return success
     
@@ -498,6 +496,9 @@ class UserInfoService:
         
         # Mark setup as complete
         old_player = self.get_player(discord_uid)
+        
+        # This operation is not performance-critical and has no equivalent in DataAccessService yet.
+        # It can be migrated later if needed. For now, we leave the legacy writer.
         success = self.writer.complete_setup(discord_uid)
         
         if success:
@@ -506,13 +507,13 @@ class UserInfoService:
             
             # Only log if completed_setup actually changed
             if old_player and not old_player.get("completed_setup"):
-                self.writer.log_player_action(
+                asyncio.create_task(self.data_service.log_player_action(
                     discord_uid=discord_uid,
                     player_name=player_name,
                     setting_name="completed_setup",
                     old_value="False",
-                    new_value="True"
-                )
+                    new_value="True",
+                ))
         
         return success
     
@@ -562,23 +563,25 @@ class UserInfoService:
         if not player:
             return False
         
-        current_aborts = player.get('remaining_aborts', 3)
+        current_aborts = self.data_service.get_remaining_aborts(discord_uid)
         new_aborts = max(0, current_aborts - 1)
         
-        success = self.writer.update_player_remaining_aborts(discord_uid, new_aborts)
+        loop = asyncio.get_event_loop()
+        task = self.data_service.update_remaining_aborts(discord_uid, new_aborts)
+
+        if loop.is_running():
+            asyncio.create_task(task)
+        else:
+            loop.run_until_complete(task)
+
+        # Log the abort usage
+        player_name = self._get_player_display_name(player)
+        asyncio.create_task(self.data_service.log_player_action(
+            discord_uid=discord_uid,
+            player_name=player_name,
+            setting_name="remaining_aborts",
+            old_value=str(current_aborts),
+            new_value=str(new_aborts),
+        ))
         
-        if success:
-            # Invalidate cache since player record changed
-            player_cache.invalidate(discord_uid)
-            
-            # Log the abort usage
-            player_name = self._get_player_display_name(player)
-            self.writer.log_player_action(
-                discord_uid=discord_uid,
-                player_name=player_name,
-                setting_name="remaining_aborts",
-                old_value=str(current_aborts),
-                new_value=str(new_aborts)
-            )
-        
-        return success
+        return True

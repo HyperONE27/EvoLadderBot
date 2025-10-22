@@ -65,11 +65,11 @@ class TimedDatabaseAdapter:
         # Log based on duration
         if duration_ms > self.VERY_SLOW_QUERY_THRESHOLD:
             logger.error(
-                f"🔴 VERY SLOW QUERY: {operation_name} took {duration_ms:.2f}ms - {query_snippet}"
+                f"🔴 VERY SLOW: {operation_name} {duration_ms:.1f}ms - {query_snippet}"
             )
         elif duration_ms > self.SLOW_QUERY_THRESHOLD:
             logger.warning(
-                f"🟡 SLOW QUERY: {operation_name} took {duration_ms:.2f}ms - {query_snippet}"
+                f"🟡 SLOW: {operation_name} {duration_ms:.1f}ms - {query_snippet}"
             )
         elif duration_ms > 10:
             logger.debug(

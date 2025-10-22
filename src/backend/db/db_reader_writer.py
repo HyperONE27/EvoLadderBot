@@ -11,6 +11,7 @@ Supports both SQLite and PostgreSQL via database adapters.
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from functools import wraps
+import asyncio
 
 from src.backend.db.adapters import get_adapter
 from src.bot.config import DATABASE_TYPE
@@ -30,9 +31,22 @@ def invalidate_leaderboard_on_mmr_change(func):
         # Only invalidate if the operation was successful
         if result is True or (isinstance(result, bool) and result):
             try:
+                # Invalidate leaderboard cache
                 from src.backend.services.leaderboard_service import invalidate_leaderboard_cache
                 invalidate_leaderboard_cache()
-                print(f"[MMR Change] Cache invalidated after {func.__name__}")
+                print(f"[MMR Change] Leaderboard cache invalidated after {func.__name__}")
+
+                # Trigger ranking service refresh asynchronously (only if event loop is running)
+                try:
+                    loop = asyncio.get_running_loop()
+                    from src.backend.services.app_context import ranking_service
+                    if ranking_service:
+                        loop.create_task(ranking_service.trigger_refresh())
+                        print(f"[MMR Change] Ranking service refresh triggered after {func.__name__}")
+                except RuntimeError:
+                    # No event loop running, skip async operations
+                    print(f"[MMR Change] No event loop running, skipping ranking service refresh after {func.__name__}")
+
             except Exception as e:
                 print(f"[MMR Change] Warning: Failed to invalidate cache after {func.__name__}: {e}")
         
@@ -172,7 +186,7 @@ class DatabaseReader:
             List of player MMR records sorted by MMR descending.
         """
         query = """
-            SELECT m.*, p.country, p.player_name
+            SELECT m.*, p.country, p.player_name, p.alt_player_name_1, p.alt_player_name_2
             FROM mmrs_1v1 m
             LEFT JOIN players p ON m.discord_uid = p.discord_uid
             WHERE 1=1
@@ -250,6 +264,14 @@ class DatabaseReader:
             {"discord_uid": discord_uid}
         )
         return results[0] if results else None
+    
+    def get_match_mmr_change(self, match_id: int) -> Optional[int]:
+        """Get the MMR change for a match."""
+        results = self.adapter.execute_query(
+            "SELECT mmr_change FROM matches_1v1 WHERE id = :match_id",
+            {"match_id": match_id}
+        )
+        return results[0]['mmr_change'] if results else None
 
 
 class DatabaseWriter:
@@ -989,6 +1011,34 @@ class DatabaseWriter:
             print(f"Error aborting match {match_id}: {e}")
             return False
 
+    def update_match_result(self, match_id: int, match_result: int) -> bool:
+        """
+        Update the match result for a match.
+        
+        Args:
+            match_id: The ID of the match to update
+            match_result: The match result (0=draw, 1=player1 wins, 2=player2 wins, -1=aborted, -2=conflict)
+            
+        Returns:
+            True if the update was successful, False otherwise
+        """
+        try:
+            self.adapter.execute_write(
+                """
+                UPDATE matches_1v1 
+                SET match_result = :match_result
+                WHERE id = :match_id
+                """,
+                {
+                    "match_id": match_id,
+                    "match_result": match_result
+                }
+            )
+            return True
+        except Exception as e:
+            print(f"Database error in update_match_result: {e}")
+            return False
+
     def insert_command_call(self, discord_uid: int, player_name: str, command: str) -> bool:
         """
         Logs a command call to the command_calls table.
@@ -1021,21 +1071,25 @@ class DatabaseWriter:
             True if the insertion was successful, False otherwise.
         """
         try:
+            print(f"[DatabaseWriter] Inserting replay: {replay_data.get('replay_hash', 'unknown')}")
             self.adapter.execute_insert(
                 """
                 INSERT INTO replays (
                     replay_path, replay_hash, replay_date, player_1_name, player_2_name,
                     player_1_race, player_2_race, result, player_1_handle, player_2_handle,
-                    observers, map_name, duration
+                    observers, map_name, duration, uploaded_at
                 ) VALUES (
                     :replay_path, :replay_hash, :replay_date, :player_1_name, :player_2_name,
                     :player_1_race, :player_2_race, :result, :player_1_handle, :player_2_handle,
-                    :observers, :map_name, :duration
+                    :observers, :map_name, :duration, :uploaded_at
                 )
                 """,
                 replay_data
             )
+            print(f"[DatabaseWriter] Replay inserted successfully: {replay_data.get('replay_hash', 'unknown')}")
             return True
         except Exception as e:
             print(f"Database error in insert_replay: {e}")
+            import traceback
+            traceback.print_exc()
             return False

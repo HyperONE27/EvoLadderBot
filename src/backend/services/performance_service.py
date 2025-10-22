@@ -89,7 +89,7 @@ class FlowTracker:
                     f"(total: {elapsed_ms:.2f}ms)"
                 )
                 warning_emoji = "⚠️" if USE_EMOJIS else "[W]"
-                print(f"  {warning_emoji}  Slow checkpoint: {self.flow_name}.{name} took {duration:.2f}ms")
+                print(f"  {warning_emoji} {self.flow_name}.{name}: {duration:.1f}ms")
         
     def add_metadata(self, key: str, value: Any) -> None:
         """Add metadata to the flow."""
@@ -262,8 +262,8 @@ class PerformanceMonitor:
     ) -> None:
         """Alert on slow operations."""
         logger.warning(
-            f"⚠️ SLOW OPERATION: {flow_name} took {duration_ms:.2f}ms "
-            f"(threshold: {threshold}ms, {((duration_ms/threshold - 1) * 100):.1f}% over)"
+            f"⚠️ SLOW: {flow_name} {duration_ms:.1f}ms "
+            f"(+{((duration_ms/threshold - 1) * 100):.0f}% over {threshold}ms)"
         )
 
 
