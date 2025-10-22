@@ -14,6 +14,8 @@ from src.backend.services.app_context import (
     db_writer,
     maps_service,
     mmr_service,
+    notification_service,
+    queue_service,
     races_service as race_service,
     regions_service,
     replay_service,
@@ -530,8 +532,8 @@ class QueueSearchingView(discord.ui.View):
         # Add cancel button
         self.add_item(CancelQueueButton(original_view, player))
         
-        # Start async match checking
-        self.match_task = asyncio.create_task(self.periodic_match_check())
+        # Start async match listener (push-based notifications)
+        self.match_task = asyncio.create_task(self._listen_for_match())
     
     def start_status_updates(self) -> None:
         if self.status_task is None:
@@ -574,46 +576,66 @@ class QueueSearchingView(discord.ui.View):
         )
         return embed
     
-    async def periodic_match_check(self):
-        """Periodically check for matches and update the view"""
-        while self.is_active:
-            if not await queue_searching_view_manager.has_view(self.player.discord_user_id):
-                break
-            if self.player.discord_user_id in match_results:
-                # Match found! Update the view
-                match_result = match_results[self.player.discord_user_id]
-                is_player1 = match_result.player_1_discord_id == self.player.discord_user_id
-                
-                # Create match found view
-                match_view = MatchFoundView(match_result, is_player1)
-                
-                # Register the view for replay detection
-                if self.last_interaction:
-                    channel_id = self.last_interaction.channel_id
-                    await match_view.register_for_replay_detection(channel_id)
-                    # Store the interaction reference for later updates
-                    match_view.last_interaction = self.last_interaction
-                
-                # Update the message if we have a stored interaction
-                if self.last_interaction:
-                    try:
-                        await self.last_interaction.edit_original_response(
-                            embed=match_view.get_embed(),
-                            view=match_view
-                        )
-                    except:
-                        pass  # Interaction might be expired
-                
-                # Clean up
-                del match_results[self.player.discord_user_id]
-                await queue_searching_view_manager.unregister(self.player.discord_user_id, view=self)
-                break
+    async def _listen_for_match(self):
+        """
+        Listen for match notifications (push-based, not polling).
+        
+        This method blocks until a match is found and published by the notification service.
+        It provides instant notification without the overhead and delay of polling.
+        """
+        # Subscribe to notifications and get our personal queue
+        notification_queue = await notification_service.subscribe(self.player.discord_user_id)
+        
+        try:
+            # Block here until a match is published (instant notification!)
+            match_result = await notification_queue.get()
             
-            # Wait 1 second before checking again
-            await asyncio.sleep(1)
+            # Match found! Update the view immediately
+            is_player1 = match_result.player_1_discord_id == self.player.discord_user_id
+            
+            # Create match found view
+            match_view = MatchFoundView(match_result, is_player1)
+            
+            # Register the view for replay detection
+            if self.last_interaction:
+                channel_id = self.last_interaction.channel_id
+                await match_view.register_for_replay_detection(channel_id)
+                # Store the interaction reference for later updates
+                match_view.last_interaction = self.last_interaction
+            
+            # Update the message if we have a stored interaction
+            if self.last_interaction:
+                try:
+                    await self.last_interaction.edit_original_response(
+                        embed=match_view.get_embed(),
+                        view=match_view
+                    )
+                    print(f"[Match Notification] Successfully displayed match view for player {self.player.discord_user_id}")
+                except discord.NotFound:
+                    print(f"[Match Notification] Interaction expired for player {self.player.discord_user_id}")
+                except discord.HTTPException as e:
+                    print(f"[Match Notification] Discord API error for player {self.player.discord_user_id}: {e}")
+                except Exception as e:
+                    print(f"[Match Notification] Unexpected error for player {self.player.discord_user_id}: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # Clean up
+            await queue_searching_view_manager.unregister(self.player.discord_user_id, view=self)
+            
+        finally:
+            # Always unsubscribe when done, even if an error occurred
+            await notification_service.unsubscribe(self.player.discord_user_id)
 
     async def on_timeout(self):
         """Handle view timeout"""
+        # Clean up notification subscription
+        await notification_service.unsubscribe(self.player.discord_user_id)
+        
+        # Cancel the match listener task
+        if self.match_task:
+            self.match_task.cancel()
+        
         # Clean up this view from the manager
         await queue_searching_view_manager.unregister(self.player.discord_user_id, view=self)
         
@@ -654,40 +676,17 @@ class CancelQueueButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         parent_view = self.view
 
-        # If a match has already been found, show the match instead of cancelling
-        existing_match = match_results.get(self.player.discord_user_id)
-        if existing_match:
-            print(f"⚠️ Cancel ignored: match already assigned to {self.player.user_id}")
-
-            # Determine player role in the match
-            is_player1 = existing_match.player_1_discord_id == self.player.discord_user_id
-            match_view = MatchFoundView(existing_match, is_player1)
-
-            # Register replay detection if possible
-            channel_id = interaction.channel_id
-            if channel_id is not None:
-                await match_view.register_for_replay_detection(channel_id)
-            match_view.last_interaction = interaction
-
-            # Stop the searching view heartbeat
-            if isinstance(parent_view, QueueSearchingView):
-                parent_view.deactivate()
-
-            # Remove this searching view from the manager
-            await queue_searching_view_manager.unregister(self.player.discord_user_id, view=parent_view)
-
-            # Prevent duplicate notifications for this player
-            match_results.pop(self.player.discord_user_id, None)
-
-            await interaction.response.edit_message(
-                embed=match_view.get_embed(),
-                view=match_view
-            )
-            return
-
-        # No match yet—proceed with cancelling the queue entry
+        # Proceed with cancelling the queue entry
         print(f"🚪 Removing player from matchmaker: {self.player.user_id}")
         await matchmaker.remove_player(self.player.discord_user_id)
+        
+        # Clean up the notification subscription and cancel the listener task
+        await notification_service.unsubscribe(self.player.discord_user_id)
+        
+        # Stop the searching view's match listener task
+        if isinstance(parent_view, QueueSearchingView) and parent_view.match_task:
+            parent_view.match_task.cancel()
+            parent_view.deactivate()
         
         await queue_searching_view_manager.unregister(self.player.discord_user_id, view=parent_view)
         
@@ -728,15 +727,20 @@ async def wait_for_match_completion(match_id: int, timeout: int = 30) -> Optiona
         return None
 
 def handle_match_result(match_result: MatchResult, register_completion_callback: Callable[[Callable], None]):
-    """Handle when a match is found"""
-    print(f"🎉 Match #{match_result.match_id}: {match_result.player_1_user_id} vs {match_result.player_2_user_id} | {match_result.map_choice} @ {match_result.server_choice}")
+    """
+    Handle when a match is found - publish via notification service.
     
-    # Store match results for both players
-    match_results[match_result.player_1_discord_id] = match_result
-    match_results[match_result.player_2_discord_id] = match_result
+    This callback is invoked by the matchmaker when a match is created.
+    It uses the notification service to instantly push the result to both players.
+    """
+    print(f"🎉 Match #{match_result.match_id}: {match_result.player_1_user_id} vs {match_result.player_2_user_id} | {match_result.map_choice} @ {match_result.server_choice}")
     
     # Attach the register callback so views can subscribe to completion notifications
     setattr(match_result, 'register_completion_callback', register_completion_callback)
+    
+    # Publish match notification immediately via the notification service
+    # This triggers instant push-based notifications to both players
+    asyncio.create_task(notification_service.publish_match_found(match_result))
 
 
 # Set the match callback

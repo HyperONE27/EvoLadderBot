@@ -26,6 +26,8 @@ from src.backend.services.maps_service import MapsService
 from src.backend.services.match_completion_service import MatchCompletionService
 from src.backend.services.matchmaking_service import matchmaker
 from src.backend.services.mmr_service import MMRService
+from src.backend.services.notification_service import initialize_notification_service
+from src.backend.services.queue_service import initialize_queue_service
 from src.backend.services.ranking_service import RankingService
 from src.backend.services.races_service import RacesService
 from src.backend.services.regions_service import RegionsService
@@ -104,6 +106,10 @@ leaderboard_service = LeaderboardService(
 # Create the singleton instance
 match_completion_service = MatchCompletionService()
 
+# New event-driven matchmaking services
+notification_service = initialize_notification_service()
+queue_service = initialize_queue_service()
+
 
 # =============================================================================
 # EXPORTS - All services available for import
@@ -132,5 +138,7 @@ __all__ = [
     # Matchmaking services
     "matchmaker",
     "match_completion_service",
+    "notification_service",
+    "queue_service",
 ]
 
