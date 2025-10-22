@@ -37,6 +37,7 @@ from src.bot.utils.discord_utils import (
     get_flag_emote,
     get_race_emote,
     send_ephemeral_response,
+    get_rank_emote,
 )
 import time
 from contextlib import suppress
@@ -880,10 +881,6 @@ class MatchFoundView(discord.ui.View):
         
         # Get rank information for both players
         from src.backend.services.app_context import ranking_service
-        from src.bot.utils.discord_utils import get_rank_emote
-        
-        # Ensure rankings are refreshed before getting ranks
-        ranking_service.refresh_rankings()
         
         p1_rank = ranking_service.get_rank(self.match_result.player_1_discord_id, p1_race)
         p2_rank = ranking_service.get_rank(self.match_result.player_2_discord_id, p2_race)
@@ -1168,10 +1165,6 @@ class MatchFoundView(discord.ui.View):
 
         # Get rank emotes for both players
         from src.backend.services.app_context import ranking_service
-        from src.bot.utils.discord_utils import get_rank_emote
-        
-        # Ensure rankings are refreshed
-        ranking_service.refresh_rankings()
         
         p1_rank = ranking_service.get_rank(final_results['player_1_discord_uid'], p1_race)
         p2_rank = ranking_service.get_rank(final_results['player_2_discord_uid'], p2_race)
@@ -1254,10 +1247,6 @@ class MatchFoundView(discord.ui.View):
 
         # Get rank emotes for both players
         from src.backend.services.app_context import ranking_service
-        from src.bot.utils.discord_utils import get_rank_emote
-        
-        # Ensure rankings are refreshed
-        ranking_service.refresh_rankings()
         
         p1_rank = ranking_service.get_rank(match_data['player_1_discord_uid'], p1_race)
         p2_rank = ranking_service.get_rank(match_data['player_2_discord_uid'], p2_race)
