@@ -25,6 +25,8 @@ Intended usage:
     rank = ranking_service.get_rank(discord_uid, race)
 """
 
+import asyncio
+from threading import Lock
 from typing import Dict, List, Optional, Tuple
 from src.backend.db.db_reader_writer import DatabaseReader
 
@@ -51,60 +53,89 @@ class RankingService:
             db_reader: Optional DatabaseReader instance for dependency injection.
         """
         self.db_reader = db_reader or DatabaseReader()
-        # In-memory storage: (discord_uid, race) -> rank
         self._rankings: Dict[Tuple[int, str], str] = {}
-        # Total count of ranked entries
         self._total_entries: int = 0
+        self._refresh_lock = Lock()
+        self._background_task: Optional[asyncio.Task] = None
 
     def refresh_rankings(self) -> None:
         """
         Refresh rankings by loading all MMR data and calculating percentile ranks.
         
-        This method should be called whenever the leaderboard cache is refreshed.
-        It loads the entire mmrs_1v1 table, sorts by MMR, and assigns ranks based
-        on percentile distribution.
+        This method is synchronous and blocking. It should be called from an executor.
         """
-        print("[Ranking Service] Starting ranking refresh...")
+        with self._refresh_lock:
+            print("[Ranking Service] Starting ranking refresh...")
+            
+            all_mmr_data = self._load_all_mmr_data()
+            
+            print(f"[Ranking Service] Loaded {len(all_mmr_data)} MMR entries from database")
+            
+            # Use a temporary dict to build new rankings
+            new_rankings = {}
+            total_entries = len(all_mmr_data)
+            
+            if total_entries == 0:
+                print("[Ranking Service] No MMR data found - all players will be unranked")
+            else:
+                rank_counts = {}
+                for index, entry in enumerate(all_mmr_data):
+                    discord_uid = entry.get("discord_uid")
+                    race = entry.get("race")
+                    
+                    if discord_uid is None or race is None:
+                        continue
+                    
+                    percentile = (index / total_entries) * 100
+                    rank = self._get_rank_from_percentile(percentile)
+                    
+                    new_rankings[(discord_uid, race)] = rank
+                    rank_counts[rank] = rank_counts.get(rank, 0) + 1
+            
+            # Atomically update the instance variables
+            self._rankings = new_rankings
+            self._total_entries = total_entries
+            
+            print(f"[Ranking Service] Refreshed rankings for {len(self._rankings)} player-race combinations")
+            if 'rank_counts' in locals():
+                print(f"[Ranking Service] Rank distribution: {rank_counts}")
+
+    async def trigger_refresh(self) -> None:
+        """
+        Trigger an asynchronous refresh of the rankings in an executor.
+        This is the preferred way to refresh from an async context.
+        """
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self.refresh_rankings)
+
+    async def start_background_refresh(self, interval_seconds: int) -> None:
+        """
+        Start a background task to periodically refresh rankings.
         
-        # Load all player-race combinations sorted by MMR DESC, id DESC
-        all_mmr_data = self._load_all_mmr_data()
-        
-        print(f"[Ranking Service] Loaded {len(all_mmr_data)} MMR entries from database")
-        
-        # Clear existing rankings
-        self._rankings.clear()
-        
-        # Calculate total entries
-        self._total_entries = len(all_mmr_data)
-        
-        if self._total_entries == 0:
-            print("[Ranking Service] No MMR data found - all players will be unranked")
+        Args:
+            interval_seconds: How often to refresh the rankings.
+        """
+        if self._background_task:
+            print("[Ranking Service] Background refresh is already running.")
             return
-        
-        # Assign ranks based on percentile distribution
-        rank_counts = {}
-        for index, entry in enumerate(all_mmr_data):
-            discord_uid = entry.get("discord_uid")
-            race = entry.get("race")
-            
-            if discord_uid is None or race is None:
-                print(f"[Ranking Service] Warning: Entry {index} has None discord_uid or race: {entry}")
-                continue
-            
-            # Calculate percentile (0 = best, 100 = worst)
-            percentile = (index / self._total_entries) * 100
-            
-            # Determine rank based on percentile
-            rank = self._get_rank_from_percentile(percentile)
-            
-            # Store in memory
-            self._rankings[(discord_uid, race)] = rank
-            
-            # Count ranks for debugging
-            rank_counts[rank] = rank_counts.get(rank, 0) + 1
-        
-        print(f"[Ranking Service] Refreshed rankings for {len(self._rankings)} player-race combinations")
-        print(f"[Ranking Service] Rank distribution: {rank_counts}")
+
+        print(f"[Ranking Service] Starting background refresh every {interval_seconds} seconds.")
+        # Perform an initial refresh immediately
+        await self.trigger_refresh()
+
+        async def _periodic_refresh():
+            while True:
+                await asyncio.sleep(interval_seconds)
+                await self.trigger_refresh()
+
+        self._background_task = asyncio.create_task(_periodic_refresh())
+
+    def stop_background_refresh(self) -> None:
+        """Stop the background refresh task."""
+        if self._background_task:
+            self._background_task.cancel()
+            self._background_task = None
+            print("[Ranking Service] Stopped background refresh task.")
 
     def get_rank(self, discord_uid: int, race: str) -> str:
         """

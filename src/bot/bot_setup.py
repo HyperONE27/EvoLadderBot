@@ -18,7 +18,7 @@ from discord.ext import commands
 
 from src.backend.db.connection_pool import close_pool, initialize_pool
 from src.backend.db.test_connection_startup import test_database_connection
-from src.backend.services.app_context import command_guard_service, db_writer, leaderboard_service
+from src.backend.services.app_context import command_guard_service, db_writer, leaderboard_service, ranking_service
 from src.backend.services.cache_service import static_cache
 from src.backend.services.command_guard_service import DMOnlyError
 from src.backend.services.memory_monitor import initialize_memory_monitor, log_memory
@@ -288,10 +288,13 @@ class EvoLadderBot(commands.Bot):
         # Start memory monitoring task
         self._memory_monitor_task = asyncio.create_task(self._memory_monitor_task_loop())
         print("[Background Tasks] Memory monitor task started")
+
+        # Start ranking service background refresh
+        asyncio.create_task(ranking_service.start_background_refresh(interval_seconds=300))
+        print("[Background Tasks] Ranking service refresh task started")
         
         # DISABLED: Process pool monitor task removed for resource optimization
         # Process pool health is now checked on-demand when work is submitted
-        # This eliminates idle spinning and reduces resource usage
         
         # DISABLED: Leaderboard cache refresh task removed for resource optimization
         # Cache will be invalidated only when MMR changes occur
@@ -306,6 +309,9 @@ class EvoLadderBot(commands.Bot):
         if self._memory_monitor_task and not self._memory_monitor_task.done():
             self._memory_monitor_task.cancel()
             print("[Background Tasks] Memory monitor task stopped")
+        
+        # Stop ranking service background refresh
+        ranking_service.stop_background_refresh()
         
         # DISABLED: Process pool monitor task removed for resource optimization
         # Process pool health is now checked on-demand when work is submitted

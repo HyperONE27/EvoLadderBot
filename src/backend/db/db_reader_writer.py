@@ -11,6 +11,7 @@ Supports both SQLite and PostgreSQL via database adapters.
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from functools import wraps
+import asyncio
 
 from src.backend.db.adapters import get_adapter
 from src.bot.config import DATABASE_TYPE
@@ -30,9 +31,17 @@ def invalidate_leaderboard_on_mmr_change(func):
         # Only invalidate if the operation was successful
         if result is True or (isinstance(result, bool) and result):
             try:
+                # Invalidate leaderboard cache
                 from src.backend.services.leaderboard_service import invalidate_leaderboard_cache
                 invalidate_leaderboard_cache()
-                print(f"[MMR Change] Cache invalidated after {func.__name__}")
+                print(f"[MMR Change] Leaderboard cache invalidated after {func.__name__}")
+
+                # Trigger ranking service refresh asynchronously
+                from src.backend.services.app_context import ranking_service
+                if ranking_service:
+                    asyncio.create_task(ranking_service.trigger_refresh())
+                    print(f"[MMR Change] Ranking service refresh triggered after {func.__name__}")
+
             except Exception as e:
                 print(f"[MMR Change] Warning: Failed to invalidate cache after {func.__name__}: {e}")
         
