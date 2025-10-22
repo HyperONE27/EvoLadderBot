@@ -74,7 +74,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         self.user_id = discord.ui.TextInput(
             label="User ID",
             placeholder="Enter your user ID (English only, 3-12 characters)",
-            default=self.existing_data.get('player_name', ''),
+            default=self.existing_data['player_name'],
             min_length=3,
             max_length=12,
             required=True
@@ -83,7 +83,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         self.battle_tag = discord.ui.TextInput(
             label="BattleTag",
             placeholder="e.g., Username#1234 (3-12 letters + # + 4-12 digits)",
-            default=self.existing_data.get('battletag', ''),
+            default=self.existing_data['battletag'],
             min_length=8,
             max_length=25,  # 12 + # + 12 = 25 max
             required=True
@@ -92,7 +92,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         self.alt_id_1 = discord.ui.TextInput(
             label="Alternative ID 1 (optional)",
             placeholder="Enter your first alternative ID (any language, 3-12 characters)",
-            default=self.existing_data.get('alt_player_name_1', ''),
+            default=self.existing_data['alt_player_name_1'],
             min_length=3,
             max_length=12,
             required=False
@@ -101,7 +101,7 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
         self.alt_id_2 = discord.ui.TextInput(
             label="Alternative ID 2 (optional)",
             placeholder="Enter your second alternative ID (any language, 3-12 characters)",
-            default=self.existing_data.get('alt_player_name_2', ''),
+            default=self.existing_data['alt_player_name_2'],
             min_length=3,
             max_length=12,
             required=False
@@ -121,8 +121,8 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
             'alt_player_name_1': self.alt_id_1.value.strip() if self.alt_id_1.value else '',
             'alt_player_name_2': self.alt_id_2.value.strip() if self.alt_id_2.value else '',
             # Preserve country/region from existing data if present
-            'country': self.existing_data.get('country', ''),
-            'region': self.existing_data.get('region', '')
+            'country': self.existing_data['country'],
+            'region': self.existing_data['region']
         }
         
         # Validate user ID

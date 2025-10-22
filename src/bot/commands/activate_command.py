@@ -50,7 +50,7 @@ def submit_activation_code(user_id: int, code: str) -> dict:
     if result["status"] == "error":
         raise ErrorEmbedException(
             title="Activation Failed",
-            description=result.get("message", "An error occurred while processing your activation code."),
+            description=result["message"],
             error_fields=[
                 ("Error Code", "ACTIVATION_ERROR"),
                 ("Suggestion", "Please check your code and try again")

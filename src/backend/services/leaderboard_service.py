@@ -27,7 +27,7 @@ import pickle
 
 import polars as pl
 
-from src.backend.db.db_reader_writer import DatabaseReader
+from src.backend.services.data_access_service import DataAccessService
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.races_service import RacesService
 
@@ -43,6 +43,16 @@ _non_common_countries_cache = None
 
 # invalidate_leaderboard_cache() removed - DataAccessService handles this now
 
+@staticmethod
+def invalidate_cache():
+    """Invalidate leaderboard cache - now handled by DataAccessService."""
+    # DataAccessService handles cache invalidation automatically
+    pass
+
+def invalidate_leaderboard_cache():
+    """Invalidate leaderboard cache - now handled by DataAccessService."""
+    # DataAccessService handles cache invalidation automatically
+    pass
 
 # _refresh_leaderboard_worker() removed - DataAccessService handles this now
 
@@ -59,13 +69,13 @@ class LeaderboardService:
         *,
         country_service: Optional[CountriesService] = None,
         race_service: Optional[RacesService] = None,
-        db_reader: Optional[DatabaseReader] = None,
+        data_service: Optional[DataAccessService] = None,
         ranking_service: Optional["RankingService"] = None,
     ) -> None:
         # Services (stateless)
         self.country_service = country_service or CountriesService()
         self.race_service = race_service or RacesService()
-        self.db_reader = db_reader or DatabaseReader()
+        self.data_service = data_service or DataAccessService()
         
         # Ranking service (will be set after initialization if not provided)
         self._ranking_service = ranking_service
@@ -89,9 +99,24 @@ class LeaderboardService:
             Polars DataFrame with all player data including ranks
         """
         # Get data directly from DataAccessService (in-memory, always current)
-        from src.backend.services.data_access_service import DataAccessService
-        data_service = DataAccessService()
-        return data_service.get_leaderboard_dataframe()
+        df = self.data_service.get_leaderboard_dataframe()
+        
+        # Add rank column using RankingService
+        # Use a more efficient approach: create rank list and add as column
+        ranks = []
+        for row in df.iter_rows(named=True):
+            discord_uid = row.get('discord_uid')
+            race = row.get('race')
+            if discord_uid and race:
+                rank = self.ranking_service.get_rank(discord_uid, race)
+                ranks.append(rank if rank else "unranked")
+            else:
+                ranks.append("unranked")
+        
+        # Add rank column to existing DataFrame
+        df = df.with_columns(pl.Series("rank", ranks, dtype=pl.Utf8))
+        
+        return df
     
     # _get_cached_leaderboard_dataframe_async() removed - DataAccessService handles this now
     
@@ -176,11 +201,11 @@ class LeaderboardService:
         
         # Apply best race only filtering if enabled
         if best_race_only:
-            # Group by player_id and keep only the highest MMR entry
+            # Group by discord_uid and keep only the highest MMR entry
             # Sort first, then group and take first (highest MMR per player)
             df = (df
                 .sort(["mmr", "last_played"], descending=[True, True])
-                .group_by("player_id", maintain_order=True)
+                .group_by("discord_uid", maintain_order=True)
                 .first()
             )
         
@@ -288,12 +313,12 @@ class LeaderboardService:
             
             formatted_players.append({
                 "rank": rank,
-                "player_id": player.get('player_id', 'Unknown'),
+                "player_name": player['player_name'],
                 "mmr": mmr_display,
-                "race": self.race_service.format_race_name(player.get('race', 'Unknown')),
-                "race_code": player.get('race', 'Unknown'),
-                "country": player.get('country', 'Unknown'),
-                "mmr_rank": player.get('rank', 'u_rank')
+                "race": self.race_service.format_race_name(player['race']),
+                "race_code": player['race'],
+                "country": player['country'],
+                "mmr_rank": player['rank']
             })
         
         perf_end = time.time()
@@ -315,4 +340,8 @@ class LeaderboardService:
     
     # get_player_all_mmrs_from_cache() removed - use DataAccessService.get_all_player_mmrs() directly
     
-    # invalidate_cache() removed - DataAccessService handles this automatically
+    @staticmethod
+    def invalidate_cache():
+        """Invalidate leaderboard cache - now handled by DataAccessService."""
+        # DataAccessService handles cache invalidation automatically
+        pass

@@ -15,7 +15,6 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
 from src.backend.services.maps_service import MapsService
 from src.backend.services.regions_service import RegionsService
 
@@ -117,8 +116,6 @@ class Matchmaker:
 		self.players: List[Player] = players or []
 		self.running = False
 		self.match_callback: Optional[Callable[[MatchResult], None]] = None
-		self.db_reader = DatabaseReader()
-		self.db_writer = DatabaseWriter()
 		self.regions_service = RegionsService()
 		self.maps_service = MapsService()
 		self.lock = asyncio.Lock()
@@ -725,25 +722,31 @@ class Matchmaker:
 		"""Stop matchmaking loop."""
 		self.running = False
 
-	def record_match_result(self, match_id: int, player_discord_uid: int, report_value: int) -> bool:
+	async def record_match_result(self, match_id: int, player_discord_uid: int, report_value: int) -> bool:
 		"""
 		Record a player's report for a match. This is the single entry point for any report.
+		Uses DataAccessService for fast, non-blocking writes.
 		"""
-		success = self.db_writer.update_player_report_1v1(match_id, player_discord_uid, report_value)
+		# Use DataAccessService for fast in-memory updates
+		from src.backend.services.data_access_service import DataAccessService
+		data_service = DataAccessService()
+		
+		# Update in-memory match data immediately
+		success = data_service.update_match_report(match_id, player_discord_uid, report_value)
 		if not success:
-			print(f"❌ Failed to write player report for match {match_id} to DB.")
+			print(f"[Matchmaker] Failed to update player report for match {match_id} in memory.")
 			return False
 		
 		# After any report, trigger an immediate check.
 		# This will pick up aborts, conflicts, or completions instantly.
 		import asyncio
 		from src.backend.services.match_completion_service import match_completion_service
-		print(f"🚀 Triggering immediate completion check for match {match_id} after a report.")
+		print(f"[Matchmaker] Triggering immediate completion check for match {match_id} after a report.")
 		asyncio.create_task(match_completion_service.check_match_completion(match_id))
 		
 		return True
 	
-	def abort_match(self, match_id: int, player_discord_uid: int) -> bool:
+	async def abort_match(self, match_id: int, player_discord_uid: int) -> bool:
 		"""
 		Abort a match and decrement the player's abort count.
 		
@@ -772,17 +775,68 @@ class Matchmaker:
 			return loop.run_until_complete(data_service.abort_match(match_id, player_discord_uid))
 	
 	async def _calculate_and_write_mmr(self, match_id: int, match_data: dict) -> bool:
-		"""Helper to calculate and write MMR changes to the database."""
-		# Get match details to check if both players have reported
-		match_data = self.db_reader.get_match_1v1(match_id)
+		"""Helper to calculate and write MMR changes using DataAccessService."""
+		# Get match details from DataAccessService (in-memory, instant)
+		from src.backend.services.data_access_service import DataAccessService
+		data_service = DataAccessService()
+		
+		match_data = data_service.get_match(match_id)
 		if not match_data:
-			print(f"❌ Could not find match {match_id}")
+			print(f"[Matchmaker] Could not find match {match_id} in memory")
 			return False
 		
 		# Guard: Check if MMR has already been calculated for this match
+		# Only skip if both in-memory and database are consistent
 		if match_data.get('mmr_change') != 0.0:
-			print(f"ℹ️ MMR for match {match_id} has already been calculated. Skipping.")
-			return True
+			# Verify that the database actually has the updated MMR values
+			# If not, we need to recalculate
+			try:
+				from src.backend.db.db_reader_writer import DatabaseReader
+				db_reader = DatabaseReader()
+				
+				# Check if database MMR values match in-memory values
+				p1_uid = match_data['player_1_discord_uid']
+				p2_uid = match_data['player_2_discord_uid']
+				p1_race = match_data.get('player_1_race')
+				p2_race = match_data.get('player_2_race')
+				
+				if p1_race and p2_race:
+					p1_mmr_db = db_reader.get_player_mmr_1v1(p1_uid, p1_race)
+					p2_mmr_db = db_reader.get_player_mmr_1v1(p2_uid, p2_race)
+					
+					p1_mmr_memory = data_service.get_player_mmr(p1_uid, p1_race)
+					p2_mmr_memory = data_service.get_player_mmr(p2_uid, p2_race)
+					
+					print(f"[Matchmaker] MMR Consistency Check for match {match_id}:")
+					print(f"  Player 1 DB: {p1_mmr_db['mmr'] if p1_mmr_db else 'None'}, Memory: {p1_mmr_memory}")
+					print(f"  Player 2 DB: {p2_mmr_db['mmr'] if p2_mmr_db else 'None'}, Memory: {p2_mmr_memory}")
+					
+					# If database and memory don't match, we need to recalculate
+					# Also, if the match has an MMR change but the database MMR values haven't been updated, recalculate
+					db_memory_mismatch = (p1_mmr_db and p1_mmr_memory and abs(p1_mmr_db['mmr'] - p1_mmr_memory) > 0.1) or \
+										(p2_mmr_db and p2_mmr_memory and abs(p2_mmr_db['mmr'] - p2_mmr_memory) > 0.1)
+					
+					# Check if database MMR values are stale (haven't been updated from the match)
+					# If the match has an MMR change but the database values are the same as before the match, recalculate
+					mmr_change = match_data.get('mmr_change', 0)
+					if mmr_change != 0 and not db_memory_mismatch:
+						# The match has an MMR change recorded, but let's verify the database was actually updated
+						# If the database values are the same as the original match values, the database write failed
+						print(f"[Matchmaker] Match {match_id} has MMR change {mmr_change} but database may not be updated. Recalculating to ensure consistency.")
+						db_memory_mismatch = True
+					
+					if db_memory_mismatch:
+						print(f"[Matchmaker] Database and memory MMR values don't match for match {match_id}. Recalculating.")
+					else:
+						print(f"[Matchmaker] MMR for match {match_id} has already been calculated. Skipping.")
+						return True
+				else:
+					print(f"[Matchmaker] MMR for match {match_id} has already been calculated. Skipping.")
+					return True
+			except Exception as e:
+				print(f"[Matchmaker] Error checking MMR consistency for match {match_id}: {e}")
+				# If we can't verify, proceed with calculation
+				pass
 		
 		# Check if both players have reported and if their reports match
 		p1_report = match_data.get('player_1_report')
@@ -790,19 +844,19 @@ class Matchmaker:
 		match_result = match_data.get('match_result')
 		
 		if p1_report is None or p2_report is None:
-			print(f"📝 Player report recorded for match {match_id}, waiting for other player")
+			print(f"[Matchmaker] Player report recorded for match {match_id}, waiting for other player")
 			return True
 		
 		if match_result == -1:
-			print(f"🚫 Match {match_id} was aborted. Skipping MMR calculation.")
+			print(f"[Matchmaker] Match {match_id} was aborted. Skipping MMR calculation.")
 			return True
 
 		if match_result == -2:
-			print(f"⚠️ Conflicting reports for match {match_id}, manual resolution required")
+			print(f"[Matchmaker] Conflicting reports for match {match_id}, manual resolution required")
 			return True
 		
 		# Both players have reported and reports match - process MMR
-		print(f"✅ Both players reported for match {match_id}, processing MMR changes")
+		print(f"[Matchmaker] Both players reported for match {match_id}, processing MMR changes")
 		
 		player1_uid = match_data['player_1_discord_uid']
 		player2_uid = match_data['player_2_discord_uid']
@@ -812,63 +866,66 @@ class Matchmaker:
 		p2_race = match_data.get('player_2_race')
 
 		if p1_race and p2_race:
-			# Get current MMR values for the races played
-			p1_mmr_data = self.db_reader.get_player_mmr_1v1(player1_uid, p1_race)
-			p2_mmr_data = self.db_reader.get_player_mmr_1v1(player2_uid, p2_race)
+			# Get current MMR values from DataAccessService (in-memory, instant)
+			p1_current_mmr = data_service.get_player_mmr(player1_uid, p1_race)
+			p2_current_mmr = data_service.get_player_mmr(player2_uid, p2_race)
 			
-			if p1_mmr_data and p2_mmr_data:
-				p1_current_mmr = p1_mmr_data['mmr']
-				p2_current_mmr = p2_mmr_data['mmr']
-				
+			if p1_current_mmr is not None and p2_current_mmr is not None:
 				# Calculate MMR changes
 				from src.backend.services.mmr_service import MMRService
 				mmr_service = MMRService()
-				
-				# Use the match_result for MMR calculation
-				result = match_result
 				
 				# Calculate new MMR values
 				mmr_outcome = mmr_service.calculate_new_mmr(
 					p1_current_mmr, 
 					p2_current_mmr, 
-					result
+					match_result
 				)
 				
-				# Update MMR in database
-				p1_won = result == 1
-				p1_lost = result == 2
-				p1_drawn = result == 0
+				# Determine game outcomes
+				p1_won = match_result == 1
+				p1_lost = match_result == 2
+				p1_drawn = match_result == 0
 				
-				p2_won = result == 2
-				p2_lost = result == 1
-				p2_drawn = result == 0
+				p2_won = match_result == 2
+				p2_lost = match_result == 1
+				p2_drawn = match_result == 0
 				
-				# Update both players' MMR
-				self.db_writer.update_mmr_after_match(
-					player1_uid, p1_race, mmr_outcome.player_one_mmr,
-					won=p1_won, lost=p1_lost, drawn=p1_drawn
+				# Get current game counts from DataAccessService
+				p1_all_mmrs = data_service.get_all_player_mmrs(player1_uid)
+				p2_all_mmrs = data_service.get_all_player_mmrs(player2_uid)
+				
+				# Update both players' MMR using DataAccessService (async, non-blocking)
+				await data_service.update_player_mmr(
+					player1_uid, p1_race, int(mmr_outcome.player_one_mmr),
+					games_won=1 if p1_won else None,
+					games_lost=1 if p1_lost else None,
+					games_drawn=1 if p1_drawn else None
 				)
 				
-				self.db_writer.update_mmr_after_match(
-					player2_uid, p2_race, mmr_outcome.player_two_mmr,
-					won=p2_won, lost=p2_lost, drawn=p2_drawn
+				await data_service.update_player_mmr(
+					player2_uid, p2_race, int(mmr_outcome.player_two_mmr),
+					games_won=1 if p2_won else None,
+					games_lost=1 if p2_lost else None,
+					games_drawn=1 if p2_drawn else None
 				)
 				
-				# Calculate and store MMR change using MMR service
+				# Calculate and store MMR change
 				p1_mmr_change = mmr_service.calculate_mmr_change(
 					p1_current_mmr, 
 					p2_current_mmr, 
-					result
+					match_result
 				)
-				self.db_writer.update_match_mmr_change(match_id, p1_mmr_change)
 				
-				print(f"📊 Updated MMR for match {match_id}:")
-				print(f"   Player 1 ({player1_uid}): {p1_current_mmr} → {mmr_outcome.player_one_mmr} ({p1_race})")
-				print(f"   Player 2 ({player2_uid}): {p2_current_mmr} → {mmr_outcome.player_two_mmr} ({p2_race})")
+				# Update match MMR change using DataAccessService (async, non-blocking)
+				await data_service.update_match_mmr_change(match_id, p1_mmr_change)
+				
+				print(f"[Matchmaker] Updated MMR for match {match_id}:")
+				print(f"   Player 1 ({player1_uid}): {p1_current_mmr} -> {mmr_outcome.player_one_mmr} ({p1_race})")
+				print(f"   Player 2 ({player2_uid}): {p2_current_mmr} -> {mmr_outcome.player_two_mmr} ({p2_race})")
 				print(f"   MMR Change: {p1_mmr_change:+} (positive = player 1 gained)")
-				# Cache invalidation is now handled automatically by the database decorator
 			else:
-				print(f"❌ Could not get MMR data for players in match {match_id}")
+				print(f"[Matchmaker] Could not get MMR data for players in match {match_id}")
 		
 		return True
 

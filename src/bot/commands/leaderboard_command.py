@@ -447,9 +447,9 @@ class LeaderboardView(discord.ui.View):
             flag_emotes = {}
             
             for player in formatted_players:
-                mmr_rank = player.get('mmr_rank', 'u_rank')
-                race_code = player.get('race_code', '')
-                country = player.get('country', '')
+                mmr_rank = player['mmr_rank']
+                race_code = player['race_code']
+                country = player['country']
                 
                 # Cache emotes to avoid repeated lookups
                 if mmr_rank not in rank_emotes:
@@ -473,15 +473,15 @@ class LeaderboardView(discord.ui.View):
                     format_start = time.perf_counter()
                     
                     # Use pre-fetched emotes (no function calls)
-                    rank_emote = rank_emotes[player.get('mmr_rank', 'u_rank')]
-                    race_emote = race_emotes[player.get('race_code', '')]
-                    flag_emote = flag_emotes[player.get('country', '')]
+                    rank_emote = rank_emotes[player['mmr_rank']]
+                    race_emote = race_emotes[player['race_code']]
+                    flag_emote = flag_emotes[player['country']]
                     
                     # Format rank with backticks and proper alignment (4 chars + period)
                     rank_padded = f"{player['rank']:>4d}"
                     
                     # Format player name with padding to 12 chars (12 max)
-                    player_name = player['player_id']
+                    player_name = player['player_name']
                     player_name_padded = f"{player_name:<12}"
                     
                     # Format MMR

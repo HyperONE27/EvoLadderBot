@@ -39,7 +39,7 @@ class RacesService(BaseConfigService):
         brood_war: List[Dict[str, Any]] = []
         starcraft2: List[Dict[str, Any]] = []
         for race in self.get_races():
-            code = race.get("code", "")
+            code = race["code"]
             if code.startswith("bw_"):
                 brood_war.append(race)
             elif code.startswith("sc2_"):
@@ -50,11 +50,11 @@ class RacesService(BaseConfigService):
         grouped = self.get_races_by_game()
         return {
             "brood_war": [
-                (race.get("name", ""), race.get("code", ""), race.get("description", ""))
+                (race["name"], race["code"], race["description"])
                 for race in grouped["brood_war"]
             ],
             "starcraft2": [
-                (race.get("name", ""), race.get("code", ""), race.get("description", ""))
+                (race["name"], race["code"], race["description"])
                 for race in grouped["starcraft2"]
             ],
         }
@@ -68,7 +68,7 @@ class RacesService(BaseConfigService):
 
     def get_race_options_for_dropdown(self) -> List[Tuple[str, str, str]]:
         return [
-            (race.get("name", ""), race.get("code", ""), race.get("description", ""))
+            (race["name"], race["code"], race["description"])
             for race in self.get_races()
         ]
 

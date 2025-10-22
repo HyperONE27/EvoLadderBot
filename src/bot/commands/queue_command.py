@@ -10,8 +10,6 @@ from discord import app_commands
 from src.backend.db.db_reader_writer import get_timestamp
 from src.backend.services.app_context import (
     command_guard_service as guard_service,
-    db_reader,
-    db_writer,
     maps_service,
     mmr_service,
     notification_service,
@@ -189,10 +187,10 @@ async def queue_command(interaction: discord.Interaction):
     if user_preferences:
         # Parse saved preferences from database
         try:
-            default_races = json.loads(user_preferences.get('last_chosen_races', '[]'))
-            default_maps = json.loads(user_preferences.get('last_chosen_vetoes', '[]'))
-        except (json.JSONDecodeError, TypeError):
-            # Fallback to empty defaults if parsing fails
+            default_races = json.loads(user_preferences['last_chosen_races'])
+            default_maps = json.loads(user_preferences['last_chosen_vetoes'])
+        except (json.JSONDecodeError, TypeError, KeyError):
+            # If parsing fails or keys don't exist, use empty defaults
             default_races = []
             default_maps = []
     else:
@@ -1024,7 +1022,7 @@ class MatchFoundView(discord.ui.View):
         if server_code:
             region_info = regions_service.get_game_region_for_server(server_code)
             if region_info:
-                region_name = (region_info.get("name") or "").lower()
+                region_name = region_info["name"].lower()
                 if "americas" in region_name:
                     map_link = maps_service.get_map_battlenet_link(map_short_name, "americas")
                 elif "europe" in region_name:
@@ -1036,7 +1034,7 @@ class MatchFoundView(discord.ui.View):
             # Fallback to Americas link if specific region not available
             map_link = maps_service.get_map_battlenet_link(map_short_name, "americas")
 
-        map_author = maps_service.get_map_author(map_short_name) or "Unknown"
+        map_author = maps_service.get_map_author(map_short_name)
         map_link_display = map_link if map_link else "Unavailable"
         
         embed.add_field(
@@ -1276,8 +1274,8 @@ class MatchFoundView(discord.ui.View):
         p1_name = final_results['p1_name']
         p2_name = final_results['p2_name']
 
-        p1_flag = get_flag_emote(p1_info.get('country', 'XX'))
-        p2_flag = get_flag_emote(p2_info.get('country', 'XX'))
+        p1_flag = get_flag_emote(p1_info['country'])
+        p2_flag = get_flag_emote(p2_info['country'])
         p1_race = final_results['p1_race']
         p2_race = final_results['p2_race']
         p1_race_emote = get_race_emote(p1_race)
@@ -1361,8 +1359,8 @@ class MatchFoundView(discord.ui.View):
         elif match_data.get("player_2_report") == -3:
             aborted_by = p2_name
             
-        p1_flag = get_flag_emote(p1_info.get('country', 'XX')) if p1_info else '🏳️'
-        p2_flag = get_flag_emote(p2_info.get('country', 'XX')) if p2_info else '🏳️'
+        p1_flag = get_flag_emote(p1_info['country']) if p1_info else '🏳️'
+        p2_flag = get_flag_emote(p2_info['country']) if p2_info else '🏳️'
         p1_race = match_data.get('player_1_race')
         p2_race = match_data.get('player_2_race')
         p1_race_emote = get_race_emote(p1_race)
@@ -1433,7 +1431,7 @@ class MatchAbortButton(discord.ui.Button):
         super().__init__(
             emoji="🛑",
             label=label_text,
-            style=discord.ButtonStyle.danger,
+            style=discord.ButtonStyle.secondary,
             row=0,
             disabled=is_disabled
         )
@@ -1470,7 +1468,7 @@ class MatchAbortButton(discord.ui.Button):
         
         flow.checkpoint("execute_abort_start")
         # Atomically abort the match
-        success = matchmaker.abort_match(
+        success = await matchmaker.abort_match(
             self.parent_view.match_result.match_id,
             player_discord_uid
         )
@@ -1677,7 +1675,7 @@ class MatchResultSelect(discord.ui.Select):
             current_player_id = self.parent_view.match_result.player_1_discord_id if self.is_player1 else self.parent_view.match_result.player_2_discord_id
             
             checkpoint1 = time.perf_counter()
-            success = matchmaker.record_match_result(self.match_result.match_id, current_player_id, report_value)
+            success = await matchmaker.record_match_result(self.match_result.match_id, current_player_id, report_value)
             checkpoint2 = time.perf_counter()
             
             duration_ms = (checkpoint2 - checkpoint1) * 1000
@@ -1772,7 +1770,7 @@ class MatchResultSelect(discord.ui.Select):
         
         try:
             current_player_id = self.parent_view.match_result.player_1_discord_id if self.is_player1 else self.parent_view.match_result.player_2_discord_id
-            success = matchmaker.record_match_result(self.match_result.match_id, current_player_id, report_value)
+            success = await matchmaker.record_match_result(self.match_result.match_id, current_player_id, report_value)
             
             if success:
                 print(f"📝 Player report recorded for match {self.match_result.match_id}. Waiting for backend notification.")
@@ -1846,6 +1844,37 @@ class StarCraftRaceSelect(discord.ui.Select):
         self.view.selected_sc2_race = self.values[0] if self.values else None
         await self.view.persist_preferences()
         await self.view.update_embed(interaction)
+
+
+async def store_replay_background(match_id: int, player_id: int, replay_bytes: bytes, replay_info: dict, channel):
+    """Background task to store replay without blocking UI updates"""
+    try:
+        print(f"[Background] Starting replay storage for match {match_id} (player: {player_id})")
+        
+        # Use the async method for non-blocking database writes
+        result = await replay_service.store_upload_from_parsed_dict_async(
+            match_id,
+            player_id,
+            replay_bytes,
+            replay_info
+        )
+        
+        if result.get("success"):
+            # Send replay details embed as a new message
+            replay_data = result.get("replay_data")
+            if replay_data:
+                replay_embed = ReplayDetailsEmbed.get_success_embed(replay_data)
+                await channel.send(embed=replay_embed)
+            
+            print(f"✅ Background replay storage completed for match {match_id} (player: {player_id})")
+        else:
+            error_message = result.get("error")
+            print(f"❌ Background replay storage failed for match {match_id}: {error_message}")
+            
+    except Exception as e:
+        print(f"❌ Background replay storage error for match {match_id}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 async def on_message(message: discord.Message, bot=None):
@@ -1989,65 +2018,37 @@ async def on_message(message: discord.Message, bot=None):
             print(f"❌ Failed to parse replay for match {match_view.match_result.match_id}: {error_message}")
             return
         
-        flow.checkpoint("store_replay_start")
-        # Use the async method for non-blocking database writes
-        result = await replay_service.store_upload_from_parsed_dict_async(
+        # IMMEDIATE UI UPDATE - Don't wait for storage to complete
+        flow.checkpoint("immediate_ui_update_start")
+        unix_epoch = int(time.time())
+        match_view.match_result.replay_uploaded = "Yes"
+        match_view.match_result.replay_upload_time = unix_epoch
+        
+        # Update all views for the match IMMEDIATELY
+        match_views = await match_found_view_manager.get_views_by_match_id(match_view.match_result.match_id)
+        for _, view in match_views:
+            view.match_result.replay_uploaded = "Yes"
+            view.match_result.replay_upload_time = unix_epoch
+            view._update_dropdown_states()
+            if view.last_interaction:
+                with suppress(discord.NotFound, discord.InteractionResponded):
+                    await view.last_interaction.edit_original_response(
+                        embed=view.get_embed(), view=view
+                    )
+        flow.checkpoint("immediate_ui_update_complete")
+        
+        # Start background storage task (non-blocking)
+        flow.checkpoint("start_background_storage")
+        asyncio.create_task(store_replay_background(
             match_view.match_result.match_id,
             message.author.id,
             replay_bytes,
-            replay_info
-        )
-        flow.checkpoint("store_replay_complete")
+            replay_info,
+            message.channel
+        ))
         
-        flow.checkpoint("update_views_start")
-        if result.get("success"):
-            unix_epoch = result.get("unix_epoch")
-            match_view.match_result.replay_uploaded = "Yes"
-            match_view.match_result.replay_upload_time = unix_epoch
-            
-            flow.checkpoint("send_replay_embed")
-            # Send replay details embed as a new message
-            replay_data = result.get("replay_data")
-            if replay_data:
-                replay_embed = ReplayDetailsEmbed.get_success_embed(replay_data)
-                await message.channel.send(embed=replay_embed)
-            
-            flow.checkpoint("update_all_match_views")
-            
-            # Update all views for the match
-            match_views = await match_found_view_manager.get_views_by_match_id(match_view.match_result.match_id)
-            for _, view in match_views:
-                view.match_result.replay_uploaded = "Yes"
-                view.match_result.replay_upload_time = unix_epoch
-                view._update_dropdown_states()
-                if view.last_interaction:
-                    with suppress(discord.NotFound, discord.InteractionResponded):
-                        await view.last_interaction.edit_original_response(
-                            embed=view.get_embed(), view=view
-                        )
-            flow.checkpoint("update_views_complete")
-            
-            print(f"✅ Replay file stored for match {match_view.match_result.match_id} (player: {message.author.id})")
-            flow.complete("success")
-        else:
-            # Handle failure, including parsing errors
-            error_message = result.get("error")
-            if error_message:
-                flow.complete("store_failed")
-                # Send the red error embed
-                error_embed = ReplayDetailsEmbed.get_error_embed(error_message)
-                await message.channel.send(embed=error_embed)
-
-                # Update the match view to show "Replay Invalid"
-                match_view.match_result.replay_uploaded = "Replay Invalid"
-                match_view._update_dropdown_states()
-                if match_view.last_interaction:
-                    with suppress(discord.NotFound, discord.InteractionResponded):
-                        await match_view.last_interaction.edit_original_response(
-                            embed=match_view.get_embed(), view=match_view
-                        )
-            
-            print(f"❌ Failed to store replay for match {match_view.match_result.match_id}: {error_message}")
+        print(f"✅ Replay upload UI updated immediately for match {match_view.match_result.match_id} (player: {message.author.id})")
+        flow.complete("success")
 
     except Exception as e:
         flow.complete("error")

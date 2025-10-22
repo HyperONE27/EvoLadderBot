@@ -39,6 +39,8 @@ class WriteJobType(Enum):
     UPDATE_PREFERENCES = "update_preferences"
     CREATE_MATCH = "create_match"
     UPDATE_MATCH = "update_match"
+    UPDATE_MATCH_REPORT = "update_match_report"
+    UPDATE_MATCH_MMR_CHANGE = "update_match_mmr_change"
     INSERT_REPLAY = "insert_replay"
     LOG_PLAYER_ACTION = "log_player_action"
     INSERT_COMMAND_CALL = "insert_command_call"
@@ -71,6 +73,10 @@ class DataAccessService:
     
     def __init__(self):
         """Initialize the service (only runs once due to singleton pattern)."""
+        # Guard: Don't re-initialize if __init__ was already called
+        if hasattr(self, '_init_done') and self._init_done:
+            return
+        
         if DataAccessService._initialized:
             return
         
@@ -87,17 +93,19 @@ class DataAccessService:
         self._matches_df: Optional[pl.DataFrame] = None
         self._replays_df: Optional[pl.DataFrame] = None
         
-        # Async write-back queue
-        self._write_queue: asyncio.Queue = asyncio.Queue()
-        self._writer_task: Optional[asyncio.Task] = None
+        # System state
         self._shutdown_event = asyncio.Event()
-        
-        # Performance tracking
+        self._writer_task: Optional[asyncio.Task] = None
+        self._write_queue: asyncio.Queue = asyncio.Queue()
+        self._init_lock = asyncio.Lock()
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None  # Store a reference to the main loop
+
+        # Performance stats
         self._write_queue_size_peak = 0
         self._total_writes_queued = 0
         self._total_writes_completed = 0
         
-        DataAccessService._initialized = True
+        self._init_done = True  # Mark that __init__ has completed
         print("[DataAccessService] Singleton initialized (DataFrames not loaded yet)")
     
     async def initialize_async(self) -> None:
@@ -106,22 +114,30 @@ class DataAccessService:
         
         This MUST be called during bot startup after the event loop is running.
         """
-        print("[DataAccessService] Starting async initialization...")
-        start_time = time.time()
-        
-        # Load all hot tables into memory
-        await self._load_all_tables()
-        
-        # Start background write worker
-        self._writer_task = asyncio.create_task(self._db_writer_worker())
-        
-        elapsed = (time.time() - start_time) * 1000
-        print(f"[DataAccessService] Async initialization complete in {elapsed:.2f}ms")
-        print(f"[DataAccessService]    - Players: {len(self._players_df) if self._players_df is not None else 0} rows")
-        print(f"[DataAccessService]    - MMRs: {len(self._mmrs_df) if self._mmrs_df is not None else 0} rows")
-        print(f"[DataAccessService]    - Preferences: {len(self._preferences_df) if self._preferences_df is not None else 0} rows")
-        print(f"[DataAccessService]    - Matches: {len(self._matches_df) if self._matches_df is not None else 0} rows")
-        print(f"[DataAccessService]    - Replays: {len(self._replays_df) if self._replays_df is not None else 0} rows")
+        async with self._init_lock:
+            if DataAccessService._initialized:
+                print("[DataAccessService] Already initialized, skipping")
+                return
+            
+            print("[DataAccessService] Starting async initialization...")
+            self._main_loop = asyncio.get_running_loop() # Store the loop on which this was initialized
+            start_time = time.time()
+            
+            # Load all hot tables into memory
+            await self._load_all_tables()
+            
+            # Start background write worker
+            self._writer_task = self._main_loop.create_task(self._db_writer_worker())
+            
+            elapsed = (time.time() - start_time) * 1000
+            print(f"[DataAccessService] Async initialization complete in {elapsed:.2f}ms")
+            print(f"[DataAccessService]    - Players: {len(self._players_df) if self._players_df is not None else 0} rows")
+            print(f"[DataAccessService]    - MMRs: {len(self._mmrs_df) if self._mmrs_df is not None else 0} rows")
+            print(f"[DataAccessService]    - Preferences: {len(self._preferences_df) if self._preferences_df is not None else 0} rows")
+            print(f"[DataAccessService]    - Matches: {len(self._matches_df) if self._matches_df is not None else 0} rows")
+            print(f"[DataAccessService]    - Replays: {len(self._replays_df) if self._replays_df is not None else 0} rows")
+            
+            self._initialized = True
     
     async def _load_all_tables(self) -> None:
         """Load all hot tables from the database into Polars DataFrames."""
@@ -201,10 +217,26 @@ class DataAccessService:
         if matches_data:
             self._matches_df = pl.DataFrame(matches_data, infer_schema_length=None)
         else:
+            # Create empty DataFrame with complete schema matching matches_1v1 table
             self._matches_df = pl.DataFrame({
                 "id": pl.Series([], dtype=pl.Int64),
                 "player_1_discord_uid": pl.Series([], dtype=pl.Int64),
                 "player_2_discord_uid": pl.Series([], dtype=pl.Int64),
+                "player_1_race": pl.Series([], dtype=pl.Utf8),
+                "player_2_race": pl.Series([], dtype=pl.Utf8),
+                "map_played": pl.Series([], dtype=pl.Utf8),
+                "server_choice": pl.Series([], dtype=pl.Utf8),
+                "player_1_mmr": pl.Series([], dtype=pl.Int64),
+                "player_2_mmr": pl.Series([], dtype=pl.Int64),
+                "mmr_change": pl.Series([], dtype=pl.Float64),
+                "played_at": pl.Series([], dtype=pl.Utf8),
+                "player_1_report": pl.Series([], dtype=pl.Int64),
+                "player_2_report": pl.Series([], dtype=pl.Int64),
+                "match_result": pl.Series([], dtype=pl.Int64),
+                "player_1_replay_path": pl.Series([], dtype=pl.Utf8),
+                "player_2_replay_path": pl.Series([], dtype=pl.Utf8),
+                "player_1_replay_time": pl.Series([], dtype=pl.Utf8),
+                "player_2_replay_time": pl.Series([], dtype=pl.Utf8),
             })
         print(f"[DataAccessService]   Matches loaded: {len(self._matches_df)} rows")
         
@@ -309,7 +341,7 @@ class DataAccessService:
                     None,
                     self._db_writer.create_player,
                     job.data['discord_uid'],
-                    job.data.get('discord_username', 'Unknown'),
+                    job.data['discord_username'],
                     job.data.get('player_name'),
                     job.data.get('battletag'),
                     job.data.get('country'),
@@ -355,7 +387,7 @@ class DataAccessService:
                     job.data['setting_name'],
                     job.data.get('old_value'),
                     job.data.get('new_value'),
-                    job.data.get('changed_by', 'player')
+                    job.data['changed_by']
                 )
             
             elif job.job_type == WriteJobType.UPDATE_PREFERENCES:
@@ -377,6 +409,16 @@ class DataAccessService:
                     job.data['replay_time']
                 )
             
+            elif job.job_type == WriteJobType.UPDATE_MATCH_MMR_CHANGE:
+                print(f"[DataAccessService] Processing UPDATE_MATCH_MMR_CHANGE: match_id={job.data['match_id']}, mmr_change={job.data['mmr_change']}")
+                result = await loop.run_in_executor(
+                    None,
+                    self._db_writer.update_match_mmr_change,
+                    job.data['match_id'],
+                    job.data['mmr_change']
+                )
+                print(f"[DataAccessService] UPDATE_MATCH_MMR_CHANGE result: {result}")
+            
             elif job.job_type == WriteJobType.INSERT_REPLAY:
                 await loop.run_in_executor(
                     None,
@@ -391,6 +433,16 @@ class DataAccessService:
                     job.data['discord_uid'],
                     job.data['player_name'],
                     job.data['command']
+                )
+            
+            elif job.job_type == WriteJobType.UPDATE_MATCH_REPORT:
+                # Use the database writer for match report updates
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.update_player_report_1v1,
+                    job.data['match_id'],
+                    job.data['player_discord_uid'],
+                    job.data['report_value']
                 )
             
             elif job.job_type == WriteJobType.ABORT_MATCH:
@@ -479,11 +531,25 @@ class DataAccessService:
         
         # Cancel worker task
         if self._writer_task and not self._writer_task.done():
-            self._writer_task.cancel()
-            try:
-                await self._writer_task
-            except asyncio.CancelledError:
-                pass
+            # Ensure cancellation happens on the correct loop
+            if self._main_loop and self._main_loop.is_running():
+                self._main_loop.call_soon_threadsafe(self._writer_task.cancel)
+                try:
+                    # Wait for the task to acknowledge cancellation
+                    await asyncio.wait_for(self._writer_task, timeout=5.0)
+                except asyncio.CancelledError:
+                    print("[DataAccessService] Writer task cancelled successfully.")
+                except asyncio.TimeoutError:
+                    print("[DataAccessService] WARN: Timeout waiting for writer task to cancel.")
+                except Exception as e:
+                    print(f"[DataAccessService] ERROR during writer task shutdown: {e}")
+            else:
+                # Fallback if loop is not running or not set
+                self._writer_task.cancel()
+                try:
+                    await self._writer_task
+                except asyncio.CancelledError:
+                    pass  # Expected
         
         # Print stats
         print(f"[DataAccessService] Shutdown complete")
@@ -608,18 +674,141 @@ class DataAccessService:
     
     def get_leaderboard_dataframe(self) -> Optional[pl.DataFrame]:
         """
-        Get the raw leaderboard DataFrame for advanced queries.
+        Get the leaderboard DataFrame with joined player and MMR data.
         
-        This can be used by LeaderboardService for filtering and sorting.
+        This creates a proper leaderboard view by joining players and MMRs data.
         
         Returns:
-            Polars DataFrame with MMR data, or None if not initialized
+            Polars DataFrame with complete leaderboard data, or None if not initialized
         """
-        if self._mmrs_df is None:
-            print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
+        if self._mmrs_df is None or self._players_df is None:
+            print("[DataAccessService] WARNING: DataFrames not initialized")
             return None
         
-        return self._mmrs_df
+        # Join MMRs with Players data to get complete leaderboard information
+        leaderboard_df = self._mmrs_df.join(
+            self._players_df.select([
+                "discord_uid", 
+                "player_name",
+                "country", 
+                "alt_player_name_1", 
+                "alt_player_name_2"
+            ]),
+            on="discord_uid",
+            how="left"
+        )
+        
+        # Add last_played from matches (most recent match for each player/race)
+        if self._matches_df is not None and len(self._matches_df) > 0:
+            # Get the most recent match date for each player/race combination
+            last_played = self._matches_df.group_by(["player_1_discord_uid", "player_1_race"]).agg([
+                pl.col("played_at").max().alias("last_played_p1")
+            ]).rename({"player_1_discord_uid": "discord_uid", "player_1_race": "race"})
+            
+            # Also get player 2 matches
+            last_played_p2 = self._matches_df.group_by(["player_2_discord_uid", "player_2_race"]).agg([
+                pl.col("played_at").max().alias("last_played_p2")
+            ]).rename({"player_2_discord_uid": "discord_uid", "player_2_race": "race"})
+            
+            # Combine both and get the most recent
+            # Rename columns to match before concatenating
+            last_played = last_played.rename({"last_played_p1": "last_played"})
+            last_played_p2 = last_played_p2.rename({"last_played_p2": "last_played"})
+            
+            all_last_played = pl.concat([last_played, last_played_p2])
+            if len(all_last_played) > 0:
+                all_last_played = all_last_played.group_by(["discord_uid", "race"]).agg([
+                    pl.col("last_played").max().alias("last_played")
+                ])
+                
+                leaderboard_df = leaderboard_df.join(
+                    all_last_played,
+                    on=["discord_uid", "race"],
+                    how="left"
+                )
+            else:
+                # No matches yet, add empty last_played column
+                leaderboard_df = leaderboard_df.with_columns(pl.lit(None).alias("last_played"))
+        else:
+            # No matches yet, add empty last_played column
+            leaderboard_df = leaderboard_df.with_columns(pl.lit(None).alias("last_played"))
+        
+        return leaderboard_df
+    
+    # ========== Match Operations ==========
+    
+    def update_match_report(self, match_id: int, player_discord_uid: int, report_value: int) -> bool:
+        """
+        Update a player's report for a match in memory.
+        
+        Args:
+            match_id: Match ID
+            player_discord_uid: Discord UID of the player reporting
+            report_value: Report value (0=loss, 1=win, -1=aborted, -3=aborted by this player)
+            
+        Returns:
+            True if successful
+        """
+        try:
+            if self._matches_df is None:
+                print(f"[DataAccessService] Matches DataFrame not initialized")
+                return False
+            
+            # Get match data to verify player is in this match
+            match = self.get_match(match_id)
+            if not match:
+                print(f"[DataAccessService] Match {match_id} not found")
+                return False
+            
+            p1_discord_uid = match.get('player_1_discord_uid')
+            p2_discord_uid = match.get('player_2_discord_uid')
+            
+            # Determine which player is reporting
+            if player_discord_uid == p1_discord_uid:
+                report_column = "player_1_report"
+            elif player_discord_uid == p2_discord_uid:
+                report_column = "player_2_report"
+            else:
+                print(f"[DataAccessService] Player {player_discord_uid} not in match {match_id}")
+                return False
+            
+            # Update the report in memory
+            self._matches_df = self._matches_df.with_columns([
+                pl.when(pl.col("id") == match_id)
+                  .then(pl.lit(report_value))
+                  .otherwise(pl.col(report_column))
+                  .alias(report_column)
+            ])
+            
+            print(f"[DataAccessService] Updated {report_column} to {report_value} for match {match_id}")
+            
+            # Queue database write
+            job = WriteJob(
+                job_type=WriteJobType.UPDATE_MATCH_REPORT,
+                data={
+                    "match_id": match_id,
+                    "player_discord_uid": player_discord_uid,
+                    "report_value": report_value
+                },
+                timestamp=time.time()
+            )
+            
+            # Note: We can't await here since this is called from sync context
+            # The write will be queued and processed by the background worker
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(self._write_queue.put(job))
+            else:
+                loop.run_until_complete(self._write_queue.put(job))
+            
+            self._total_writes_queued += 1
+            return True
+            
+        except Exception as e:
+            print(f"[DataAccessService] Error updating match report: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     # ========== Write Methods (Players Table) ==========
     
@@ -1201,8 +1390,15 @@ class DataAccessService:
         if match_id:
             match = await loop.run_in_executor(None, self._db_reader.get_match_1v1, match_id)
             if match:
-                new_row = pl.DataFrame([match])
-                self._matches_df = pl.concat([new_row, self._matches_df], how="diagonal")
+                # Create new row with explicit schema alignment
+                new_row = pl.DataFrame([match], infer_schema_length=None)
+                # Use diagonal concat to handle any missing columns gracefully
+                try:
+                    self._matches_df = pl.concat([new_row, self._matches_df], how="diagonal_relaxed")
+                except Exception as e:
+                    print(f"[DataAccessService] Error concatenating match: {e}")
+                    # Fallback: recreate the match dataframe with the new row
+                    self._matches_df = pl.concat([new_row, self._matches_df], how="diagonal")
                 # Keep only recent 1000 matches
                 if len(self._matches_df) > 1000:
                     self._matches_df = self._matches_df.head(1000)
@@ -1216,7 +1412,52 @@ class DataAccessService:
         replay_path: str,
         replay_time: str
     ) -> bool:
-        """Update replay information for a match."""
+        """Update replay information for a match with immediate in-memory update."""
+        if self._matches_df is None:
+            print("[DataAccessService] WARNING: Matches DataFrame not initialized")
+            return False
+        
+        # Update in-memory immediately
+        try:
+            # Find the match and which player uploaded
+            match_row = self._matches_df.filter(pl.col("id") == match_id)
+            if len(match_row) == 0:
+                print(f"[DataAccessService] WARNING: Match {match_id} not found in memory")
+                # Still queue the write for the database
+            else:
+                match_data = match_row.to_dicts()[0]
+                
+                # Determine which player column to update
+                if match_data['player_1_discord_uid'] == player_discord_uid:
+                    replay_col = 'player_1_replay_path'
+                    time_col = 'player_1_replay_time'
+                elif match_data['player_2_discord_uid'] == player_discord_uid:
+                    replay_col = 'player_2_replay_path'
+                    time_col = 'player_2_replay_time'
+                else:
+                    print(f"[DataAccessService] WARNING: Player {player_discord_uid} not in match {match_id}")
+                    replay_col = None
+                
+                if replay_col:
+                    # Update the DataFrame
+                    self._matches_df = self._matches_df.with_columns([
+                        pl.when(pl.col("id") == match_id)
+                          .then(pl.lit(replay_path))
+                          .otherwise(pl.col(replay_col))
+                          .alias(replay_col),
+                        pl.when(pl.col("id") == match_id)
+                          .then(pl.lit(replay_time))
+                          .otherwise(pl.col(time_col))
+                          .alias(time_col)
+                    ])
+                    print(f"[DataAccessService] Updated match {match_id} replay in memory ({replay_col})")
+        
+        except Exception as e:
+            print(f"[DataAccessService] Error updating match replay in memory: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Queue async write to database
         job = WriteJob(
             job_type=WriteJobType.UPDATE_MATCH,
             data={
@@ -1323,6 +1564,8 @@ class DataAccessService:
         """
         Abort a match using DataAccessService for fast operations.
         
+        Updates in-memory match state immediately, then queues database write.
+        
         Args:
             match_id: Match ID to abort
             player_discord_uid: Discord UID of player aborting
@@ -1334,18 +1577,53 @@ class DataAccessService:
             # Get match data from memory first - DataAccessService is source of truth
             match = self.get_match(match_id)
             if not match:
-                raise ValueError(f"[DataAccessService] Match {match_id} not found in memory. DataAccessService is the source of truth - match should have been written to memory first.")
+                print(f"[DataAccessService] Match {match_id} not found in memory")
+                return False
             
             p1_discord_uid = match.get('player_1_discord_uid')
             p2_discord_uid = match.get('player_2_discord_uid')
             
             # Verify player is in this match
             if player_discord_uid not in [p1_discord_uid, p2_discord_uid]:
+                print(f"[DataAccessService] Player {player_discord_uid} not in match {match_id}")
                 return False
+            
+            # Check if match is already aborted
+            match_result = match.get('match_result')
+            if match_result == -1:
+                print(f"[DataAccessService] Match {match_id} already aborted, treating as success for player {player_discord_uid}")
+                # Don't decrement aborts again, but return success so the UI updates correctly
+                return True
             
             # Decrement aborts in memory (instant)
             current_aborts = self.get_remaining_aborts(player_discord_uid)
-            await self.update_remaining_aborts(player_discord_uid, current_aborts - 1)
+            if current_aborts > 0:
+                await self.update_remaining_aborts(player_discord_uid, current_aborts - 1)
+                print(f"[DataAccessService] Decremented aborts for player {player_discord_uid}: {current_aborts} -> {current_aborts - 1}")
+            
+            # Update match state in memory immediately
+            # - Set aborting player's report to -3 (to identify them)
+            # - Set other player's report to -1 (aborted, no fault)
+            # - Set match_result to -1 (aborted)
+            if self._matches_df is not None:
+                # Determine which player aborted
+                is_player1_aborting = player_discord_uid == p1_discord_uid
+                
+                self._matches_df = self._matches_df.with_columns([
+                    pl.when(pl.col("id") == match_id)
+                      .then(pl.lit(-3 if is_player1_aborting else -1))
+                      .otherwise(pl.col("player_1_report"))
+                      .alias("player_1_report"),
+                    pl.when(pl.col("id") == match_id)
+                      .then(pl.lit(-3 if not is_player1_aborting else -1))
+                      .otherwise(pl.col("player_2_report"))
+                      .alias("player_2_report"),
+                    pl.when(pl.col("id") == match_id)
+                      .then(pl.lit(-1))
+                      .otherwise(pl.col("match_result"))
+                      .alias("match_result")
+                ])
+                print(f"[DataAccessService] Updated match {match_id} state to aborted in memory (aborting player: {player_discord_uid})")
             
             # Queue the actual abort operation to database (async)
             job = WriteJob(
@@ -1365,6 +1643,41 @@ class DataAccessService:
             
         except Exception as e:
             print(f"[DataAccessService] Error aborting match {match_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    async def update_match_mmr_change(self, match_id: int, mmr_change: int) -> bool:
+        """
+        Update the MMR change for a match.
+        
+        Queues async database write for match MMR change.
+        
+        Args:
+            match_id: Match ID
+            mmr_change: MMR change amount (positive = player 1 gained)
+            
+        Returns:
+            True if queued successfully
+        """
+        try:
+            job = WriteJob(
+                job_type=WriteJobType.UPDATE_MATCH_MMR_CHANGE,
+                data={
+                    "match_id": match_id,
+                    "mmr_change": mmr_change
+                },
+                timestamp=time.time()
+            )
+            
+            await self._write_queue.put(job)
+            self._total_writes_queued += 1
+            return True
+            
+        except Exception as e:
+            print(f"[DataAccessService] Error queuing match MMR change update: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
 

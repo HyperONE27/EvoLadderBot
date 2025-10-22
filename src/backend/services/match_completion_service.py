@@ -9,7 +9,6 @@ import asyncio
 from asyncio import Lock
 from typing import Callable, Dict, List, Optional, Set
 
-from src.backend.db.db_reader_writer import DatabaseReader
 from src.backend.services.leaderboard_service import LeaderboardService
 
 
@@ -21,7 +20,6 @@ class MatchCompletionService:
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super(MatchCompletionService, cls).__new__(cls)
-            cls._instance.db_reader = DatabaseReader()
             cls._instance.monitored_matches = set()
             cls._instance.monitoring_tasks = {}
             cls._instance.processed_matches = set()
@@ -266,6 +264,13 @@ class MatchCompletionService:
                     self.completion_waiters[match_id].set()
                     del self.completion_waiters[match_id]
 
+            # Release queue lock for both players so they can re-queue
+            p1_uid = final_match_data.get('player_1_discord_uid')
+            p2_uid = final_match_data.get('player_2_discord_uid')
+            if p1_uid and p2_uid:
+                await matchmaker.release_queue_lock_for_players([p1_uid, p2_uid])
+                print(f"🔓 Released queue locks for players {p1_uid} and {p2_uid} after completion")
+
             checkpoint5 = time.perf_counter()
             # Notify/update all player views with the final data
             await self._notify_players_match_complete(match_id, final_match_data)
@@ -281,6 +286,9 @@ class MatchCompletionService:
     async def _handle_match_abort(self, match_id: int, match_data: dict):
         """Handle an aborted match."""
         try:
+            # Import matchmaker for queue lock release
+            from src.backend.services.matchmaking_service import matchmaker
+            
             # Re-fetch to ensure we have the latest state
             final_match_data = await self._get_match_final_results(match_id)
             if not final_match_data:
@@ -293,6 +301,13 @@ class MatchCompletionService:
                     self.completion_waiters[match_id].set()
                     del self.completion_waiters[match_id]
 
+            # Release queue lock for both players so they can re-queue
+            p1_uid = final_match_data.get('player_1_discord_uid')
+            p2_uid = final_match_data.get('player_2_discord_uid')
+            if p1_uid and p2_uid:
+                await matchmaker.release_queue_lock_for_players([p1_uid, p2_uid])
+                print(f"🔓 Released queue locks for players {p1_uid} and {p2_uid} after abort")
+
             # Notify all callbacks with abort status
             callbacks = self.notification_callbacks.pop(match_id, [])
             print(f"  -> Notifying {len(callbacks)} callbacks for match {match_id} abort.")
@@ -304,6 +319,8 @@ class MatchCompletionService:
 
         except Exception as e:
             print(f"❌ Error handling match abort for {match_id}: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             # Clean up monitoring for this match
             self.stop_monitoring_match(match_id)
@@ -430,7 +447,7 @@ class MatchCompletionService:
                 -1: "Aborted",
                 -2: "Conflict"
             }
-            result_text = result_text_map.get(match_data['match_result'], "Undetermined")
+            result_text = result_text_map[match_data['match_result']]
 
             return {
                 "match_id": match_id,

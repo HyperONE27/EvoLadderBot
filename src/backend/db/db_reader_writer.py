@@ -36,11 +36,16 @@ def invalidate_leaderboard_on_mmr_change(func):
                 invalidate_leaderboard_cache()
                 print(f"[MMR Change] Leaderboard cache invalidated after {func.__name__}")
 
-                # Trigger ranking service refresh asynchronously
-                from src.backend.services.app_context import ranking_service
-                if ranking_service:
-                    asyncio.create_task(ranking_service.trigger_refresh())
-                    print(f"[MMR Change] Ranking service refresh triggered after {func.__name__}")
+                # Trigger ranking service refresh asynchronously (only if event loop is running)
+                try:
+                    loop = asyncio.get_running_loop()
+                    from src.backend.services.app_context import ranking_service
+                    if ranking_service:
+                        loop.create_task(ranking_service.trigger_refresh())
+                        print(f"[MMR Change] Ranking service refresh triggered after {func.__name__}")
+                except RuntimeError:
+                    # No event loop running, skip async operations
+                    print(f"[MMR Change] No event loop running, skipping ranking service refresh after {func.__name__}")
 
             except Exception as e:
                 print(f"[MMR Change] Warning: Failed to invalidate cache after {func.__name__}: {e}")
@@ -259,6 +264,14 @@ class DatabaseReader:
             {"discord_uid": discord_uid}
         )
         return results[0] if results else None
+    
+    def get_match_mmr_change(self, match_id: int) -> Optional[int]:
+        """Get the MMR change for a match."""
+        results = self.adapter.execute_query(
+            "SELECT mmr_change FROM matches_1v1 WHERE id = :match_id",
+            {"match_id": match_id}
+        )
+        return results[0]['mmr_change'] if results else None
 
 
 class DatabaseWriter:

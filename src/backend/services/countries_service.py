@@ -42,7 +42,7 @@ class CountriesService(BaseConfigService):
 
             common_countries = sorted(
                 [c for c in common_countries if c.get("code") not in ["XX", "ZZ"]],
-                key=lambda item: item.get("name", ""),
+                key=lambda item: item["name"],
             )
             # Add "Other" which represents all non-common countries (XX, ZZ, and any others)
             other = next((c for c in countries if c.get("code") == "ZZ"), None)
@@ -85,7 +85,7 @@ class CountriesService(BaseConfigService):
         return self.get_country_names_for_codes(ordered_codes)
 
     def get_sorted_countries(self) -> List[Dict[str, Any]]:
-        return sorted(self.get_data(), key=lambda entry: entry.get("name", ""))
+        return sorted(self.get_data(), key=lambda entry: entry["name"])
 
     def search_countries(self, query: str, limit: int = 25) -> List[Dict[str, Any]]:
         results = self.search_by_name(query, limit=limit)

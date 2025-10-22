@@ -6,8 +6,7 @@ from src.backend.services.app_context import (
     user_info_service,
     countries_service,
     regions_service,
-    races_service,
-    db_reader
+    races_service
 )
 from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote, get_flag_emote, get_game_emote
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
@@ -88,8 +87,8 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
     # Basic Information
     basic_info_parts = [
         f"- **User ID:** {user.mention}",
-        f"- **Player Name:** {player_data.get('player_name', 'Not set')}",
-        f"- **BattleTag:** {player_data.get('battletag', 'Not set')}"
+        f"- **Player Name:** {player_data['player_name']}",
+        f"- **BattleTag:** {player_data['battletag']}"
     ]
     
     # Alternative IDs if they exist

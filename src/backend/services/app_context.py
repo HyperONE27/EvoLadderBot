@@ -18,7 +18,7 @@ Usage:
     )
 """
 
-from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
+# Database imports removed - all services now use DataAccessService
 from src.backend.services.command_guard_service import CommandGuardService
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.leaderboard_service import LeaderboardService
@@ -42,14 +42,12 @@ from src.backend.services.validation_service import ValidationService
 # =============================================================================
 
 # ⚠️  LEGACY WARNING: These instances are kept for backwards compatibility only.
+# ⚠️  DEPRECATED: Global database instances removed
 # ⚠️  NEW CODE SHOULD USE DataAccessService INSTEAD:
 # ⚠️  from src.backend.services.data_access_service import DataAccessService
 # ⚠️  data_service = DataAccessService()
 # ⚠️  DataAccessService provides in-memory data access with async write-back to DB.
-# ⚠️  These legacy instances bypass the new architecture and should be avoided.
-
-db_reader = DatabaseReader()
-db_writer = DatabaseWriter()
+# ⚠️  All services now use DataAccessService for unified data access.
 
 
 # =============================================================================
@@ -90,13 +88,15 @@ command_guard_service = CommandGuardService(user_service=user_info_service)
 # =============================================================================
 
 # Ranking service for MMR-based percentile ranks
-ranking_service = RankingService(db_reader=db_reader)
+from src.backend.services.data_access_service import DataAccessService
+data_access_service = DataAccessService()
+ranking_service = RankingService(data_service=data_access_service)
 
 # Leaderboard service with injected dependencies
 leaderboard_service = LeaderboardService(
     country_service=countries_service,
     race_service=races_service,
-    db_reader=db_reader,
+    data_service=data_access_service,
     ranking_service=ranking_service
 )
 
@@ -123,9 +123,6 @@ queue_service = initialize_queue_service()
 # =============================================================================
 
 __all__ = [
-    # Database layer
-    "db_reader",
-    "db_writer",
     # Static data services
     "countries_service",
     "regions_service",

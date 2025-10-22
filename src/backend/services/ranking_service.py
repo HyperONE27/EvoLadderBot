@@ -28,7 +28,7 @@ Intended usage:
 import asyncio
 from threading import Lock
 from typing import Dict, List, Optional, Tuple
-from src.backend.db.db_reader_writer import DatabaseReader
+from src.backend.services.data_access_service import DataAccessService
 
 
 class RankingService:
@@ -45,14 +45,14 @@ class RankingService:
         ("f_rank", 100.0),  # Top 92-100% (next 8%)
     ]
 
-    def __init__(self, db_reader: Optional[DatabaseReader] = None) -> None:
+    def __init__(self, data_service: Optional[DataAccessService] = None) -> None:
         """
         Initialize the ranking service.
         
         Args:
-            db_reader: Optional DatabaseReader instance for dependency injection.
+            data_service: Optional DataAccessService instance for dependency injection.
         """
-        self.db_reader = db_reader or DatabaseReader()
+        self.data_service = data_service or DataAccessService()
         self._rankings: Dict[Tuple[int, str], str] = {}
         self._total_entries: int = 0
         self._refresh_lock = Lock()
@@ -134,9 +134,7 @@ class RankingService:
         """
         try:
             # Get MMR data from DataAccessService (in-memory, instant)
-            from src.backend.services.data_access_service import DataAccessService
-            data_service = DataAccessService()
-            mmr_df = data_service.get_leaderboard_dataframe()
+            mmr_df = self.data_service.get_leaderboard_dataframe()
             
             # Convert to list of dicts, already sorted by MMR DESC, last_played DESC, id DESC
             return mmr_df.to_dicts()

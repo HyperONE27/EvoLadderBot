@@ -1,12 +1,13 @@
 import asyncio
 import logging
+import sys
 
 import discord
 from discord.ext import commands
 
 from src.backend.services.matchmaking_service import matchmaker
-from src.bot.bot_setup import EvoLadderBot, initialize_bot_resources, shutdown_bot_resources
-# from src.bot.commands.activate_command import register_activate_command  # DISABLED: Obsolete command
+from src.bot.bot_setup import EvoLadderBot, shutdown_bot_resources
+from src.bot.commands.activate_command import register_activate_command  # DISABLED: Obsolete command
 from src.bot.commands.help_command import register_help_command
 from src.bot.commands.leaderboard_command import register_leaderboard_command
 from src.bot.commands.profile_command import register_profile_command
@@ -50,9 +51,7 @@ async def on_ready():
         asyncio.create_task(matchmaker.run())
         print("Matchmaker started")
         
-        # Start background tasks (leaderboard cache refresh, etc.)
-        bot.start_background_tasks()
-        print("Background tasks started")
+        # Background tasks are started in bot_setup.py setup_hook
     except Exception as e:
         print("Sync failed:", e)
 
@@ -72,13 +71,53 @@ def register_commands(bot: commands.Bot):
     register_setup_command(bot.tree)
     register_termsofservice_command(bot.tree)
 
-if __name__ == "__main__":
-    # Initialize all bot resources (database pool, cache, process pool)
-    initialize_bot_resources(bot)
-    
+def setup_signal_handlers(bot: discord.Client):
+    """Sets up signal handlers to ensure graceful shutdown."""
+    import signal
     try:
-        # Run the bot
-        bot.run(EVOLADDERBOT_TOKEN)
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+
+    def signal_handler(signum, frame):
+        print(f"Received signal {signum}. Shutting down gracefully.")
+        if loop.is_running():
+            loop.create_task(bot.close())
+        else:
+            loop.run_until_complete(bot.close())
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+def main():
+    # Set up signal handling for graceful shutdown
+    setup_signal_handlers(bot)
+
+    try:
+        # The bot's run method is blocking, so we run it here.
+        # The new setup_hook will handle async initialization.
+        bot.run(EVOLADDERBOT_TOKEN, log_handler=None, log_level=logging.INFO)
+    except discord.errors.LoginFailure:
+        logger.fatal("Invalid Discord token. Please check your config.py file.")
+        sys.exit(1)
+    except Exception as e:
+        logger.fatal(f"An unexpected error occurred: {e}")
     finally:
-        # Gracefully shut down all resources
-        shutdown_bot_resources(bot)
+        # On exit, ensure resources are cleaned up
+        # We need a new loop to run the async shutdown function
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If there's a running loop, create a task to do shutdown
+                loop.create_task(shutdown_bot_resources(bot))
+            else:
+                # If not, run it to completion
+                asyncio.run(shutdown_bot_resources(bot))
+        except RuntimeError: # No running loop
+            asyncio.run(shutdown_bot_resources(bot))
+        except Exception as e:
+            print(f"[Shutdown] An error occurred during final shutdown: {e}")
+
+
+if __name__ == "__main__":
+    main()

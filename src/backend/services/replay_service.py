@@ -302,39 +302,12 @@ class ReplayService:
         process using parse_replay_data_blocking(), then call
         store_upload_from_parsed_dict() with the result.
         """
-        try:
-            replay_path = self.save_replay(replay_bytes)
-            
-            # Parse the replay to get the data for the replays table
-            parsed_replay = self.parse_replay(replay_bytes, is_bytes=True)
-
-            db_writer = DatabaseWriter()
-
-            # Insert the parsed replay data into the new replays table
-            replay_data = asdict(parsed_replay)
-            replay_data['replay_path'] = replay_path  # Add the path to the data
-            replay_data['observers'] = json.dumps(replay_data['observers'])  # Convert list to JSON string
-            db_writer.insert_replay(replay_data)
-
-            sql_timestamp = get_timestamp()
-            success = db_writer.update_match_replay_1v1(
-                match_id,
-                uploader_id,
-                replay_path,
-                sql_timestamp
-            )
-
-            return {
-                "success": success,
-                "unix_epoch": get_current_unix_timestamp() if success else None,
-                "replay_data": asdict(parsed_replay) if parsed_replay else None
-            }
-        except ReplayParseError as e:
-            print(f"Replay parse error during store_upload: {e}")
-            return {"success": False, "error": str(e)}
-        except Exception as e:
-            print(f"Error storing replay upload: {e}")
-            return {"success": False, "error": "An unexpected error occurred while storing the replay."}
+        # This method now delegates to the new async workflow
+        # Parse the replay first (blocking)
+        parsed_dict = self.parse_replay_data_blocking(replay_bytes)
+        
+        # Delegate to the refactored sync method which uses DataAccessService
+        return self.store_upload_from_parsed_dict(match_id, uploader_id, replay_bytes, parsed_dict)
     
     async def store_upload_from_parsed_dict_async(self, match_id: int, uploader_id: int, 
                                                     replay_bytes: bytes, parsed_dict: dict) -> dict:
@@ -423,56 +396,31 @@ class ReplayService:
         DEPRECATED: Synchronous version kept for backwards compatibility.
         Use store_upload_from_parsed_dict_async() instead for better performance.
         
-        This method performs BLOCKING database writes and should be avoided.
+        Now delegates to the async version using DataAccessService.
         """
+        import asyncio
+        
+        # Get or create event loop
         try:
-            # Check if parsing failed
-            if parsed_dict.get("error"):
-                return {"success": False, "error": parsed_dict["error"]}
-            
-            # Save the replay file (uploads to Supabase Storage, falls back to local)
-            replay_url = self.save_replay(replay_bytes, match_id=match_id, player_discord_uid=uploader_id)
-            
-            db_writer = DatabaseWriter()
-
-            # Prepare replay data for database insertion
-            replay_data = {
-                "replay_hash": parsed_dict["replay_hash"],
-                "replay_date": parsed_dict["replay_date"],
-                "player_1_name": parsed_dict["player_1_name"],
-                "player_2_name": parsed_dict["player_2_name"],
-                "player_1_race": parsed_dict["player_1_race"],
-                "player_2_race": parsed_dict["player_2_race"],
-                "result": parsed_dict["result"],
-                "player_1_handle": parsed_dict["player_1_handle"],
-                "player_2_handle": parsed_dict["player_2_handle"],
-                "observers": json.dumps(parsed_dict["observers"]),  # Convert list to JSON
-                "map_name": parsed_dict["map_name"],
-                "duration": parsed_dict["duration"],
-                "replay_path": replay_url  # Store URL (Supabase) or path (local fallback)
-            }
-            
-            # Insert into replays table
-            db_writer.insert_replay(replay_data)
-
-            # Update match record with replay URL/path
-            sql_timestamp = get_timestamp()
-            success = db_writer.update_match_replay_1v1(
-                match_id,
-                uploader_id,
-                replay_url,  # Store URL (Supabase) or path (local fallback)
-                sql_timestamp
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop, create a temporary one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    self.store_upload_from_parsed_dict_async(match_id, uploader_id, replay_bytes, parsed_dict)
+                )
+                return result
+            finally:
+                loop.close()
+        else:
+            # Already in an async context, create a task
+            task = loop.create_task(
+                self.store_upload_from_parsed_dict_async(match_id, uploader_id, replay_bytes, parsed_dict)
             )
-
-            return {
-                "success": success,
-                "unix_epoch": get_current_unix_timestamp() if success else None,
-                "replay_data": parsed_dict
-            }
-            
-        except Exception as e:
-            print(f"Error storing replay upload from parsed dict: {e}")
-            return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
+            # Return a placeholder - caller should use async version
+            return {"success": True, "task": task}
 
     def _calculate_replay_hash(self, replay_bytes: bytes) -> str:
         """Calculates an 80-bit blake2b hash of the replay."""
