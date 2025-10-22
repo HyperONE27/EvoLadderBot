@@ -222,7 +222,8 @@ class LeaderboardService:
         sort_time = (perf_sort - perf_best_race)*1000
         
         # Calculate pagination
-        total_players = len(df)
+        true_total_players = len(df)  # Store true count before limiting
+        total_players = true_total_players
         total_pages = max(1, (total_players + page_size - 1) // page_size)
         
         # Limit to 25 pages to avoid Discord dropdown limits
@@ -257,7 +258,8 @@ class LeaderboardService:
             "players": page_players,
             "total_pages": total_pages,
             "current_page": current_page,
-            "total_players": total_players
+            "total_players": total_players,
+            "true_total_players": true_total_players
         }
     
     def get_button_states(self, current_page: int, total_pages: int) -> Dict[str, bool]:

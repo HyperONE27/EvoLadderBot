@@ -2,18 +2,24 @@
 Ranking service for MMR-based player rankings.
 
 This module defines the RankingService class, which manages MMR-based rankings
-for all player-race combinations. Rankings are calculated based on percentile
-distribution and kept in memory for fast access.
+for all player-race combinations. Rankings are calculated using fixed allocation
+to ensure mathematical balance across all population sizes.
 
 Distribution:
-- S-Rank: top 1%
-- A-Rank: next 7%
-- B-Rank: next 21%
-- C-Rank: next 21%
-- D-Rank: next 21%
-- E-Rank: next 21%
-- F-Rank: bottom 8%
+- S-Rank: 1% of population
+- A-Rank: 7% of population  
+- B-Rank: 21% of population
+- C-Rank: 21% of population
+- D-Rank: 21% of population
+- E-Rank: 21% of population
+- F-Rank: 8% of population
 - U-Rank: unranked (no games played or insufficient data)
+
+The adaptive allocation method ensures S+A = F balance and equal middle ranks
+by:
+1. Rounding down ideal allocations
+2. Distributing middle ranks (D-C-E-B) first for equality
+3. Adaptively choosing F-A-S or A-F-S order based on current S+A vs F balance
 
 Intended usage:
     from src.backend.services.app_context import ranking_service
@@ -32,18 +38,21 @@ from src.backend.services.data_access_service import DataAccessService
 
 
 class RankingService:
-    """Service for managing MMR-based rankings with percentile distribution."""
+    """Service for managing MMR-based rankings with fixed allocation distribution."""
 
-    # Rank distribution percentiles (cumulative from top)
-    RANK_THRESHOLDS = [
-        ("s_rank", 1.0),    # Top 1%
-        ("a_rank", 8.0),    # Top 1-8% (next 7%)
-        ("b_rank", 29.0),   # Top 8-29% (next 21%)
-        ("c_rank", 50.0),   # Top 29-50% (next 21%)
-        ("d_rank", 71.0),   # Top 50-71% (next 21%)
-        ("e_rank", 92.0),   # Top 71-92% (next 21%)
-        ("f_rank", 100.0),  # Top 92-100% (next 8%)
-    ]
+    # Rank distribution percentages
+    RANK_PERCENTAGES = {
+        "s_rank": 0.01,    # 1%
+        "a_rank": 0.07,    # 7%
+        "b_rank": 0.21,    # 21%
+        "c_rank": 0.21,    # 21%
+        "d_rank": 0.21,    # 21%
+        "e_rank": 0.21,    # 21%
+        "f_rank": 0.08,    # 8%
+    }
+    
+    # Distribution order for extras (D-C-E-B-A-F-S)
+    DISTRIBUTION_ORDER = ["d_rank", "c_rank", "e_rank", "b_rank", "a_rank", "f_rank", "s_rank"]
 
     def __init__(self, data_service: Optional[DataAccessService] = None) -> None:
         """
@@ -60,7 +69,7 @@ class RankingService:
 
     def refresh_rankings(self) -> None:
         """
-        Refresh rankings by loading all MMR data and calculating percentile ranks.
+        Refresh rankings by loading all MMR data and calculating fixed allocation ranks.
         
         This method is synchronous and blocking. It should be called from an executor.
         """
@@ -78,19 +87,25 @@ class RankingService:
             if total_entries == 0:
                 print("[Ranking Service] No MMR data found - all players will be unranked")
             else:
+                # Calculate fixed allocation for each rank
+                rank_allocations = self._calculate_fixed_allocations(total_entries)
+                
+                # Assign ranks based on position in sorted list
                 rank_counts = {}
-                for index, entry in enumerate(all_mmr_data):
-                    discord_uid = entry.get("discord_uid")
-                    race = entry.get("race")
-                    
-                    if discord_uid is None or race is None:
-                        continue
-                    
-                    percentile = (index / total_entries) * 100
-                    rank = self._get_rank_from_percentile(percentile)
-                    
-                    new_rankings[(discord_uid, race)] = rank
-                    rank_counts[rank] = rank_counts.get(rank, 0) + 1
+                current_position = 0
+                
+                for rank_name, allocation_size in rank_allocations.items():
+                    for i in range(allocation_size):
+                        if current_position < len(all_mmr_data):
+                            entry = all_mmr_data[current_position]
+                            discord_uid = entry.get("discord_uid")
+                            race = entry.get("race")
+                            
+                            if discord_uid is not None and race is not None:
+                                new_rankings[(discord_uid, race)] = rank_name
+                                rank_counts[rank_name] = rank_counts.get(rank_name, 0) + 1
+                            
+                            current_position += 1
             
             # Atomically update the instance variables
             self._rankings = new_rankings
@@ -145,22 +160,66 @@ class RankingService:
             traceback.print_exc()
             return []
 
-    def _get_rank_from_percentile(self, percentile: float) -> str:
+    def _calculate_fixed_allocations(self, total_players: int) -> Dict[str, int]:
         """
-        Determine rank based on percentile.
+        Calculate fixed allocations for each rank using adaptive distribution method.
+        
+        This method:
+        1. Rounds down ideal allocations
+        2. Distributes middle ranks (D-C-E-B) first
+        3. Checks S+A vs F balance
+        4. Adaptively chooses F-A-S or A-F-S order based on current balance
         
         Args:
-            percentile: Percentile value (0-100, where 0 is best).
+            total_players: Total number of players to distribute.
         
         Returns:
-            Rank code (e.g., 's_rank', 'a_rank', etc.).
+            Dictionary mapping rank names to their allocation sizes.
         """
-        for rank_name, threshold in self.RANK_THRESHOLDS:
-            if percentile < threshold:
-                return rank_name
+        if total_players == 0:
+            return {rank: 0 for rank in self.RANK_PERCENTAGES.keys()}
         
-        # Default to unranked if something goes wrong
-        return "u_rank"
+        # Calculate ideal allocations (floats)
+        ideal_allocations = {}
+        for rank, percentage in self.RANK_PERCENTAGES.items():
+            ideal_allocations[rank] = total_players * percentage
+        
+        # Round down to get initial allocations
+        allocations = {}
+        for rank, ideal in ideal_allocations.items():
+            allocations[rank] = int(ideal)
+        
+        # Calculate remaining players to distribute
+        allocated_so_far = sum(allocations.values())
+        remaining_players = total_players - allocated_so_far
+        
+        # First, distribute to middle ranks (D-C-E-B) to ensure equality
+        middle_ranks = ["d_rank", "c_rank", "e_rank", "b_rank"]
+        for rank in middle_ranks:
+            if remaining_players <= 0:
+                break
+            allocations[rank] += 1
+            remaining_players -= 1
+        
+        # Now check S+A vs F balance and choose adaptive order
+        s_a_total = allocations.get("s_rank", 0) + allocations.get("a_rank", 0)
+        f_total = allocations.get("f_rank", 0)
+        
+        if f_total > s_a_total:
+            # F is bigger, give to A first: A-F-S
+            adaptive_order = ["a_rank", "f_rank", "s_rank"]
+        else:
+            # F <= S+A, give to F first: F-A-S
+            adaptive_order = ["f_rank", "a_rank", "s_rank"]
+        
+        # Distribute remaining extras using adaptive order
+        for rank in adaptive_order:
+            if remaining_players <= 0:
+                break
+            allocations[rank] += 1
+            remaining_players -= 1
+        
+        return allocations
 
     def get_total_ranked_entries(self) -> int:
         """
