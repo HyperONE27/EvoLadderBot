@@ -132,9 +132,18 @@ class Matchmaker:
 
 	async def add_player(self, player: Player) -> None:
 		"""Add a player to the matchmaking pool with MMR lookup."""
-		# Look up MMR for each selected race
+		loop = asyncio.get_running_loop()
+		
+		# Offload MMR lookups to executor to avoid blocking the event loop
 		for race in player.preferences.selected_races:
-			mmr_data = self.db_reader.get_player_mmr_1v1(player.discord_user_id, race)
+			# Run blocking DB call in executor
+			mmr_data = await loop.run_in_executor(
+				None,
+				self.db_reader.get_player_mmr_1v1,
+				player.discord_user_id,
+				race
+			)
+			
 			if mmr_data:
 				mmr_value = mmr_data['mmr']
 				if race.startswith("bw_"):
@@ -146,12 +155,17 @@ class Matchmaker:
 				from src.backend.services.mmr_service import MMRService
 				mmr_service = MMRService()
 				default_mmr = mmr_service.default_mmr()
-				self.db_writer.create_or_update_mmr_1v1(
-					player.discord_user_id, 
-					player.user_id, 
-					race, 
+				
+				# Run blocking DB write in executor
+				await loop.run_in_executor(
+					None,
+					self.db_writer.create_or_update_mmr_1v1,
+					player.discord_user_id,
+					player.user_id,
+					race,
 					default_mmr
 				)
+				
 				if race.startswith("bw_"):
 					player.bw_mmr = default_mmr
 				elif race.startswith("sc2_"):
@@ -545,8 +559,11 @@ class Matchmaker:
 			p1_mmr = int(p1.get_effective_mmr(is_bw_match) or 1500)
 			p2_mmr = int(p2.get_effective_mmr(not is_bw_match) or 1500)
 			
-			# Create the match record in the database
-			match_id = self.db_writer.create_match_1v1(
+			# Create the match record in the database (offload to executor to avoid blocking)
+			loop = asyncio.get_running_loop()
+			match_id = await loop.run_in_executor(
+				None,
+				self.db_writer.create_match_1v1,
 				p1.discord_user_id,
 				p2.discord_user_id,
 				p1_race,
