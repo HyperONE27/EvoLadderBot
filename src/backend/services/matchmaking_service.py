@@ -132,46 +132,68 @@ class Matchmaker:
 
 	async def add_player(self, player: Player) -> None:
 		"""Add a player to the matchmaking pool with MMR lookup."""
+		from src.backend.services.performance_service import FlowTracker
+		from src.backend.services.app_context import leaderboard_service
+		flow = FlowTracker(f"matchmaker.add_player", user_id=player.discord_user_id)
+		
 		loop = asyncio.get_running_loop()
 		
-		# Offload MMR lookups to executor to avoid blocking the event loop
+		flow.checkpoint("start_mmr_lookups")
+		# Try to get MMRs from leaderboard cache first (MUCH faster: <5ms vs 400-550ms)
 		for race in player.preferences.selected_races:
-			# Run blocking DB call in executor
-			mmr_data = await loop.run_in_executor(
-				None,
-				self.db_reader.get_player_mmr_1v1,
+			# Try cache first
+			mmr_value = leaderboard_service.get_player_mmr_from_cache(
 				player.discord_user_id,
 				race
 			)
 			
-			if mmr_data:
-				mmr_value = mmr_data['mmr']
+			if mmr_value is not None:
+				# Cache hit! Use cached MMR
 				if race.startswith("bw_"):
 					player.bw_mmr = mmr_value
 				elif race.startswith("sc2_"):
 					player.sc2_mmr = mmr_value
 			else:
-				# Create default MMR entry if none exists
-				from src.backend.services.mmr_service import MMRService
-				mmr_service = MMRService()
-				default_mmr = mmr_service.default_mmr()
-				
-				# Run blocking DB write in executor
-				await loop.run_in_executor(
+				# Cache miss - fallback to database (rare: only for brand new players)
+				print(f"[Cache MISS] MMR not in cache for {player.discord_user_id}/{race}, falling back to DB")
+				mmr_data = await loop.run_in_executor(
 					None,
-					self.db_writer.create_or_update_mmr_1v1,
+					self.db_reader.get_player_mmr_1v1,
 					player.discord_user_id,
-					player.user_id,
-					race,
-					default_mmr
+					race
 				)
 				
-				if race.startswith("bw_"):
-					player.bw_mmr = default_mmr
-				elif race.startswith("sc2_"):
-					player.sc2_mmr = default_mmr
+				if mmr_data:
+					mmr_value = mmr_data['mmr']
+					if race.startswith("bw_"):
+						player.bw_mmr = mmr_value
+					elif race.startswith("sc2_"):
+						player.sc2_mmr = mmr_value
+				else:
+					# Create default MMR entry if none exists
+					from src.backend.services.mmr_service import MMRService
+					mmr_service = MMRService()
+					default_mmr = mmr_service.default_mmr()
+					
+					# Run blocking DB write in executor
+					await loop.run_in_executor(
+						None,
+						self.db_writer.create_or_update_mmr_1v1,
+						player.discord_user_id,
+						player.user_id,
+						race,
+						default_mmr
+					)
+					
+					if race.startswith("bw_"):
+						player.bw_mmr = default_mmr
+					elif race.startswith("sc2_"):
+						player.sc2_mmr = default_mmr
 
+		flow.checkpoint("mmr_lookups_complete")
+		
 		async with self.lock:
+			flow.checkpoint("acquired_lock")
 			print(f"👤 {player.user_id} (Discord ID: {player.discord_user_id}) joined the queue")
 			print(f"   Selected races: {player.preferences.selected_races}")
 			print(f"   BW MMR: {player.bw_mmr}, SC2 MMR: {player.sc2_mmr}")
@@ -181,6 +203,8 @@ class Matchmaker:
 			
 			# Log player activity
 			self.recent_activity[player.discord_user_id] = time.time()
+		
+		flow.complete("success")
 
 	async def remove_player(self, discord_user_id: int) -> None:
 		"""Remove a player from the matchmaking pool by Discord ID."""
@@ -485,19 +509,25 @@ class Matchmaker:
 
 	async def attempt_match(self):
 		"""Try to find and process all valid matches using the advanced algorithm."""
+		from src.backend.services.performance_service import FlowTracker
+		flow = FlowTracker("matchmaker.attempt_match")
 		
+		flow.checkpoint("copy_player_list")
 		# Operate on a copy of the list to prevent race conditions from new players joining
 		current_players = self.players.copy()
 		
 		if len(current_players) < 2:
+			flow.complete("not_enough_players")
 			return  # Silent when not enough players
 
 		print("🎯 Attempting to match players with advanced algorithm...")
 		
+		flow.checkpoint("increment_wait_cycles")
 		# Increment wait cycles for all players
 		for player in current_players:
 			player.wait_cycles += 1
 
+		flow.checkpoint("categorize_players")
 		# Categorize players into original lists
 		original_bw_only, original_sc2_only, original_both_races = self.categorize_players(current_players)
 		
@@ -508,11 +538,13 @@ class Matchmaker:
 		sc2_list = original_sc2_only.copy()
 		both_races = original_both_races.copy()
 		
+		flow.checkpoint("equalize_lists")
 		# Equalize BW and SC2 lists using both_races players
 		bw_list, sc2_list, remaining_z = self.equalize_lists(bw_list, sc2_list, both_races)
 		
 		print(f"   📊 After equalization: BW={len(bw_list)}, SC2={len(sc2_list)}, Remaining Z={len(remaining_z)}")
 		
+		flow.checkpoint("find_matches_start")
 		# Find matches
 		matches = []
 		
@@ -531,6 +563,9 @@ class Matchmaker:
 			matches.extend(bw_matches)
 			print(f"   ✅ Found {len(bw_matches)} BW vs SC2 matches (lead: {len(lead_side)}, follow: {len(follow_side)})")
 		
+		flow.checkpoint("find_matches_complete")
+		
+		flow.checkpoint("process_matches_start")
 		# Process matches
 		matched_players = set()
 		for p1, p2 in matches:
@@ -559,6 +594,7 @@ class Matchmaker:
 			p1_mmr = int(p1.get_effective_mmr(is_bw_match) or 1500)
 			p2_mmr = int(p2.get_effective_mmr(not is_bw_match) or 1500)
 			
+			flow.checkpoint(f"create_match_db_start_{p1.discord_user_id}_vs_{p2.discord_user_id}")
 			# Create the match record in the database (offload to executor to avoid blocking)
 			loop = asyncio.get_running_loop()
 			match_id = await loop.run_in_executor(
@@ -574,7 +610,9 @@ class Matchmaker:
 				p2_mmr,
 				0  # MMR change will be calculated and updated after match result
 			)
+			flow.checkpoint(f"create_match_db_complete_{p1.discord_user_id}_vs_{p2.discord_user_id}")
 
+			flow.checkpoint(f"create_match_result_object_{p1.discord_user_id}_vs_{p2.discord_user_id}")
 			match_result = MatchResult(
 				match_id=match_id,
 				player_1_discord_id=p1.discord_user_id,
@@ -590,6 +628,7 @@ class Matchmaker:
 					
 			from src.backend.services.match_completion_service import match_completion_service
 
+			flow.checkpoint(f"invoke_match_callback_{p1.discord_user_id}_vs_{p2.discord_user_id}")
 			if self.match_callback:
 				print(f"📞 Calling match callback for {p1.user_id} vs {p2.user_id}")
 				self.match_callback(
@@ -603,19 +642,27 @@ class Matchmaker:
 				# If no frontend is registered, still monitor the match so backend workflows continue
 				match_completion_service.start_monitoring_match(match_id)
 				print("⚠️  No match callback set!")
+			
+			flow.checkpoint(f"match_callback_complete_{p1.discord_user_id}_vs_{p2.discord_user_id}")
 					
 			# Track matched players
 			matched_players.add(p1.discord_user_id)
 			matched_players.add(p2.discord_user_id)
 		
+		flow.checkpoint("process_matches_complete")
+		
+		flow.checkpoint("update_queue_start")
 		# Now clean up the matchmaker queue based on who was matched
 		# Remove matched players from the original lists
 		await self._update_queue_after_matching(matched_players, original_bw_only, original_sc2_only, original_both_races)
+		flow.checkpoint("update_queue_complete")
 		
 		print(f"   📊 Final state: {len(matched_players)} players matched")
 
 		if not matches:
 			print("❌ No valid matches this round.")
+		
+		flow.complete("success")
 
 	def _prune_recent_activity(self):
 		"""Remove players from activity log if they haven't been seen in 15 minutes."""

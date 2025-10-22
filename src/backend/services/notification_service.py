@@ -69,6 +69,9 @@ class NotificationService:
         Args:
             match: The match result containing player IDs and match details
         """
+        import time
+        start_time = time.perf_counter()
+        
         player_1_id = match.player_1_discord_id
         player_2_id = match.player_2_discord_id
         
@@ -88,6 +91,12 @@ class NotificationService:
                 logger.info(f"[NotificationService] Notified player {player_2_id} of match {match.match_id}")
             else:
                 logger.warning(f"[NotificationService] Player {player_2_id} not subscribed when match {match.match_id} found")
+        
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        if duration_ms > 10:
+            logger.warning(f"[NotificationService PERF] publish_match_found took {duration_ms:.2f}ms for match {match.match_id}")
+        else:
+            logger.debug(f"[NotificationService PERF] publish_match_found took {duration_ms:.2f}ms for match {match.match_id}")
     
     def get_subscriber_count(self) -> int:
         """

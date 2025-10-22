@@ -181,7 +181,7 @@ class DatabaseReader:
             List of player MMR records sorted by MMR descending.
         """
         query = """
-            SELECT m.*, p.country, p.player_name
+            SELECT m.*, p.country, p.player_name, p.alt_player_name_1, p.alt_player_name_2
             FROM mmrs_1v1 m
             LEFT JOIN players p ON m.discord_uid = p.discord_uid
             WHERE 1=1

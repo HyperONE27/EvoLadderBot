@@ -265,9 +265,14 @@ class JoinQueueButton(discord.ui.Button):
         )
     
     async def callback(self, interaction: discord.Interaction):
+        flow = FlowTracker("join_queue_button", user_id=interaction.user.id)
+        
+        flow.checkpoint("defer_interaction_start")
         # Defer the interaction immediately to prevent timeouts
         await interaction.response.defer()
+        flow.checkpoint("defer_interaction_complete")
 
+        flow.checkpoint("validate_race_selection")
         # Validate that at least one race is selected
         if not self.view.get_selected_race_codes():
             # Create error exception with restart button only
@@ -290,6 +295,7 @@ class JoinQueueButton(discord.ui.Button):
             for button in restart_buttons:
                 error_view.add_item(button)
             
+            flow.complete("validation_failed_no_race")
             await interaction.followup.send(
                 embed=error_view.embed,
                 view=error_view,
@@ -297,12 +303,15 @@ class JoinQueueButton(discord.ui.Button):
             )
             return
         
+        flow.checkpoint("get_user_info")
         # Get user info
         user_info = get_user_info(interaction)
         user_id = user_info["id"]
 
+        flow.checkpoint("check_duplicate_queue")
         # Prevent multiple queue attempts or queuing while a match is active
         if await queue_searching_view_manager.has_view(user_id) or interaction.user.id in match_results:
+            flow.complete("already_queued")
             error = ErrorEmbedException(
                 title="Queueing Not Allowed",
                 description="You cannot queue more than once, or while a match is active."
@@ -311,6 +320,7 @@ class JoinQueueButton(discord.ui.Button):
             await interaction.followup.send(embed=error_view.embed, view=error_view, ephemeral=True)
             return
         
+        flow.checkpoint("create_queue_preferences")
         # Create queue preferences
         preferences = QueuePreferences(
             selected_races=self.view.get_selected_race_codes(),
@@ -319,6 +329,7 @@ class JoinQueueButton(discord.ui.Button):
             user_id="Player" + str(user_id)  # TODO: Get actual user ID from database
         )
         
+        flow.checkpoint("create_player_object")
         # Create player and add to matchmaking queue
         player = Player(
             discord_user_id=user_id,
@@ -326,10 +337,13 @@ class JoinQueueButton(discord.ui.Button):
             preferences=preferences
         )
         
+        flow.checkpoint("add_player_to_matchmaker_start")
         # Add player to matchmaker
         print(f"🎮 Adding player to matchmaker: {player.user_id}")
         await matchmaker.add_player(player)
+        flow.checkpoint("add_player_to_matchmaker_complete")
         
+        flow.checkpoint("create_searching_view")
         # Show searching state
         searching_view = QueueSearchingView(
             original_view=self.view,
@@ -337,17 +351,24 @@ class JoinQueueButton(discord.ui.Button):
             vetoed_maps=self.view.vetoed_maps,
             player=player
         )
+        
+        flow.checkpoint("register_view_manager")
         await queue_searching_view_manager.register(user_id, searching_view)
         
+        flow.checkpoint("start_status_updates")
         searching_view.start_status_updates()
         
+        flow.checkpoint("build_and_send_embed_start")
         await interaction.edit_original_response(
             embed=searching_view.build_searching_embed(),
             view=searching_view
         )
+        flow.checkpoint("build_and_send_embed_complete")
         
         # Store the interaction so we can update the message when match is found
         searching_view.set_interaction(interaction)
+        
+        flow.complete("success")
 
 
 class ClearSelectionsButton(discord.ui.Button):
@@ -588,19 +609,27 @@ class QueueSearchingView(discord.ui.View):
         This method blocks until a match is found and published by the notification service.
         It provides instant notification without the overhead and delay of polling.
         """
+        flow = FlowTracker(f"listen_for_match", user_id=self.player.discord_user_id)
+        
+        flow.checkpoint("subscribe_to_notifications")
         # Subscribe to notifications and get our personal queue
         notification_queue = await notification_service.subscribe(self.player.discord_user_id)
         
         try:
+            flow.checkpoint("waiting_for_match")
             # Block here until a match is published (instant notification!)
             match_result = await notification_queue.get()
+            flow.checkpoint("match_notification_received")
             
+            flow.checkpoint("process_match_result_start")
             # Match found! Update the view immediately
             is_player1 = match_result.player_1_discord_id == self.player.discord_user_id
             
+            flow.checkpoint("create_match_found_view")
             # Create match found view
             match_view = MatchFoundView(match_result, is_player1)
             
+            flow.checkpoint("register_for_replay_detection")
             # Register the view for replay detection
             if self.last_interaction:
                 channel_id = self.last_interaction.channel_id
@@ -608,17 +637,21 @@ class QueueSearchingView(discord.ui.View):
                 # Store the interaction reference for later updates
                 match_view.last_interaction = self.last_interaction
             
+            flow.checkpoint("generate_match_embed_start")
             # Update the message if we have a stored interaction
             if self.last_interaction:
                 try:
                     # Offload the embed generation to executor to avoid blocking on ranking refresh
                     loop = asyncio.get_running_loop()
                     embed = await loop.run_in_executor(None, match_view.get_embed)
+                    flow.checkpoint("generate_match_embed_complete")
                     
+                    flow.checkpoint("update_discord_message_start")
                     await self.last_interaction.edit_original_response(
                         embed=embed,
                         view=match_view
                     )
+                    flow.checkpoint("update_discord_message_complete")
                     print(f"[Match Notification] Successfully displayed match view for player {self.player.discord_user_id}")
                 except discord.NotFound:
                     print(f"[Match Notification] Interaction expired for player {self.player.discord_user_id}")
@@ -629,8 +662,12 @@ class QueueSearchingView(discord.ui.View):
                     import traceback
                     traceback.print_exc()
             
+            flow.checkpoint("cleanup_start")
             # Clean up
             await queue_searching_view_manager.unregister(self.player.discord_user_id, view=self)
+            flow.checkpoint("cleanup_complete")
+            
+            flow.complete("match_displayed_successfully")
             
         finally:
             # Always unsubscribe when done, even if an error occurred
@@ -768,6 +805,9 @@ class MatchFoundView(discord.ui.View):
         self.last_interaction = None  # Store reference to last interaction for updates
         self.edit_lock = asyncio.Lock()
         
+        # Performance tracking
+        self.view_creation_time = time.time()
+        
         # Register this view's notification handler with the backend
         if hasattr(match_result, "register_completion_callback"):
             match_result.register_completion_callback(self.handle_completion_notification)
@@ -861,15 +901,33 @@ class MatchFoundView(discord.ui.View):
     
     def get_embed(self) -> discord.Embed:
         """Get the match found embed"""
-        # Get player 1 info
-        p1_info = db_reader.get_player_by_discord_uid(self.match_result.player_1_discord_id)
+        import time
+        from src.backend.services.app_context import leaderboard_service
+        start_time = time.perf_counter()
+        
+        # Get player 1 info - try cache first (MUCH faster: <5ms vs 500-800ms)
+        checkpoint1 = time.perf_counter()
+        p1_info = leaderboard_service.get_player_info_from_cache(self.match_result.player_1_discord_id)
+        if p1_info is None:
+            # Cache miss - fallback to DB (rare: only for brand new players)
+            print(f"[Cache MISS] Player info not in cache for {self.match_result.player_1_discord_id}, falling back to DB")
+            p1_info = db_reader.get_player_by_discord_uid(self.match_result.player_1_discord_id)
+        
         p1_name = p1_info.get('player_name') if p1_info else None
         p1_country = p1_info.get('country') if p1_info else None
         p1_display_name = p1_name if p1_name else str(self.match_result.player_1_discord_id)
         p1_flag = get_flag_emote(p1_country) if p1_country else get_flag_emote("XX")
         
-        # Get player 2 info
-        p2_info = db_reader.get_player_by_discord_uid(self.match_result.player_2_discord_id)
+        # Get player 2 info - try cache first
+        p2_info = leaderboard_service.get_player_info_from_cache(self.match_result.player_2_discord_id)
+        if p2_info is None:
+            # Cache miss - fallback to DB
+            print(f"[Cache MISS] Player info not in cache for {self.match_result.player_2_discord_id}, falling back to DB")
+            p2_info = db_reader.get_player_by_discord_uid(self.match_result.player_2_discord_id)
+        
+        checkpoint2 = time.perf_counter()
+        print(f"  [MatchEmbed PERF] Player info lookup: {(checkpoint2-checkpoint1)*1000:.2f}ms")
+        
         p2_name = p2_info.get('player_name') if p2_info else None
         p2_country = p2_info.get('country') if p2_info else None
         p2_display_name = p2_name if p2_name else str(self.match_result.player_2_discord_id)
@@ -883,20 +941,26 @@ class MatchFoundView(discord.ui.View):
         p1_race_emote = get_race_emote(p1_race)
         p2_race_emote = get_race_emote(p2_race)
         
+        checkpoint3 = time.perf_counter()
         # Get rank information for both players
         from src.backend.services.app_context import ranking_service
         
         p1_rank = ranking_service.get_rank(self.match_result.player_1_discord_id, p1_race)
         p2_rank = ranking_service.get_rank(self.match_result.player_2_discord_id, p2_race)
+        checkpoint4 = time.perf_counter()
+        print(f"  [MatchEmbed PERF] Rank lookup: {(checkpoint4-checkpoint3)*1000:.2f}ms")
         
         # Get rank emotes
         p1_rank_emote = get_rank_emote(p1_rank)
         p2_rank_emote = get_rank_emote(p2_rank)
         
+        checkpoint5 = time.perf_counter()
         # Get MMR values from database
         match_data = db_reader.get_match_1v1(self.match_result.match_id)
         p1_mmr = int(match_data.get('player_1_mmr', 0)) if match_data else 0
         p2_mmr = int(match_data.get('player_2_mmr', 0)) if match_data else 0
+        checkpoint6 = time.perf_counter()
+        print(f"  [MatchEmbed PERF] Match data lookup: {(checkpoint6-checkpoint5)*1000:.2f}ms")
         
         # Create title with new format: rank, flag, race, name, MMR
         title = f"Match #{self.match_result.match_id}: {p1_rank_emote} {p1_flag} {p1_race_emote} {p1_display_name} ({p1_mmr}) vs {p2_rank_emote} {p2_flag} {p2_race_emote} {p2_display_name} ({p2_mmr})"
@@ -1052,9 +1116,12 @@ class MatchFoundView(discord.ui.View):
         # Get abort timer deadline (current time + ABORT_TIMER_SECONDS)
         current_time = get_current_unix_timestamp()
         
+        checkpoint7 = time.perf_counter()
         # Get remaining aborts for both players
         p1_aborts = user_info_service.get_remaining_aborts(self.match_result.player_1_discord_id)
         p2_aborts = user_info_service.get_remaining_aborts(self.match_result.player_2_discord_id)
+        checkpoint8 = time.perf_counter()
+        print(f"  [MatchEmbed PERF] Abort count lookup: {(checkpoint8-checkpoint7)*1000:.2f}ms")
         
         abort_validity_value = (
             f"You can use the button below to abort the match if you are unable to play.\n"
@@ -1064,6 +1131,12 @@ class MatchFoundView(discord.ui.View):
             f"You can only abort the match before <t:{self.abort_deadline}:T> (<t:{self.abort_deadline}:R>)."
         )
         embed.add_field(name="**Can't play? Need to leave?**", value=abort_validity_value, inline=False)
+        
+        total_time = (time.perf_counter() - start_time) * 1000
+        if total_time > 100:
+            print(f"⚠️ [MatchEmbed PERF] TOTAL get_embed() took {total_time:.2f}ms")
+        elif total_time > 50:
+            print(f"🟡 [MatchEmbed PERF] TOTAL get_embed() took {total_time:.2f}ms")
         
         return embed
 
@@ -1076,7 +1149,13 @@ class MatchFoundView(discord.ui.View):
     
     async def handle_completion_notification(self, status: str, data: dict):
         """This is the callback that the backend will invoke."""
+        flow = FlowTracker(f"match_completion_notification_{status}", 
+                          user_id=self.match_result.player_1_discord_id if self.is_player1 else self.match_result.player_2_discord_id)
+        
+        flow.checkpoint("notification_received")
+        
         if status == "complete":
+            flow.checkpoint("process_complete_status")
             # Update the view's internal state with the final results
             result_raw = data.get('match_result_raw')
             result_map = {
@@ -1094,26 +1173,37 @@ class MatchFoundView(discord.ui.View):
             if mapped_result:
                 self.match_result.match_result_confirmation_status = "Confirmed"
             
+            flow.checkpoint("disable_components")
             # Disable components and update the original embed
             self.disable_all_components()
+            
+            flow.checkpoint("update_embed_start")
             async with self.edit_lock:
                 if self.last_interaction:
                     await self.last_interaction.edit_original_response(
                         embed=self.get_embed(),
                         view=self
                     )
+            flow.checkpoint("update_embed_complete")
             
+            flow.checkpoint("send_final_embed_start")
             # Send the final gold embed as a follow-up
             await self._send_final_notification_embed(data)
+            flow.checkpoint("send_final_embed_complete")
+            
+            flow.complete("success")
             
         elif status == "abort":
+            flow.checkpoint("process_abort_status")
             # Update the view's internal state to reflect the abort
             self.match_result.match_result = "aborted"
             self.match_result.match_result_confirmation_status = "Aborted"
 
+            flow.checkpoint("disable_components")
             # Immediately disable all components to prevent further actions
             self.disable_all_components()
 
+            flow.checkpoint("update_abort_embed_start")
             # Update the embed with the abort information
             async with self.edit_lock:
                 if self.last_interaction:
@@ -1124,28 +1214,41 @@ class MatchFoundView(discord.ui.View):
                         )
                     except discord.HTTPException:
                         pass  # Non-critical if this fails, the main state is updated
+            flow.checkpoint("update_abort_embed_complete")
 
+            flow.checkpoint("send_abort_embed_start")
             # Send a follow-up notification to ensure the user sees the final state
             await self._send_abort_notification_embed()
+            flow.checkpoint("send_abort_embed_complete")
             
             # The view's work is done
             self.stop()
+            flow.complete("success")
             
         elif status == "conflict":
+            flow.checkpoint("process_conflict_status")
             # Update the view's state to reflect the conflict
             self.match_result.match_result = "conflict"
             
+            flow.checkpoint("disable_components")
             # Disable components and update the original embed
             self.disable_all_components()
+            
+            flow.checkpoint("update_conflict_embed_start")
             async with self.edit_lock:
                 if self.last_interaction:
                     await self.last_interaction.edit_original_response(
                         embed=self.get_embed(),
                         view=self
                     )
+            flow.checkpoint("update_conflict_embed_complete")
 
+            flow.checkpoint("send_conflict_embed_start")
             # Send the conflict embed as a follow-up
             await self._send_conflict_notification_embed()
+            flow.checkpoint("send_conflict_embed_complete")
+            
+            flow.complete("success")
 
         # The view's work is done
         self.stop()
@@ -1300,6 +1403,7 @@ class MatchAbortButton(discord.ui.Button):
     def __init__(self, parent_view):
         self.parent_view = parent_view
         self.awaiting_confirmation = False  # Track confirmation state
+        self.first_click_time = None  # Track timing
         viewer_id = (
             parent_view.match_result.player_1_discord_id
             if parent_view.is_player1
@@ -1319,34 +1423,49 @@ class MatchAbortButton(discord.ui.Button):
         )
     
     async def callback(self, interaction: discord.Interaction):
+        flow = FlowTracker(f"match_abort", user_id=interaction.user.id)
         player_discord_uid = interaction.user.id
         
+        flow.checkpoint("check_confirmation_state")
         # If not yet in confirmation state, show confirmation prompt
         if not self.awaiting_confirmation:
+            self.first_click_time = time.time()
+            flow.checkpoint("show_confirmation_prompt")
             remaining_aborts = user_info_service.get_remaining_aborts(player_discord_uid)
             self.label = f"Confirm Abort ({remaining_aborts} remaining)"
             self.style = discord.ButtonStyle.danger  # Keep danger style
             self.awaiting_confirmation = True
             
+            flow.checkpoint("update_button_ui_start")
             # Update the view to show the confirmation button
             async with self.parent_view.edit_lock:
                 await interaction.response.edit_message(
                     embed=self.parent_view.get_embed(),
                     view=self.parent_view
                 )
+            flow.checkpoint("update_button_ui_complete")
+            flow.complete("awaiting_confirmation")
             return
         
         # If already in confirmation state, proceed with abort
+        if self.first_click_time:
+            time_to_confirm = time.time() - self.first_click_time
+            print(f"⏱️ [Abort PERF] Time between first click and confirmation: {time_to_confirm*1000:.2f}ms")
+        
+        flow.checkpoint("execute_abort_start")
         # Atomically abort the match
         success = matchmaker.abort_match(
             self.parent_view.match_result.match_id,
             player_discord_uid
         )
+        flow.checkpoint("execute_abort_complete")
         
         if success:
+            flow.checkpoint("abort_succeeded")
             # The backend will now handle notifications.
             # We just need to update the UI to a disabled state.
             
+            flow.checkpoint("update_ui_start")
             # Update button label
             remaining_aborts = user_info_service.get_remaining_aborts(player_discord_uid)
             self.label = f"Match Aborted ({remaining_aborts} left this month)"
@@ -1357,6 +1476,7 @@ class MatchAbortButton(discord.ui.Button):
             if self.parent_view.abort_disable_task and not self.parent_view.abort_disable_task.done():
                 self.parent_view.abort_disable_task.cancel()
             
+            flow.checkpoint("send_abort_ui_update")
             # Update the embed to show abort status temporarily
             # The backend will send the final authoritative state
             async with self.parent_view.edit_lock:
@@ -1364,7 +1484,10 @@ class MatchAbortButton(discord.ui.Button):
                     embed=self.parent_view.get_embed(), 
                     view=self.parent_view
                 )
+            flow.checkpoint("send_abort_ui_complete")
+            flow.complete("success")
         else:
+            flow.complete("abort_failed")
             await interaction.response.send_message("❌ Failed to abort match. It might have been already completed or aborted by the other player.")
 
 
@@ -1392,9 +1515,13 @@ class MatchResultConfirmSelect(discord.ui.Select):
         )
     
     async def callback(self, interaction: discord.Interaction):
+        flow = FlowTracker(f"confirm_match_result", user_id=interaction.user.id)
+        
+        flow.checkpoint("update_confirmation_status")
         # Persist the confirmation status
         self.parent_view.match_result.match_result_confirmation_status = "Confirmed"
         
+        flow.checkpoint("update_ui_state")
         # Set the selected option as default for persistence
         for option in self.options:
             option.default = (option.value == self.values[0])
@@ -1409,17 +1536,23 @@ class MatchResultConfirmSelect(discord.ui.Select):
         if self.parent_view.abort_disable_task and not self.parent_view.abort_disable_task.done():
             self.parent_view.abort_disable_task.cancel()
 
+        flow.checkpoint("update_discord_message_start")
         # Update the message to show the final state before backend processing
         async with self.parent_view.edit_lock:
             await interaction.response.edit_message(
                 embed=self.parent_view.get_embed(), view=self.parent_view
             )
+        flow.checkpoint("update_discord_message_complete")
 
+        flow.checkpoint("record_player_report_start")
         # Now, send the report to the backend for final processing.
         # The completion handler will send the final embed update.
         await self.parent_view.result_select.record_player_report(
             self.parent_view.selected_result
         )
+        flow.checkpoint("record_player_report_complete")
+        
+        flow.complete("success")
 
 
 class MatchResultSelect(discord.ui.Select):
@@ -1462,11 +1595,16 @@ class MatchResultSelect(discord.ui.Select):
         )
     
     async def callback(self, interaction: discord.Interaction):
+        flow = FlowTracker(f"select_match_result", user_id=interaction.user.id)
+        
+        flow.checkpoint("validate_replay_uploaded")
         # Check if replay is uploaded before allowing result selection
         if self.parent_view.match_result.replay_uploaded != "Yes":
+            flow.complete("no_replay_uploaded")
             await interaction.response.send_message("❌ Please upload a replay file before reporting match results.")
             return
         
+        flow.checkpoint("store_selected_result")
         # Store the selected result in parent view and persist it
         self.parent_view.selected_result = self.values[0]
         self.parent_view.match_result.match_result = self.values[0]
@@ -1483,6 +1621,7 @@ class MatchResultSelect(discord.ui.Select):
         else:
             result_label = "Draw"
         
+        flow.checkpoint("update_confirmation_dropdown")
         # Enable and update confirmation dropdown
         self.parent_view.confirm_select.disabled = False
         self.parent_view.confirm_select.options = [
@@ -1493,15 +1632,21 @@ class MatchResultSelect(discord.ui.Select):
         ]
         self.parent_view.confirm_select.placeholder = "Confirm your selection..."
         
+        flow.checkpoint("update_message_start")
         # Update the message (DO NOT call _update_dropdown_states() as it would reset our changes)
         self.parent_view.last_interaction = interaction
         async with self.parent_view.edit_lock:
             await interaction.response.edit_message(
                 embed=self.parent_view.get_embed(), view=self.parent_view
             )
+        flow.checkpoint("update_message_complete")
+        flow.complete("success")
     
     async def record_player_report(self, result: str):
         """Record a player's individual report for the match"""
+        import time
+        start_time = time.perf_counter()
+        
         # Convert result to report value format
         if result == "player1_win":
             report_value = 1
@@ -1512,7 +1657,13 @@ class MatchResultSelect(discord.ui.Select):
         
         try:
             current_player_id = self.parent_view.match_result.player_1_discord_id if self.is_player1 else self.parent_view.match_result.player_2_discord_id
+            
+            checkpoint1 = time.perf_counter()
             success = matchmaker.record_match_result(self.match_result.match_id, current_player_id, report_value)
+            checkpoint2 = time.perf_counter()
+            
+            duration_ms = (checkpoint2 - checkpoint1) * 1000
+            print(f"⏱️ [Report PERF] record_match_result DB call took {duration_ms:.2f}ms")
             
             if success:
                 print(f"📝 Player report recorded for match {self.match_result.match_id}. Waiting for backend notification.")
@@ -1520,6 +1671,9 @@ class MatchResultSelect(discord.ui.Select):
                 print(f"❌ Failed to record player report for match {self.match_result.match_id}")
         except Exception as e:
             print(f"❌ Error recording player report: {e}")
+        finally:
+            total_time = (time.perf_counter() - start_time) * 1000
+            print(f"⏱️ [Report PERF] TOTAL record_player_report took {total_time:.2f}ms")
     
     async def update_embed_with_mmr_changes(self):
         """Update the embed to show MMR changes"""
@@ -1710,13 +1864,18 @@ async def on_message(message: discord.Message, bot=None):
     if not match_view:
         return
     
+    flow = FlowTracker(f"replay_upload", user_id=message.author.id)
+    
     try:
+        flow.checkpoint("download_replay_start")
         # Download the replay file
         replay_bytes = await replay_attachment.read()
+        flow.checkpoint("download_replay_complete")
         
         print(f"[Main Process] Replay uploaded by {message.author.name} "
               f"(size: {len(replay_bytes)} bytes). Offloading to worker process...")
         
+        flow.checkpoint("parse_replay_start")
         # --- MULTIPROCESSING INTEGRATION ---
         # Get the current asyncio event loop
         loop = asyncio.get_running_loop()
@@ -1778,6 +1937,7 @@ async def on_message(message: discord.Message, bot=None):
         except Exception as e:
             # This will catch any exception from the worker process
             print(f"[FATAL] Replay parsing in worker process failed: {type(e).__name__}: {e}")
+            flow.complete("parse_failed")
             error_embed = ReplayDetailsEmbed.get_error_embed(
                 "A critical error occurred while parsing the replay. "
                 "The file may be corrupted. Please notify an admin."
@@ -1785,13 +1945,16 @@ async def on_message(message: discord.Message, bot=None):
             await message.channel.send(embed=error_embed)
             return
         
+        flow.checkpoint("parse_replay_complete")
         print(f"[Main Process] Received result from worker process")
         
+        flow.checkpoint("validate_replay_data")
         # Check if parsing failed
         if replay_info.get("error"):
             error_message = replay_info["error"]
             print(f"[Main Process] Worker process reported parsing error: {error_message}")
             
+            flow.complete("validation_failed")
             # Send the red error embed
             error_embed = ReplayDetailsEmbed.get_error_embed(error_message)
             await message.channel.send(embed=error_embed)
@@ -1808,6 +1971,7 @@ async def on_message(message: discord.Message, bot=None):
             print(f"❌ Failed to parse replay for match {match_view.match_result.match_id}: {error_message}")
             return
         
+        flow.checkpoint("store_replay_start")
         # Use the new method that accepts pre-parsed data
         result = replay_service.store_upload_from_parsed_dict(
             match_view.match_result.match_id,
@@ -1815,17 +1979,22 @@ async def on_message(message: discord.Message, bot=None):
             replay_bytes,
             replay_info
         )
+        flow.checkpoint("store_replay_complete")
         
+        flow.checkpoint("update_views_start")
         if result.get("success"):
             unix_epoch = result.get("unix_epoch")
             match_view.match_result.replay_uploaded = "Yes"
             match_view.match_result.replay_upload_time = unix_epoch
             
+            flow.checkpoint("send_replay_embed")
             # Send replay details embed as a new message
             replay_data = result.get("replay_data")
             if replay_data:
                 replay_embed = ReplayDetailsEmbed.get_success_embed(replay_data)
                 await message.channel.send(embed=replay_embed)
+            
+            flow.checkpoint("update_all_match_views")
             
             # Update all views for the match
             match_views = await match_found_view_manager.get_views_by_match_id(match_view.match_result.match_id)
@@ -1838,12 +2007,15 @@ async def on_message(message: discord.Message, bot=None):
                         await view.last_interaction.edit_original_response(
                             embed=view.get_embed(), view=view
                         )
+            flow.checkpoint("update_views_complete")
             
             print(f"✅ Replay file stored for match {match_view.match_result.match_id} (player: {message.author.id})")
+            flow.complete("success")
         else:
             # Handle failure, including parsing errors
             error_message = result.get("error")
             if error_message:
+                flow.complete("store_failed")
                 # Send the red error embed
                 error_embed = ReplayDetailsEmbed.get_error_embed(error_message)
                 await message.channel.send(embed=error_embed)
@@ -1860,5 +2032,6 @@ async def on_message(message: discord.Message, bot=None):
             print(f"❌ Failed to store replay for match {match_view.match_result.match_id}: {error_message}")
 
     except Exception as e:
+        flow.complete("error")
         print(f"❌ Error processing replay file: {e}")
 

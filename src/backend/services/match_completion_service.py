@@ -116,6 +116,8 @@ class MatchCompletionService:
 
     async def check_match_completion(self, match_id: int):
         """Manually check if a match is complete and handle it."""
+        import time
+        start_time = time.perf_counter()
         
         lock = self._get_lock(match_id)
         async with lock:
@@ -178,6 +180,12 @@ class MatchCompletionService:
             except Exception as e:
                 print(f"❌ Error checking match completion for {match_id}: {e}")
                 return False
+            finally:
+                duration_ms = (time.perf_counter() - start_time) * 1000
+                if duration_ms > 100:
+                    print(f"⚠️ [MatchCompletion PERF] check_match_completion for match {match_id} took {duration_ms:.2f}ms")
+                elif duration_ms > 50:
+                    print(f"🟡 [MatchCompletion PERF] check_match_completion for match {match_id} took {duration_ms:.2f}ms")
     
     async def _monitor_match_completion(self, match_id: int):
         """Monitor a specific match for completion."""
@@ -224,15 +232,25 @@ class MatchCompletionService:
     
     async def _handle_match_completion(self, match_id: int, match_data: dict):
         """Handle a completed match."""
+        import time
+        start_time = time.perf_counter()
+        
         try:
             from src.backend.services.matchmaking_service import matchmaker
             
+            checkpoint1 = time.perf_counter()
             # Calculate and write MMR changes
             await matchmaker._calculate_and_write_mmr(match_id, match_data)
+            checkpoint2 = time.perf_counter()
+            print(f"  [MatchCompletion PERF] MMR calculation took {(checkpoint2-checkpoint1)*1000:.2f}ms")
             # Cache invalidation is now handled automatically by the database decorator
 
+            checkpoint3 = time.perf_counter()
             # Re-fetch match data to ensure it's the absolute latest
             final_match_data = await self._get_match_final_results(match_id)
+            checkpoint4 = time.perf_counter()
+            print(f"  [MatchCompletion PERF] Get final results took {(checkpoint4-checkpoint3)*1000:.2f}ms")
+            
             if not final_match_data:
                 print(f"❌ Could not get final results for match {match_id} during handling.")
                 return
@@ -244,11 +262,17 @@ class MatchCompletionService:
                     self.completion_waiters[match_id].set()
                     del self.completion_waiters[match_id]
 
+            checkpoint5 = time.perf_counter()
             # Notify/update all player views with the final data
             await self._notify_players_match_complete(match_id, final_match_data)
+            checkpoint6 = time.perf_counter()
+            print(f"  [MatchCompletion PERF] Notify players took {(checkpoint6-checkpoint5)*1000:.2f}ms")
             
         except Exception as e:
             print(f"❌ Error handling match completion for {match_id}: {e}")
+        finally:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            print(f"🏁 [MatchCompletion PERF] Total _handle_match_completion for match {match_id}: {duration_ms:.2f}ms")
     
     async def _handle_match_abort(self, match_id: int, match_data: dict):
         """Handle an aborted match."""
