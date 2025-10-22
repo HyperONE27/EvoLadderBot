@@ -226,9 +226,9 @@ async def prune_command(interaction: discord.Interaction):
         return
     
     # Defer the response since this might take a while
-    flow.checkpoint("defer_response_start")
-    await interaction.response.defer(ephemeral=False)  # Non-ephemeral in DMs
-    flow.checkpoint("defer_response_complete")
+    flow.checkpoint("response_start")
+    # Removed defer() - system is now fast enough that Discord's loading indicator provides better UX
+    flow.checkpoint("response_complete")
     
     # Get the channel (DM-only enforced by centralized system)
     channel = interaction.channel
@@ -370,8 +370,7 @@ async def prune_command(interaction: discord.Interaction):
     
     # Define the confirm callback
     async def confirm_deletion(confirm_interaction: discord.Interaction):
-        # Defer to prevent timeout
-        await confirm_interaction.response.defer()
+        # Removed defer() - system is now fast enough that Discord's loading indicator provides better UX
         
         # Show progress embed immediately
         progress_embed = discord.Embed(

@@ -42,8 +42,7 @@ class RestartButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         if isinstance(self.reset_target, discord.ui.View):
-            # Defer to prevent timeout
-            await interaction.response.defer()
+            # Removed defer() - system is now fast enough that Discord's loading indicator provides better UX
             
             # Check if the view has a get_embed method to get the proper embed
             if hasattr(self.reset_target, 'get_embed'):
@@ -85,8 +84,7 @@ class CancelButton(discord.ui.Button):
         self.show_fields = show_fields
 
     async def callback(self, interaction: discord.Interaction):
-        # Defer to prevent timeout
-        await interaction.response.defer()
+        # Removed defer() - system is now fast enough that Discord's loading indicator provides better UX
         
         # Always use the cancel embed for consistency
         cancel_view = create_cancel_embed()
