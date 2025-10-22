@@ -1011,6 +1011,34 @@ class DatabaseWriter:
             print(f"Error aborting match {match_id}: {e}")
             return False
 
+    def update_match_result(self, match_id: int, match_result: int) -> bool:
+        """
+        Update the match result for a match.
+        
+        Args:
+            match_id: The ID of the match to update
+            match_result: The match result (0=draw, 1=player1 wins, 2=player2 wins, -1=aborted, -2=conflict)
+            
+        Returns:
+            True if the update was successful, False otherwise
+        """
+        try:
+            self.adapter.execute_write(
+                """
+                UPDATE matches_1v1 
+                SET match_result = :match_result
+                WHERE id = :match_id
+                """,
+                {
+                    "match_id": match_id,
+                    "match_result": match_result
+                }
+            )
+            return True
+        except Exception as e:
+            print(f"Database error in update_match_result: {e}")
+            return False
+
     def insert_command_call(self, discord_uid: int, player_name: str, command: str) -> bool:
         """
         Logs a command call to the command_calls table.
@@ -1043,21 +1071,25 @@ class DatabaseWriter:
             True if the insertion was successful, False otherwise.
         """
         try:
+            print(f"[DatabaseWriter] Inserting replay: {replay_data.get('replay_hash', 'unknown')}")
             self.adapter.execute_insert(
                 """
                 INSERT INTO replays (
                     replay_path, replay_hash, replay_date, player_1_name, player_2_name,
                     player_1_race, player_2_race, result, player_1_handle, player_2_handle,
-                    observers, map_name, duration
+                    observers, map_name, duration, uploaded_at
                 ) VALUES (
                     :replay_path, :replay_hash, :replay_date, :player_1_name, :player_2_name,
                     :player_1_race, :player_2_race, :result, :player_1_handle, :player_2_handle,
-                    :observers, :map_name, :duration
+                    :observers, :map_name, :duration, :uploaded_at
                 )
                 """,
                 replay_data
             )
+            print(f"[DatabaseWriter] Replay inserted successfully: {replay_data.get('replay_hash', 'unknown')}")
             return True
         except Exception as e:
             print(f"Database error in insert_replay: {e}")
+            import traceback
+            traceback.print_exc()
             return False

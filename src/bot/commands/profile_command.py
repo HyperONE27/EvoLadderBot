@@ -132,6 +132,9 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
         # Get the canonical race order
         race_order = races_service.get_race_order()
         
+        # Convert dict to list of dicts for processing
+        mmr_list = [{"race": race, "mmr": mmr} for race, mmr in mmr_data.items()]
+        
         # Sort MMR data by race order
         def race_sort_key(mmr_entry):
             race_code = mmr_entry['race']
@@ -140,7 +143,7 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
             except ValueError:
                 return len(race_order)  # Put unknown races at the end
         
-        sorted_mmr_data = sorted(mmr_data, key=race_sort_key)
+        sorted_mmr_data = sorted(mmr_list, key=race_sort_key)
         
         # Separate BW and SC2 races (already in correct order)
         bw_mmrs = [m for m in sorted_mmr_data if m['race'].startswith('bw_')]

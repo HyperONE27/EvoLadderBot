@@ -43,6 +43,9 @@ class MatchResult:
     match_result_confirmation_status: Optional[str] = None
     replay_uploaded: str = "No"
     replay_upload_time: Optional[int] = None
+    # Cached ranks for performance
+    player_1_rank: Optional[str] = None
+    player_2_rank: Optional[str] = None
 
 class Player:
 	def __init__(self, discord_user_id: int, user_id: str, preferences: QueuePreferences, 
@@ -592,6 +595,12 @@ class Matchmaker:
 			flow.checkpoint(f"create_match_db_complete_{p1.discord_user_id}_vs_{p2.discord_user_id}")
 
 			flow.checkpoint(f"create_match_result_object_{p1.discord_user_id}_vs_{p2.discord_user_id}")
+			
+			# Get cached ranks for performance (avoid dynamic calculation in embed)
+			from src.backend.services.app_context import ranking_service
+			p1_rank = ranking_service.get_rank(p1.discord_user_id, p1_race)
+			p2_rank = ranking_service.get_rank(p2.discord_user_id, p2_race)
+			
 			match_result = MatchResult(
 				match_id=match_id,
 				player_1_discord_id=p1.discord_user_id,
@@ -602,7 +611,9 @@ class Matchmaker:
 				player_2_race=p2_race,
 				map_choice=map_choice,
 				server_choice=server_choice,
-				in_game_channel=in_game_channel
+				in_game_channel=in_game_channel,
+				player_1_rank=p1_rank,
+				player_2_rank=p2_rank
 			)
 					
 			from src.backend.services.match_completion_service import match_completion_service
@@ -841,11 +852,45 @@ class Matchmaker:
 		# Check if both players have reported and if their reports match
 		p1_report = match_data.get('player_1_report')
 		p2_report = match_data.get('player_2_report')
-		match_result = match_data.get('match_result')
 		
 		if p1_report is None or p2_report is None:
 			print(f"[Matchmaker] Player report recorded for match {match_id}, waiting for other player")
 			return True
+		
+		# Determine match result from player reports
+		# Reports: 0=draw, 1=player 1 wins, 2=player 2 wins, -1=aborted, -3=aborted by this player
+		if p1_report == -3 or p2_report == -3:
+			# Match was aborted
+			match_result = -1
+		elif p1_report == -1 and p2_report == -1:
+			# Both players aborted
+			match_result = -1
+		elif p1_report == 0 and p2_report == 0:
+			# Both players agree on draw
+			match_result = 0
+		elif p1_report == 1 and p2_report == 1:
+			# Both players agree player 1 wins
+			match_result = 1
+		elif p1_report == 2 and p2_report == 2:
+			# Both players agree player 2 wins
+			match_result = 2
+		elif p1_report == 1 and p2_report == 2:
+			# Conflicting reports - one says P1 wins, other says P2 wins
+			match_result = -2
+		elif p1_report == 2 and p2_report == 1:
+			# Conflicting reports - one says P2 wins, other says P1 wins
+			match_result = -2
+		elif p1_report == 0 and p2_report in [1, 2]:
+			# Conflicting reports - one says draw, other says win
+			match_result = -2
+		elif p2_report == 0 and p1_report in [1, 2]:
+			# Conflicting reports - one says draw, other says win
+			match_result = -2
+		else:
+			# Conflicting reports
+			match_result = -2
+		
+		print(f"[Matchmaker] Match {match_id} result determined: {match_result} (p1={p1_report}, p2={p2_report})")
 		
 		if match_result == -1:
 			print(f"[Matchmaker] Match {match_id} was aborted. Skipping MMR calculation.")
@@ -874,6 +919,9 @@ class Matchmaker:
 				# Calculate MMR changes
 				from src.backend.services.mmr_service import MMRService
 				mmr_service = MMRService()
+				
+				# Update match result in database
+				await data_service.update_match(match_id, match_result=match_result)
 				
 				# Calculate new MMR values
 				mmr_outcome = mmr_service.calculate_new_mmr(

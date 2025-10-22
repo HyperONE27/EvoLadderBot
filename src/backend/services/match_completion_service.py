@@ -452,6 +452,30 @@ class MatchCompletionService:
             }
             result_text = result_text_map[match_data['match_result']]
 
+            # Calculate MMR changes directly from the match result
+            # This ensures we get the correct values even if database writes are still pending
+            match_result = match_data['match_result']
+            p1_mmr_change = 0
+            p2_mmr_change = 0
+            
+            if match_result in [0, 1, 2]:  # Valid match results (draw, p1 win, p2 win)
+                # Calculate MMR changes using the MMR service
+                from src.backend.services.mmr_service import MMRService
+                mmr_service = MMRService()
+                
+                p1_current_mmr = match_data['player_1_mmr']
+                p2_current_mmr = match_data['player_2_mmr']
+                
+                if p1_current_mmr is not None and p2_current_mmr is not None:
+                    p1_mmr_change = mmr_service.calculate_mmr_change(
+                        p1_current_mmr, 
+                        p2_current_mmr, 
+                        match_result
+                    )
+                    p2_mmr_change = -p1_mmr_change  # Player 2's change is opposite of player 1's
+                    
+                    print(f"[MatchCompletion] Calculated MMR changes for match {match_id}: P1={p1_mmr_change:+.1f}, P2={p2_mmr_change:+.1f}")
+
             return {
                 "match_id": match_id,
                 "p1_info": p1_info,
@@ -464,8 +488,8 @@ class MatchCompletionService:
                 "p2_race": match_data.get('player_2_race'),
                 "p1_current_mmr": match_data['player_1_mmr'],
                 "p2_current_mmr": match_data['player_2_mmr'],
-                "p1_mmr_change": match_data.get('mmr_change', 0),
-                "p2_mmr_change": -match_data.get('mmr_change', 0),
+                "p1_mmr_change": p1_mmr_change,
+                "p2_mmr_change": p2_mmr_change,
                 "p1_report": match_data.get('player_1_report'),
                 "p2_report": match_data.get('player_2_report'),
                 "result_text": result_text,

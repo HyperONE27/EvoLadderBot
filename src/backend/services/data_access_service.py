@@ -400,14 +400,61 @@ class DataAccessService:
                 )
             
             elif job.job_type == WriteJobType.UPDATE_MATCH:
-                await loop.run_in_executor(
-                    None,
-                    self._db_writer.update_match_replay_1v1,
-                    job.data['match_id'],
-                    job.data['player_discord_uid'],
-                    job.data['replay_path'],
-                    job.data['replay_time']
-                )
+                # Handle general match updates (match_result, player reports, replay updates, etc.)
+                match_id = job.data['match_id']
+                update_fields = {k: v for k, v in job.data.items() if k != 'match_id'}
+                
+                # Handle specific field updates
+                for field, value in update_fields.items():
+                    if field == 'match_result':
+                        await loop.run_in_executor(
+                            None,
+                            self._db_writer.update_match_result,
+                            match_id,
+                            value
+                        )
+                    elif field == 'player_1_report':
+                        # Get player_1_discord_uid from the match data
+                        from src.backend.db.db_reader_writer import DatabaseReader
+                        db_reader = DatabaseReader()
+                        match_data = db_reader.get_match_by_id(match_id)
+                        if match_data:
+                            player_1_uid = match_data.get('player_1_discord_uid')
+                            if player_1_uid:
+                                await loop.run_in_executor(
+                                    None,
+                                    self._db_writer.update_player_report_1v1,
+                                    match_id,
+                                    player_1_uid,
+                                    value
+                                )
+                    elif field == 'player_2_report':
+                        # Get player_2_discord_uid from the match data
+                        from src.backend.db.db_reader_writer import DatabaseReader
+                        db_reader = DatabaseReader()
+                        match_data = db_reader.get_match_by_id(match_id)
+                        if match_data:
+                            player_2_uid = match_data.get('player_2_discord_uid')
+                            if player_2_uid:
+                                await loop.run_in_executor(
+                                    None,
+                                    self._db_writer.update_player_report_1v1,
+                                    match_id,
+                                    player_2_uid,
+                                    value
+                                )
+                    elif field in ['player_discord_uid', 'replay_path', 'replay_time']:
+                        # Handle replay updates - these fields come together
+                        if 'player_discord_uid' in update_fields and 'replay_path' in update_fields and 'replay_time' in update_fields:
+                            await loop.run_in_executor(
+                                None,
+                                self._db_writer.update_match_replay_1v1,
+                                match_id,
+                                update_fields['player_discord_uid'],
+                                update_fields['replay_path'],
+                                update_fields['replay_time']
+                            )
+                            break  # Only process this once per job
             
             elif job.job_type == WriteJobType.UPDATE_MATCH_MMR_CHANGE:
                 print(f"[DataAccessService] Processing UPDATE_MATCH_MMR_CHANGE: match_id={job.data['match_id']}, mmr_change={job.data['mmr_change']}")
@@ -420,11 +467,13 @@ class DataAccessService:
                 print(f"[DataAccessService] UPDATE_MATCH_MMR_CHANGE result: {result}")
             
             elif job.job_type == WriteJobType.INSERT_REPLAY:
-                await loop.run_in_executor(
+                print(f"[DataAccessService] Processing INSERT_REPLAY: replay_hash={job.data.get('replay_hash', 'unknown')}")
+                result = await loop.run_in_executor(
                     None,
                     self._db_writer.insert_replay,
                     job.data
                 )
+                print(f"[DataAccessService] INSERT_REPLAY result: {result}")
             
             elif job.job_type == WriteJobType.INSERT_COMMAND_CALL:
                 await loop.run_in_executor(
@@ -1647,6 +1696,55 @@ class DataAccessService:
             traceback.print_exc()
             return False
     
+    async def update_match(self, match_id: int, **kwargs) -> bool:
+        """
+        Update match data with immediate in-memory update.
+        
+        Args:
+            match_id: Match ID
+            **kwargs: Match fields to update (e.g., match_result, player_1_report, etc.)
+            
+        Returns:
+            True if updated successfully
+        """
+        if self._matches_df is None:
+            print("[DataAccessService] WARNING: Matches DataFrame not initialized")
+            return False
+        
+        try:
+            # Update in-memory immediately
+            if len(self._matches_df.filter(pl.col("id") == match_id)) > 0:
+                # Update the match in memory
+                for key, value in kwargs.items():
+                    if key in self._matches_df.columns:
+                        self._matches_df = self._matches_df.with_columns(
+                            pl.when(pl.col("id") == match_id)
+                            .then(pl.lit(value))
+                            .otherwise(pl.col(key))
+                            .alias(key)
+                        )
+                        print(f"[DataAccessService] Updated match {match_id} {key} to {value} in memory")
+            
+            # Queue database write
+            job = WriteJob(
+                job_type=WriteJobType.UPDATE_MATCH,
+                data={
+                    "match_id": match_id,
+                    **kwargs
+                },
+                timestamp=time.time()
+            )
+            
+            await self._write_queue.put(job)
+            self._total_writes_queued += 1
+            return True
+            
+        except Exception as e:
+            print(f"[DataAccessService] Error updating match {match_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
     async def update_match_mmr_change(self, match_id: int, mmr_change: int) -> bool:
         """
         Update the MMR change for a match.

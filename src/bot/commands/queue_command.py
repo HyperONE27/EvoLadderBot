@@ -8,6 +8,7 @@ import discord
 from discord import app_commands
 
 from src.backend.db.db_reader_writer import get_timestamp
+from src.bot.config import QUEUE_SEARCHING_HEARTBEAT_SECONDS
 from src.backend.services.app_context import (
     command_guard_service as guard_service,
     maps_service,
@@ -320,6 +321,10 @@ class JoinQueueButton(discord.ui.Button):
             await interaction.followup.send(embed=error_view.embed, view=error_view, ephemeral=True)
             return
         
+        flow.checkpoint("persist_preferences")
+        # Persist current preferences before joining queue
+        await self.view.persist_preferences()
+        
         flow.checkpoint("create_queue_preferences")
         # Create queue preferences
         preferences = QueuePreferences(
@@ -452,33 +457,19 @@ class QueueView(discord.ui.View):
         sorted_vetoes = sorted(self.vetoed_maps)
         vetoes_payload = json.dumps(sorted_vetoes)
 
-        loop = asyncio.get_running_loop()
-
-        def _write_preferences() -> None:
-            try:
-                # Use DataAccessService for async write
-                import asyncio
-                from src.backend.services.data_access_service import DataAccessService
-                data_service = DataAccessService()
-                
-                # Run async update in sync context
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(data_service.update_player_preferences(
-                        discord_uid=self.discord_user_id,
-                        last_chosen_races=races_payload,
-                        last_chosen_vetoes=vetoes_payload
-                    ))
-                else:
-                    loop.run_until_complete(data_service.update_player_preferences(
-                        discord_uid=self.discord_user_id,
-                        last_chosen_races=races_payload,
-                        last_chosen_vetoes=vetoes_payload
-                    ))
-            except Exception as exc:  # pragma: no cover — log and continue
-                logger.error("Failed to update 1v1 preferences for user %s: %s", self.discord_user_id, exc)
-
-        await loop.run_in_executor(None, _write_preferences)
+        try:
+            # Use DataAccessService for async write
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+            
+            # Call async method directly
+            await data_service.update_player_preferences(
+                discord_uid=self.discord_user_id,
+                last_chosen_races=races_payload,
+                last_chosen_vetoes=vetoes_payload
+            )
+        except Exception as exc:  # pragma: no cover — log and continue
+            logger.error("Failed to update 1v1 preferences for user %s: %s", self.discord_user_id, exc)
     
     def get_embed(self):
         """Get the embed for this view without requiring an interaction"""
@@ -583,7 +574,7 @@ class QueueSearchingView(discord.ui.View):
         while self.is_active:
             if not await queue_searching_view_manager.has_view(self.player.discord_user_id):
                 break
-            await asyncio.sleep(15)
+            await asyncio.sleep(QUEUE_SEARCHING_HEARTBEAT_SECONDS)
             if not self.is_active or self.last_interaction is None:
                 continue
             async with self.status_lock:
@@ -950,11 +941,9 @@ class MatchFoundView(discord.ui.View):
         p2_race_emote = get_race_emote(p2_race)
         
         checkpoint3 = time.perf_counter()
-        # Get rank information for both players
-        from src.backend.services.app_context import ranking_service
-        
-        p1_rank = ranking_service.get_rank(self.match_result.player_1_discord_id, p1_race)
-        p2_rank = ranking_service.get_rank(self.match_result.player_2_discord_id, p2_race)
+        # Use cached ranks from MatchResult (no dynamic calculation needed)
+        p1_rank = self.match_result.player_1_rank or "u_rank"
+        p2_rank = self.match_result.player_2_rank or "u_rank"
         checkpoint4 = time.perf_counter()
         print(f"  [MatchEmbed PERF] Rank lookup: {(checkpoint4-checkpoint3)*1000:.2f}ms")
         
@@ -2026,17 +2015,14 @@ async def on_message(message: discord.Message, bot=None):
         match_view.match_result.replay_uploaded = "Yes"
         match_view.match_result.replay_upload_time = unix_epoch
         
-        # Update all views for the match IMMEDIATELY
-        match_views = await match_found_view_manager.get_views_by_match_id(match_view.match_result.match_id)
-        for _, view in match_views:
-            view.match_result.replay_uploaded = "Yes"
-            view.match_result.replay_upload_time = unix_epoch
-            view._update_dropdown_states()
-            if view.last_interaction:
-                with suppress(discord.NotFound, discord.InteractionResponded):
-                    await view.last_interaction.edit_original_response(
-                        embed=view.get_embed(), view=view
-                    )
+        # Update ONLY the view for the player who uploaded the replay
+        # Each player should only see their own replay status
+        match_view._update_dropdown_states()
+        if match_view.last_interaction:
+            with suppress(discord.NotFound, discord.InteractionResponded):
+                await match_view.last_interaction.edit_original_response(
+                    embed=match_view.get_embed(), view=match_view
+                )
         flow.checkpoint("immediate_ui_update_complete")
         
         # Start background storage task (non-blocking)

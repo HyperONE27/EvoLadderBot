@@ -50,11 +50,11 @@ class RacesService(BaseConfigService):
         grouped = self.get_races_by_game()
         return {
             "brood_war": [
-                (race["name"], race["code"], race["description"])
+                (race["name"], race["code"], race.get("description", ""))
                 for race in grouped["brood_war"]
             ],
             "starcraft2": [
-                (race["name"], race["code"], race["description"])
+                (race["name"], race["code"], race.get("description", ""))
                 for race in grouped["starcraft2"]
             ],
         }
@@ -68,7 +68,7 @@ class RacesService(BaseConfigService):
 
     def get_race_options_for_dropdown(self) -> List[Tuple[str, str, str]]:
         return [
-            (race["name"], race["code"], race["description"])
+            (race["name"], race["code"], race.get("description", ""))
             for race in self.get_races()
         ]
 

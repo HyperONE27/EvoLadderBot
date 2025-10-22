@@ -452,7 +452,7 @@ class ReplayService:
         # Try Supabase Storage first if match_id and player_discord_uid are provided
         if match_id is not None and player_discord_uid is not None:
             try:
-                from src.backend.services.storage_service import storage_service
+                from src.backend.services.app_context import storage_service
                 
                 print(f"[Replay] Uploading to Supabase Storage (match: {match_id}, player: {player_discord_uid})...")
                 public_url = storage_service.upload_replay(
