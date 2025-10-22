@@ -244,14 +244,14 @@ class MatchCompletionService:
             # Calculate and write MMR changes
             await matchmaker._calculate_and_write_mmr(match_id, match_data)
             checkpoint2 = time.perf_counter()
-            print(f"  [MatchCompletion PERF] MMR calculation took {(checkpoint2-checkpoint1)*1000:.2f}ms")
+            mmr_time = (checkpoint2-checkpoint1)*1000
             # Cache invalidation is now handled automatically by the database decorator
 
             checkpoint3 = time.perf_counter()
             # Re-fetch match data to ensure it's the absolute latest
             final_match_data = await self._get_match_final_results(match_id)
             checkpoint4 = time.perf_counter()
-            print(f"  [MatchCompletion PERF] Get final results took {(checkpoint4-checkpoint3)*1000:.2f}ms")
+            results_time = (checkpoint4-checkpoint3)*1000
             
             if not final_match_data:
                 print(f"❌ Could not get final results for match {match_id} during handling.")
@@ -275,7 +275,10 @@ class MatchCompletionService:
             # Notify/update all player views with the final data
             await self._notify_players_match_complete(match_id, final_match_data)
             checkpoint6 = time.perf_counter()
-            print(f"  [MatchCompletion PERF] Notify players took {(checkpoint6-checkpoint5)*1000:.2f}ms")
+            notify_time = (checkpoint6-checkpoint5)*1000
+            
+            # Compact performance logging
+            print(f"[MC] MMR:{mmr_time:.1f}ms Results:{results_time:.1f}ms Notify:{notify_time:.1f}ms")
             
         except Exception as e:
             print(f"❌ Error handling match completion for {match_id}: {e}")

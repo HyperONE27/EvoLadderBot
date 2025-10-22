@@ -94,9 +94,9 @@ class NotificationService:
         
         duration_ms = (time.perf_counter() - start_time) * 1000
         if duration_ms > 10:
-            logger.warning(f"[NotificationService PERF] publish_match_found took {duration_ms:.2f}ms for match {match.match_id}")
+            logger.warning(f"[NS] Match {match.match_id}: {duration_ms:.1f}ms")
         else:
-            logger.debug(f"[NotificationService PERF] publish_match_found took {duration_ms:.2f}ms for match {match.match_id}")
+            logger.debug(f"[NS] Match {match.match_id}: {duration_ms:.1f}ms")
     
     def get_subscriber_count(self) -> int:
         """

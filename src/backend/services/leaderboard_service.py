@@ -155,7 +155,7 @@ class LeaderboardService:
         df = self._get_cached_leaderboard_dataframe()
         
         perf_cache = time.time()
-        print(f"[Leaderboard Perf] Cache fetch: {(perf_cache - perf_start)*1000:.2f}ms")
+        cache_time = (perf_cache - perf_start)*1000
         
         # Apply filters (optimized for large filter lists)
         # Build filter conditions and apply them in one operation for better performance
@@ -197,7 +197,7 @@ class LeaderboardService:
             df = df.filter(pl.all_horizontal(filter_conditions))
         
         perf_filter = time.time()
-        print(f"[Leaderboard Perf] Apply filters: {(perf_filter - perf_cache)*1000:.2f}ms")
+        filter_time = (perf_filter - perf_cache)*1000
         
         # Apply best race only filtering if enabled
         if best_race_only:
@@ -210,8 +210,7 @@ class LeaderboardService:
             )
         
         perf_best_race = time.time()
-        if best_race_only:
-            print(f"[Leaderboard Perf] Best race filter: {(perf_best_race - perf_filter)*1000:.2f}ms")
+        best_race_time = (perf_best_race - perf_filter)*1000 if best_race_only else 0
         
         # Sort by MMR (descending), then by last_played (descending) for tie-breaking
         # Only sort if we didn't just do best_race_only (which already sorted)
@@ -220,7 +219,7 @@ class LeaderboardService:
         # Note: If best_race_only was enabled, data is already sorted from groupby operation
         
         perf_sort = time.time()
-        print(f"[Leaderboard Perf] Sort by MMR: {(perf_sort - perf_best_race)*1000:.2f}ms")
+        sort_time = (perf_sort - perf_best_race)*1000
         
         # Calculate pagination
         total_players = len(df)
@@ -239,14 +238,20 @@ class LeaderboardService:
         page_df = df.slice(start_idx, page_size)
         
         perf_slice = time.time()
-        print(f"[Leaderboard Perf] Slice page: {(perf_slice - perf_sort)*1000:.2f}ms")
+        slice_time = (perf_slice - perf_sort)*1000
         
         # Convert back to list of dicts for compatibility
         page_players = page_df.to_dicts()
         
         perf_to_dicts = time.time()
-        print(f"[Leaderboard Perf] to_dicts(): {(perf_to_dicts - perf_slice)*1000:.2f}ms")
-        print(f"[Leaderboard Perf] TOTAL: {(perf_to_dicts - perf_start)*1000:.2f}ms")
+        dicts_time = (perf_to_dicts - perf_slice)*1000
+        total_time = (perf_to_dicts - perf_start)*1000
+        
+        # Compact performance logging
+        if best_race_only:
+            print(f"[LB] Cache:{cache_time:.1f}ms Filter:{filter_time:.1f}ms BestRace:{best_race_time:.1f}ms Sort:{sort_time:.1f}ms Slice:{slice_time:.1f}ms Dicts:{dicts_time:.1f}ms | Total:{total_time:.1f}ms")
+        else:
+            print(f"[LB] Cache:{cache_time:.1f}ms Filter:{filter_time:.1f}ms Sort:{sort_time:.1f}ms Slice:{slice_time:.1f}ms Dicts:{dicts_time:.1f}ms | Total:{total_time:.1f}ms")
         
         return {
             "players": page_players,

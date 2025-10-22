@@ -1145,9 +1145,9 @@ class MatchFoundView(discord.ui.View):
         
         total_time = (time.perf_counter() - start_time) * 1000
         if total_time > 100:
-            print(f"⚠️ [MatchEmbed PERF] TOTAL get_embed() took {total_time:.2f}ms")
+            print(f"⚠️ [ME] Total:{total_time:.1f}ms")
         elif total_time > 50:
-            print(f"🟡 [MatchEmbed PERF] TOTAL get_embed() took {total_time:.2f}ms")
+            print(f"🟡 [ME] Total:{total_time:.1f}ms")
         
         return embed
 
@@ -1679,7 +1679,7 @@ class MatchResultSelect(discord.ui.Select):
             checkpoint2 = time.perf_counter()
             
             duration_ms = (checkpoint2 - checkpoint1) * 1000
-            print(f"⏱️ [Report PERF] record_match_result DB call took {duration_ms:.2f}ms")
+            db_time = duration_ms
             
             if success:
                 print(f"📝 Player report recorded for match {self.match_result.match_id}. Waiting for backend notification.")
@@ -1689,7 +1689,9 @@ class MatchResultSelect(discord.ui.Select):
             print(f"❌ Error recording player report: {e}")
         finally:
             total_time = (time.perf_counter() - start_time) * 1000
-            print(f"⏱️ [Report PERF] TOTAL record_player_report took {total_time:.2f}ms")
+            
+            # Compact performance logging
+            print(f"[Report] DB:{db_time:.1f}ms Total:{total_time:.1f}ms")
     
     async def update_embed_with_mmr_changes(self):
         """Update the embed to show MMR changes"""
