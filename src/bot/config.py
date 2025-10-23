@@ -101,6 +101,11 @@ SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "replays")  # Default b
 # APPLICATION CONSTANTS
 # =============================================================================
 
+# Path for persistent data storage (e.g., SQLite write-ahead log)
+# On Railway, this should point to the mounted volume (e.g., /writequeue)
+# For local development, defaults to a local 'data' directory
+RAILWAY_PERSISTENT_STORAGE_PATH = os.getenv("RAILWAY_PERSISTENT_STORAGE_PATH", "data")
+
 # The current map pool season to be used by the matchmaking service
 CURRENT_SEASON = "season_alpha"
 

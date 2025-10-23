@@ -25,12 +25,12 @@ class WriteLog:
     preventing data loss during service restarts.
     """
     
-    def __init__(self, db_path: str = "data/write_log.sqlite"):
+    def __init__(self, db_path: str):
         """
         Initialize the write log.
         
         Args:
-            db_path: Path to SQLite database file
+            db_path: Full path to SQLite database file (including filename)
         """
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

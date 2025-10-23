@@ -20,6 +20,7 @@ Performance Benefits:
 """
 
 import asyncio
+import os
 import time
 from typing import Any, Dict, List, Optional
 
@@ -28,6 +29,7 @@ import polars as pl
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
 from src.backend.services.write_job import WriteJob, WriteJobType
 from src.backend.services.write_log import WriteLog
+from src.bot.config import RAILWAY_PERSISTENT_STORAGE_PATH
 
 
 class DataAccessService:
@@ -108,7 +110,11 @@ class DataAccessService:
         # System state
         self._shutdown_event = asyncio.Event()
         self._writer_task: Optional[asyncio.Task] = None
-        self._write_log: WriteLog = WriteLog()
+        
+        # Initialize write log with configured persistent storage path
+        db_path = os.path.join(RAILWAY_PERSISTENT_STORAGE_PATH, "write_log.sqlite")
+        self._write_log: WriteLog = WriteLog(db_path=db_path)
+        
         self._init_lock = asyncio.Lock()
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
 
