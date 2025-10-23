@@ -243,7 +243,8 @@ def get_memory_monitor() -> Optional[MemoryMonitor]:
     return _memory_monitor
 
 
-def log_memory(context: str = ""):
-    """Quick helper to log memory usage."""
-    if _memory_monitor:
-        _memory_monitor.log_memory_usage(context)
+def log_current_memory_usage(context: str = ""):
+    """Quick helper to log current memory usage."""
+    monitor = get_memory_monitor()
+    if monitor:
+        monitor.log_memory_usage(context)

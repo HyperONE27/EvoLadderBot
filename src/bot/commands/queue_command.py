@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 from functools import partial
 from typing import Callable, Dict, Optional
 
@@ -9,6 +8,7 @@ from discord import app_commands
 
 from src.backend.db.db_reader_writer import get_timestamp
 from src.bot.config import QUEUE_SEARCHING_HEARTBEAT_SECONDS
+from src.bot.logging_config import log_general, LogLevel
 from src.backend.services.app_context import (
     command_guard_service as guard_service,
     maps_service,
@@ -44,6 +44,7 @@ from contextlib import suppress
 from src.backend.services.performance_service import FlowTracker
 from src.bot.components.replay_details_embed import ReplayDetailsEmbed
 from src.bot.config import GLOBAL_TIMEOUT
+from src.backend.services.memory_monitor import log_current_memory_usage
 
 
 class QueueSearchingViewManager:
@@ -125,7 +126,7 @@ queue_searching_view_manager = QueueSearchingViewManager()
 match_found_view_manager = MatchFoundViewManager()
 channel_to_match_view_map: Dict[int, "MatchFoundView"] = {}
 
-logger = logging.getLogger(__name__)
+# Logger removed - using logging_config macros instead
 
 
 # Register Command
@@ -469,7 +470,7 @@ class QueueView(discord.ui.View):
                 last_chosen_vetoes=vetoes_payload
             )
         except Exception as exc:  # pragma: no cover — log and continue
-            logger.error("Failed to update 1v1 preferences for user %s: %s", self.discord_user_id, exc)
+            log_general(LogLevel.ERROR, f"Failed to update 1v1 preferences for user {self.discord_user_id}: {exc}")
     
     def get_embed(self):
         """Get the embed for this view without requiring an interaction"""
@@ -1951,8 +1952,7 @@ async def on_message(message: discord.Message, bot=None):
                             bot._track_work_start()
                         
                         # Log memory before replay parsing
-                        from src.backend.services.memory_monitor import log_memory
-                        log_memory("Before replay parse")
+                        log_current_memory_usage("Before replay parse")
                         
                         try:
                             replay_info = await loop.run_in_executor(
@@ -1964,7 +1964,7 @@ async def on_message(message: discord.Message, bot=None):
                                 bot._track_work_end()
                             
                             # Log memory after replay parsing
-                            log_memory("After replay parse")
+                            log_current_memory_usage("After replay parse")
                 except Exception as e:
                     print(f"[WARN] Process pool health check failed with error: {e}")
                     # Continue with process pool usage - let the executor handle the error

@@ -154,10 +154,11 @@ class FlowTracker:
                 checkpoint_summary = "\n" + "\n".join(checkpoint_lines)
         
         # Log the complete flow
-        logger.log(
-            log_level,
-            f"{log_prefix} [{self.flow_name}] {total_duration_ms:.2f}ms ({status})"
-            f"{checkpoint_summary}"
+        log_performance(
+            LogLevel.INFO,
+            f"{self.flow_name} completed",
+            duration_ms=total_duration_ms,
+            extra={"status": status, "checkpoints": len(self.checkpoints)}
         )
         
         # Also print to console for visibility

@@ -8,7 +8,6 @@ This module handles:
 """
 
 import asyncio
-import logging
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
@@ -22,16 +21,19 @@ from src.backend.services.app_context import command_guard_service, leaderboard_
 from src.backend.services.cache_service import static_cache
 from src.backend.services.command_guard_service import DMOnlyError
 from src.backend.services.data_access_service import DataAccessService
-from src.backend.services.memory_monitor import initialize_memory_monitor, log_memory
+from src.backend.services.memory_monitor import initialize_memory_monitor, log_current_memory_usage
 from src.backend.services.performance_service import FlowTracker, performance_monitor
 from src.backend.services.process_pool_health import set_bot_instance
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
-from src.bot.config import DATABASE_URL, DB_POOL_MAX_CONNECTIONS, DB_POOL_MIN_CONNECTIONS, WORKER_PROCESSES
+from src.bot.config import (
+    DATABASE_TYPE, DATABASE_URL, SQLITE_DB_PATH, 
+    DB_POOL_MIN_CONNECTIONS, DB_POOL_MAX_CONNECTIONS,
+    WORKER_PROCESSES
+)
+from src.bot.logging_config import log_general, log_process_pool, log_memory, LogLevel
 
 # Add app_context import
 from src.backend.services import app_context
-
-logger = logging.getLogger(__name__)
 
 
 def _health_check_worker():
@@ -128,7 +130,7 @@ class EvoLadderBot(commands.Bot):
             await data_service.insert_command_call(discord_uid, player_name, command)
         except Exception as e:
             # Log error but don't fail the command
-            logger.error(f"Failed to log command {command} for user {discord_uid}: {e}")
+            log_general(LogLevel.ERROR, f"Failed to log command {command} for user {discord_uid}: {e}")
     
     def _track_work_start(self):
         """Track that work is starting on the process pool."""
@@ -167,7 +169,7 @@ class EvoLadderBot(commands.Bot):
                     try:
                         self.process_pool.shutdown(wait=False, cancel_futures=True)
                     except Exception as e:
-                        logger.warning(f"[Process Pool] Error during shutdown: {e}")
+                        log_process_pool(LogLevel.WARNING, f"Error during shutdown: {e}")
                 
                 # Create new pool
                 print(f"[Process Pool] Creating new pool with {WORKER_PROCESSES} worker(s)...")
@@ -176,7 +178,7 @@ class EvoLadderBot(commands.Bot):
                 return True
                 
             except Exception as e:
-                logger.error(f"[Process Pool] ❌ Failed to restart process pool: {e}")
+                log_process_pool(LogLevel.ERROR, f"❌ Failed to restart process pool: {e}")
                 return False
     
     async def _ensure_process_pool_healthy(self) -> bool:
@@ -191,7 +193,7 @@ class EvoLadderBot(commands.Bot):
             True if pool is healthy or was successfully restarted, False otherwise
         """
         if not self.process_pool:
-            logger.error("[Process Pool] Process pool is None, attempting restart...")
+            log_process_pool(LogLevel.ERROR, "Process pool is None, attempting restart...")
             return await self._restart_process_pool()
         
         # Determine appropriate timeout based on worker status
@@ -221,7 +223,7 @@ class EvoLadderBot(commands.Bot):
                 print(f"[Process Pool] ✅ Health check passed (PID: {result['pid']})")
                 return True
             else:
-                logger.error(f"[Process Pool] Health check returned invalid result: {result}")
+                log_process_pool(LogLevel.ERROR, f"Health check returned invalid result: {result}")
                 return await self._restart_process_pool()
                 
         except asyncio.TimeoutError:
@@ -233,15 +235,15 @@ class EvoLadderBot(commands.Bot):
                     # Don't restart immediately, let the work complete
                     return True
                 else:
-                    logger.error(f"[Process Pool] Health check timeout with old work (age: {work_age:.1f}s) - likely crashed")
+                    log_process_pool(LogLevel.ERROR, f"Health check timeout with old work (age: {work_age:.1f}s) - likely crashed")
                     return await self._restart_process_pool()
             else:
-                logger.error("[Process Pool] Health check timeout with no active work - likely crashed")
+                log_process_pool(LogLevel.ERROR, "Health check timeout with no active work - likely crashed")
                 return await self._restart_process_pool()
                 
         except Exception as e:
-            logger.error(f"[Process Pool] Health check failed: {e}")
-            logger.info("[Process Pool] Attempting to restart process pool...")
+            log_process_pool(LogLevel.ERROR, f"Health check failed: {e}")
+            log_process_pool(LogLevel.INFO, "Attempting to restart process pool...")
             return await self._restart_process_pool()
     
     # _refresh_leaderboard_cache_task() removed - DataAccessService handles this now
@@ -264,22 +266,21 @@ class EvoLadderBot(commands.Bot):
                 monitor = get_memory_monitor()
                 if monitor:
                     # Log current memory usage
-                    monitor.log_memory_usage("Periodic check")
+                    log_current_memory_usage("Periodic check")
                     
                     # Check for potential leak
                     if monitor.check_memory_leak(threshold_mb=100.0):
                         # Generate detailed report
                         report = monitor.generate_report(include_allocations=True)
                         print(report)
-                        logger.warning("[Memory Monitor] Memory leak detected - see report above")
+                        log_memory(LogLevel.WARNING, "Memory leak detected - see report above")
                         
                         # Force garbage collection
                         collected, freed = monitor.force_garbage_collection()
-                        logger.info(f"[Memory Monitor] Forced GC: collected {collected} objects, "
-                                   f"freed {freed:.2f} MB")
+                        log_memory(LogLevel.INFO, f"Forced GC: collected {collected} objects, freed {freed:.2f} MB")
                 
             except Exception as e:
-                logger.error(f"[Memory Monitor] Error in monitoring task: {e}")
+                log_memory(LogLevel.ERROR, f"Error in monitoring task: {e}")
     
     def start_background_tasks(self):
         """Start all background tasks for the bot."""
@@ -325,7 +326,7 @@ async def initialize_backend_services(bot: EvoLadderBot) -> None:
     # 1. Initialize Memory Monitor
     print("[Startup] Initializing memory monitor...")
     initialize_memory_monitor(enable_tracemalloc=True)
-    log_memory("Startup - baseline")
+    log_current_memory_usage("Startup - baseline")
     
     # 2. Initialize Database Connection Pool
     try:
@@ -334,30 +335,27 @@ async def initialize_backend_services(bot: EvoLadderBot) -> None:
             min_conn=DB_POOL_MIN_CONNECTIONS,
             max_conn=DB_POOL_MAX_CONNECTIONS
         )
-        log_memory("After DB pool init")
+        log_current_memory_usage("After DB pool init")
     except Exception as e:
         print(f"\n[FATAL] Failed to initialize connection pool: {e}")
         sys.exit(1)
     
     # 3. Test Database Connection
-    success, message = test_database_connection()
-    if not success:
-        print(f"\n[FATAL] Database connection test failed: {message}")
-        sys.exit(1)
-        
-    # 4. Initialize Static Data Cache
-    print("[Startup] Initializing static data cache...")
-    try:
-        static_cache.initialize()
-        log_memory("After static cache init")
-    except Exception as e:
-        print(f"\n[FATAL] Failed to initialize static data cache: {e}")
-        sys.exit(1)
+    print("[Startup] Testing database connection...")
+    test_database_connection(
+        db_type=DATABASE_TYPE, 
+        db_url=DATABASE_URL, 
+        sqlite_path=SQLITE_DB_PATH
+    )
+
+    # Initialize static cache
+    print("[Startup] Initializing static cache...")
+    static_cache.initialize()
         
     # 5. Create and Attach Process Pool
     bot.process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
     print(f"[INFO] Initialized Process Pool with {WORKER_PROCESSES} worker(s)")
-    log_memory("After process pool init")
+    log_current_memory_usage("After process pool init")
     
     # 6. Register bot instance for global process pool health checking
     set_bot_instance(bot)
@@ -368,20 +366,37 @@ async def initialize_backend_services(bot: EvoLadderBot) -> None:
     try:
         data_service = DataAccessService()
         await data_service.initialize_async()
-        log_memory("After DataAccessService init")
+        app_context.data_access_service = data_service
+        log_current_memory_usage("After DataAccessService init")
         print("[INFO] DataAccessService initialized successfully")
     except Exception as e:
         print(f"\n[FATAL] Failed to initialize DataAccessService: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
+    
+    # Initialize services that depend on DataAccessService
+    from src.backend.services.leaderboard_service import LeaderboardService
+    from src.backend.services.ranking_service import RankingService
+    from src.backend.services.user_info_service import UserInfoService
+    from src.backend.services.mmr_service import MMRService
+    from src.backend.services.maps_service import MapsService
+    from src.backend.services.regions_service import RegionsService
+    from src.backend.services.races_service import RacesService
+    app_context.leaderboard_service = LeaderboardService(data_service=data_service)
+    app_context.ranking_service = RankingService(data_service=data_service)
+    app_context.user_info_service = UserInfoService()
+    app_context.mmr_service = MMRService()
+    app_context.maps_service = MapsService()
+    app_context.regions_service = RegionsService()
+    app_context.races_service = RacesService()
         
     # 8. Refresh Ranking Service (depends on DataAccessService)
     print("[Startup] Performing initial rank calculation...")
     try:
         # Use the singleton from app_context
         await app_context.ranking_service.trigger_refresh()
-        log_memory("After ranking service refresh")
+        log_current_memory_usage("After ranking service refresh")
         print("[INFO] Ranking service refreshed successfully")
     except Exception as e:
         print(f"\n[FATAL] Failed to refresh ranking service: {e}")
