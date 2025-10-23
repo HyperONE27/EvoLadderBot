@@ -634,49 +634,35 @@ class QueueSearchingView(discord.ui.View):
             # Create match found view
             match_view = MatchFoundView(match_result, is_player1)
             
-            flow.checkpoint("send_match_dm_start")
-            # Send the match DM using bot token (not interaction) for permanent access
-            if self.last_interaction:
-                try:
-                    # Acknowledge the interaction quickly
-                    await self.last_interaction.response.defer(ephemeral=True)
-                    
-                    # Get or create DM channel
-                    dm_channel = self.last_interaction.user.dm_channel
-                    if not dm_channel:
-                        dm_channel = await self.last_interaction.user.create_dm()
-                    
-                    # Offload the embed generation to executor
-                    loop = asyncio.get_running_loop()
-                    embed = await loop.run_in_executor(None, match_view.get_embed)
-                    flow.checkpoint("generate_match_embed_complete")
-                    
-                    # Send via bot token (permanent access, never expires!)
-                    flow.checkpoint("send_dm_via_bot_token")
-                    message = await dm_channel.send(embed=embed, view=match_view)
-                    
-                    # Store channel and message ID for future edits
-                    match_view.channel = dm_channel
-                    match_view.original_message_id = message.id
-                    
-                    # Register for replay detection
-                    await match_view.register_for_replay_detection(dm_channel.id)
-                    
-                    flow.checkpoint("send_match_dm_complete")
-                    print(f"[Match Notification] Successfully sent match DM for player {self.player.discord_user_id}")
-                    
-                    # Send ephemeral confirmation
-                    await self.last_interaction.followup.send("Match found! Check your DMs.", ephemeral=True)
-                    
-                except discord.Forbidden:
-                    print(f"[Match Notification] Cannot send DM to player {self.player.discord_user_id} (DMs disabled)")
-                    await self.last_interaction.followup.send("❌ Could not send you a DM. Please enable DMs from server members.", ephemeral=True)
-                except discord.HTTPException as e:
-                    print(f"[Match Notification] Discord API error for player {self.player.discord_user_id}: {e}")
-                except Exception as e:
-                    print(f"[Match Notification] Unexpected error for player {self.player.discord_user_id}: {e}")
-                    import traceback
-                    traceback.print_exc()
+            flow.checkpoint("update_match_view_start")
+            # Edit the searching message in DMs to show the match view
+            if not self.last_interaction:
+                raise RuntimeError(f"Cannot display match view: no interaction stored for player {self.player.discord_user_id}")
+            
+            # Offload the embed generation to executor
+            loop = asyncio.get_running_loop()
+            embed = await loop.run_in_executor(None, match_view.get_embed)
+            flow.checkpoint("generate_match_embed_complete")
+            
+            # Edit the existing searching message to show the match view
+            flow.checkpoint("edit_to_match_view")
+            await self.last_interaction.edit_original_response(
+                embed=embed,
+                view=match_view
+            )
+            
+            # Store channel and message ID for future edits using bot token
+            match_view.channel = self.last_interaction.channel
+            
+            # Get the message ID by fetching the original response
+            original_message = await self.last_interaction.original_response()
+            match_view.original_message_id = original_message.id
+            
+            # Register for replay detection
+            await match_view.register_for_replay_detection(self.last_interaction.channel_id)
+            
+            flow.checkpoint("update_match_view_complete")
+            print(f"[Match Notification] Successfully displayed match view for player {self.player.discord_user_id}")
             
             flow.checkpoint("cleanup_start")
             # Clean up

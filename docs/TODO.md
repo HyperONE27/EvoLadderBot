@@ -52,6 +52,8 @@
   - ✅ Comprehensive test suite (6/6 tests passing)
   - ✅ Full documentation and demonstration scripts
 - ✅ Implement service locator pattern for global service instances
+- ✅ Migrate timestamps from TIMESTAMP to TIMESTAMPZ with explicit UTC declaration
+  - ✅ Source-internal architecture continues to assume UTC
 
 ### Legacy Cleanup
 - ✅ De-activate the outdated /activation command
