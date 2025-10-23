@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from src.backend.services.base_config_service import BaseConfigService
+from src.backend.core.base_config_service import BaseConfigService
 
 
 class RegionsService(BaseConfigService):

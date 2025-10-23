@@ -4,7 +4,7 @@ Tests for the NotificationService.
 
 import asyncio
 import pytest
-from src.backend.services.notification_service import NotificationService
+from src.backend.infrastructure.notification_service import NotificationService
 from src.backend.services.matchmaking_service import MatchResult
 
 

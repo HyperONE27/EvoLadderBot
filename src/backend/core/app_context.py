@@ -11,7 +11,7 @@ This provides:
 - Simplified testing (can mock this module)
 
 Usage:
-    from src.backend.services.app_context import (
+    from src.backend.core.app_context import (
         user_info_service,
         command_guard_service,
         leaderboard_service
@@ -26,7 +26,7 @@ from src.backend.services.maps_service import MapsService
 from src.backend.services.match_completion_service import MatchCompletionService
 from src.backend.services.matchmaking_service import matchmaker
 from src.backend.services.mmr_service import MMRService
-from src.backend.services.notification_service import initialize_notification_service
+from src.backend.infrastructure.notification_service import initialize_notification_service
 from src.backend.services.queue_service import initialize_queue_service
 from src.backend.services.ranking_service import RankingService
 from src.backend.services.races_service import RacesService

@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from src.backend.services.command_guard_service import CommandGuardError
-from src.backend.services.app_context import (
+from src.backend.core.app_context import (
     command_guard_service as guard_service,
     user_info_service,
     countries_service,

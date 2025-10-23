@@ -3,7 +3,7 @@ from typing import List, Optional
 import discord
 from discord import app_commands
 
-from src.backend.services.app_context import (
+from src.backend.core.app_context import (
     command_guard_service as guard_service,
     leaderboard_service,
 )

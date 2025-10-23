@@ -22,7 +22,7 @@ by:
 3. Adaptively choosing F-A-S or A-F-S order based on current S+A vs F balance
 
 Intended usage:
-    from src.backend.services.app_context import ranking_service
+    from src.backend.core.app_context import ranking_service
     
     # Refresh rankings (call this when leaderboard cache is refreshed)
     ranking_service.refresh_rankings()

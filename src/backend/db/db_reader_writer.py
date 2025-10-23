@@ -39,7 +39,7 @@ def invalidate_leaderboard_on_mmr_change(func):
                 # Trigger ranking service refresh asynchronously (only if event loop is running)
                 try:
                     loop = asyncio.get_running_loop()
-                    from src.backend.services.app_context import ranking_service
+                    from src.backend.core.app_context import ranking_service
                     if ranking_service:
                         loop.create_task(ranking_service.trigger_refresh())
                         print(f"[MMR Change] Ranking service refresh triggered after {func.__name__}")

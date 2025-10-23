@@ -9,7 +9,7 @@ from discord import app_commands
 
 from src.backend.db.db_reader_writer import get_timestamp
 from src.bot.config import QUEUE_SEARCHING_HEARTBEAT_SECONDS
-from src.backend.services.app_context import (
+from src.backend.core.app_context import (
     command_guard_service as guard_service,
     maps_service,
     mmr_service,
@@ -923,7 +923,7 @@ class MatchFoundView(discord.ui.View):
     def get_embed(self) -> discord.Embed:
         """Get the match found embed"""
         import time
-        from src.backend.services.app_context import leaderboard_service
+        from src.backend.core.app_context import leaderboard_service
         start_time = time.perf_counter()
         
         # Get player 1 info from DataAccessService (sub-millisecond, in-memory)
@@ -1285,7 +1285,7 @@ class MatchFoundView(discord.ui.View):
         p2_race_emote = get_race_emote(p2_race)
 
         # Get rank emotes for both players
-        from src.backend.services.app_context import ranking_service
+        from src.backend.core.app_context import ranking_service
         
         p1_rank = ranking_service.get_rank(final_results['player_1_discord_uid'], p1_race)
         p2_rank = ranking_service.get_rank(final_results['player_2_discord_uid'], p2_race)
@@ -1370,7 +1370,7 @@ class MatchFoundView(discord.ui.View):
         p2_race_emote = get_race_emote(p2_race)
 
         # Get rank emotes for both players
-        from src.backend.services.app_context import ranking_service
+        from src.backend.core.app_context import ranking_service
         
         p1_rank = ranking_service.get_rank(match_data['player_1_discord_uid'], p1_race)
         p2_rank = ranking_service.get_rank(match_data['player_2_discord_uid'], p2_race)
@@ -1951,7 +1951,7 @@ async def on_message(message: discord.Message, bot=None):
                             bot._track_work_start()
                         
                         # Log memory before replay parsing
-                        from src.backend.services.memory_monitor import log_memory
+                        from src.backend.monitoring.memory_monitor import log_memory
                         log_memory("Before replay parse")
                         
                         try:

@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List
 
 from src.backend.services.command_guard_service import CommandGuardError
-from src.backend.services.app_context import command_guard_service
+from src.backend.core.app_context import command_guard_service
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT, RECENT_MESSAGE_PROTECTION_MINUTES, QUEUE_MESSAGE_PROTECTION_DAYS, PRUNE_DELETE_DELAY_SECONDS

@@ -7,7 +7,7 @@ from discord import app_commands
 from src.bot.components.confirm_embed import ConfirmEmbedView
 from src.bot.components.error_embed import ErrorEmbedException, create_simple_error_view
 from src.backend.services.command_guard_service import CommandGuardError
-from src.backend.services.app_context import (
+from src.backend.core.app_context import (
     user_info_service,
     command_guard_service as guard_service
 )

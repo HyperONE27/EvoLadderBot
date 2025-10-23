@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from src.backend.services.write_log import WriteLog
+from src.backend.infrastructure.write_log import WriteLog
 
 
 class TestPersistentStorageConfig:

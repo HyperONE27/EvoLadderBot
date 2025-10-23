@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from src.backend.services.command_guard_service import CommandGuardError
 from src.backend.services.user_info_service import get_user_info, log_user_action
-from src.backend.services.app_context import (
+from src.backend.core.app_context import (
     user_info_service,
     command_guard_service as guard_service
 )

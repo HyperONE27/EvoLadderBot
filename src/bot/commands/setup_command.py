@@ -4,7 +4,7 @@ import re
 from typing import Optional
 from src.backend.services.command_guard_service import CommandGuardError
 from src.backend.services.user_info_service import get_user_info, log_user_action
-from src.backend.services.app_context import (
+from src.backend.core.app_context import (
     countries_service,
     regions_service,
     user_info_service,

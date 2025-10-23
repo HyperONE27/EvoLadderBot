@@ -17,7 +17,7 @@ import polars as pl
 import pytest
 
 from src.backend.services.data_access_service import DataAccessService, WriteJob, WriteJobType
-from src.backend.services.write_log import WriteLog
+from src.backend.infrastructure.write_log import WriteLog
 
 
 class TestWriteDurability:

@@ -18,18 +18,18 @@ from discord.ext import commands
 
 from src.backend.db.connection_pool import close_pool, initialize_pool
 from src.backend.db.test_connection_startup import test_database_connection
-from src.backend.services.app_context import command_guard_service, leaderboard_service, ranking_service
-from src.backend.services.cache_service import static_cache
+from src.backend.core.app_context import command_guard_service, leaderboard_service, ranking_service
+from src.backend.infrastructure.cache_service import static_cache
 from src.backend.services.command_guard_service import DMOnlyError
 from src.backend.services.data_access_service import DataAccessService
-from src.backend.services.memory_monitor import initialize_memory_monitor, log_memory
+from src.backend.monitoring.memory_monitor import initialize_memory_monitor, log_memory
 from src.backend.services.performance_service import FlowTracker, performance_monitor
 from src.backend.services.process_pool_health import set_bot_instance
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import DATABASE_URL, DB_POOL_MAX_CONNECTIONS, DB_POOL_MIN_CONNECTIONS, WORKER_PROCESSES
 
 # Add app_context import
-from src.backend.services import app_context
+from src.backend.core import app_context
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +255,7 @@ class EvoLadderBot(commands.Bot):
         await self.wait_until_ready()
         print("[Memory Monitor] Starting periodic memory monitoring...")
         
-        from src.backend.services.memory_monitor import get_memory_monitor
+        from src.backend.monitoring.memory_monitor import get_memory_monitor
         
         while not self.is_closed():
             try:

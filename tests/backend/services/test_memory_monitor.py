@@ -8,7 +8,7 @@ Verifies that memory tracking works correctly and reports are generated.
 import asyncio
 import time
 
-from src.backend.services.memory_monitor import initialize_memory_monitor, get_memory_monitor, log_memory
+from src.backend.monitoring.memory_monitor import initialize_memory_monitor, get_memory_monitor, log_memory
 
 
 def allocate_memory(size_mb: int) -> list:

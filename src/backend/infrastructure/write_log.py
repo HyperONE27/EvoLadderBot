@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import asdict
 
-from src.backend.services.write_job import WriteJob, WriteJobType
+from src.backend.types.write_job import WriteJob, WriteJobType
 
 
 class WriteLog:

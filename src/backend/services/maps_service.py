@@ -7,7 +7,7 @@ from src.bot import config
 
 from typing import Any, Dict, List, Optional
 
-from src.backend.services.base_config_service import BaseConfigService
+from src.backend.core.base_config_service import BaseConfigService
 
 
 class MapsService(BaseConfigService):

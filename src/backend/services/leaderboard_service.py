@@ -90,7 +90,7 @@ class LeaderboardService:
     def ranking_service(self) -> "RankingService":
         """Get ranking service, lazily importing if not provided during init."""
         if self._ranking_service is None:
-            from src.backend.services.app_context import ranking_service
+            from src.backend.core.app_context import ranking_service
             self._ranking_service = ranking_service
         return self._ranking_service
     

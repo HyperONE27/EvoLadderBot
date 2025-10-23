@@ -16,7 +16,7 @@ import discord
 import asyncio
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
 from src.backend.services.data_access_service import DataAccessService
-from src.backend.services.cache_service import player_cache
+from src.backend.infrastructure.cache_service import player_cache
 
 
 # ========== Utility Functions ==========

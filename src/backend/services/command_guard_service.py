@@ -6,7 +6,7 @@ from typing import Any, Dict
 import discord
 
 from src.backend.services.user_info_service import UserInfoService
-from src.backend.services.cache_service import player_cache
+from src.backend.infrastructure.cache_service import player_cache
 
 
 class CommandGuardError(Exception):

@@ -115,7 +115,7 @@ Comprehensive memory monitoring system for tracking memory usage and detecting l
 ### Initialize at Startup
 
 ```python
-from src.backend.services.memory_monitor import initialize_memory_monitor, log_memory
+from src.backend.monitoring.memory_monitor import initialize_memory_monitor, log_memory
 
 # Initialize with tracemalloc
 initialize_memory_monitor(enable_tracemalloc=True)
@@ -125,7 +125,7 @@ log_memory("Startup - baseline")
 ### Log Memory at Checkpoints
 
 ```python
-from src.backend.services.memory_monitor import log_memory
+from src.backend.monitoring.memory_monitor import log_memory
 
 # Before critical operation
 log_memory("Before heavy operation")
@@ -139,7 +139,7 @@ log_memory("After heavy operation")
 ### Generate Detailed Report
 
 ```python
-from src.backend.services.memory_monitor import get_memory_monitor
+from src.backend.monitoring.memory_monitor import get_memory_monitor
 
 monitor = get_memory_monitor()
 if monitor:

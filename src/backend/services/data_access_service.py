@@ -27,8 +27,8 @@ from typing import Any, Dict, List, Optional
 import polars as pl
 
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
-from src.backend.services.write_job import WriteJob, WriteJobType
-from src.backend.services.write_log import WriteLog
+from src.backend.types.write_job import WriteJob, WriteJobType
+from src.backend.infrastructure.write_log import WriteLog
 from src.bot.config import RAILWAY_PERSISTENT_STORAGE_PATH
 
 

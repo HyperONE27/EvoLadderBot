@@ -597,7 +597,7 @@ class Matchmaker:
 			flow.checkpoint(f"create_match_result_object_{p1.discord_user_id}_vs_{p2.discord_user_id}")
 			
 			# Get cached ranks for performance (avoid dynamic calculation in embed)
-			from src.backend.services.app_context import ranking_service
+			from src.backend.core.app_context import ranking_service
 			p1_rank = ranking_service.get_rank(p1.discord_user_id, p1_race)
 			p2_rank = ranking_service.get_rank(p2.discord_user_id, p2_race)
 			
