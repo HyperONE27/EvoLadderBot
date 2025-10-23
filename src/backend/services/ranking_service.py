@@ -60,12 +60,19 @@ class RankingService:
         
         Args:
             data_service: Optional DataAccessService instance for dependency injection.
+                         If None, will be obtained via get_instance() when needed.
         """
-        self.data_service = data_service or DataAccessService()
+        self.data_service = data_service
         self._rankings: Dict[Tuple[int, str], str] = {}
         self._total_entries: int = 0
         self._refresh_lock = Lock()
         # _background_task removed - DataAccessService handles this now
+    
+    async def _ensure_data_service(self) -> DataAccessService:
+        """Ensure data_service is initialized, lazily obtaining it if needed."""
+        if self.data_service is None:
+            self.data_service = await DataAccessService.get_instance()
+        return self.data_service
 
     def refresh_rankings(self) -> None:
         """
@@ -120,6 +127,7 @@ class RankingService:
         Trigger an asynchronous refresh of the rankings in an executor.
         This is the preferred way to refresh from an async context.
         """
+        await self._ensure_data_service()
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self.refresh_rankings)
 

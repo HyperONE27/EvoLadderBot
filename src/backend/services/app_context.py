@@ -88,15 +88,15 @@ command_guard_service = CommandGuardService(user_service=user_info_service)
 # =============================================================================
 
 # Ranking service for MMR-based percentile ranks
-from src.backend.services.data_access_service import DataAccessService
-data_access_service = DataAccessService()
-ranking_service = RankingService(data_service=data_access_service)
+# NOTE: DataAccessService must be initialized asynchronously via await DataAccessService.get_instance()
+# These services will lazily obtain DataAccessService when needed
+ranking_service = RankingService(data_service=None)
 
 # Leaderboard service with injected dependencies
 leaderboard_service = LeaderboardService(
     country_service=countries_service,
     race_service=races_service,
-    data_service=data_access_service,
+    data_service=None,
     ranking_service=ranking_service
 )
 

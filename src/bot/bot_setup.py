@@ -124,7 +124,7 @@ class EvoLadderBot(commands.Bot):
         """
         try:
             from src.backend.services.data_access_service import DataAccessService
-            data_service = DataAccessService()
+            data_service = await DataAccessService.get_instance()
             await data_service.insert_command_call(discord_uid, player_name, command)
         except Exception as e:
             # Log error but don't fail the command
@@ -366,8 +366,7 @@ async def initialize_backend_services(bot: EvoLadderBot) -> None:
     # 7. Initialize DataAccessService
     print("[Startup] Initializing DataAccessService...")
     try:
-        data_service = DataAccessService()
-        await data_service.initialize_async()
+        data_service = await DataAccessService.get_instance()
         log_memory("After DataAccessService init")
         print("[INFO] DataAccessService initialized successfully")
     except Exception as e:
@@ -407,8 +406,8 @@ async def shutdown_bot_resources(bot: EvoLadderBot) -> None:
     
     # 2. Shutdown DataAccessService
     try:
-        data_access_service = DataAccessService()
-        if data_access_service._initialized:
+        data_access_service = await DataAccessService.get_instance()
+        if DataAccessService._initialized:
             await data_access_service.shutdown()
             print("[Shutdown] DataAccessService shutdown complete.")
     except Exception as e:

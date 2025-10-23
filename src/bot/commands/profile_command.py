@@ -47,7 +47,7 @@ async def profile_command(interaction: discord.Interaction):
     # Get MMR data for all races from DataAccessService (in-memory, instant)
     flow.checkpoint("fetch_mmr_data_start")
     from src.backend.services.data_access_service import DataAccessService
-    data_service = DataAccessService()
+    data_service = await DataAccessService.get_instance()
     mmr_data = data_service.get_all_player_mmrs(interaction.user.id)
     flow.checkpoint("fetch_mmr_data_complete")
     

@@ -346,7 +346,7 @@ class ReplayService:
             )
             
             from src.backend.services.data_access_service import DataAccessService
-            data_service = DataAccessService()
+            data_service = await DataAccessService.get_instance()
 
             # Prepare replay data for database insertion
             replay_data = {

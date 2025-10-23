@@ -75,10 +75,16 @@ class LeaderboardService:
         # Services (stateless)
         self.country_service = country_service or CountriesService()
         self.race_service = race_service or RacesService()
-        self.data_service = data_service or DataAccessService()
+        self.data_service = data_service
         
         # Ranking service (will be set after initialization if not provided)
         self._ranking_service = ranking_service
+    
+    async def _ensure_data_service(self) -> DataAccessService:
+        """Ensure data_service is initialized, lazily obtaining it if needed."""
+        if self.data_service is None:
+            self.data_service = await DataAccessService.get_instance()
+        return self.data_service
     
     @property
     def ranking_service(self) -> "RankingService":
@@ -148,6 +154,7 @@ class LeaderboardService:
         Returns:
             Dictionary containing players, pagination info, and totals
         """
+        await self._ensure_data_service()
         perf_start = time.time()
         
         # Get cached DataFrame (already has ranks computed)

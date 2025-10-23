@@ -89,10 +89,17 @@ class UserInfoService:
     """
     
     def __init__(self) -> None:
-        self.data_service = DataAccessService()
+        self.data_service = None
         # Legacy - kept for backwards compatibility
         self.reader = DatabaseReader()
         self.writer = DatabaseWriter()  # Still needed for operations not yet in DataAccessService
+    
+    async def _ensure_data_service(self) -> DataAccessService:
+        """Ensure data_service is initialized, lazily obtaining it if needed."""
+        if self.data_service is None:
+            from src.backend.services.data_access_service import DataAccessService
+            self.data_service = await DataAccessService.get_instance()
+        return self.data_service
     
     def _get_player_display_name(self, player: Dict[str, Any]) -> str:
         """

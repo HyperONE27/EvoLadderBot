@@ -64,6 +64,34 @@ class DataAccessService:
     
     _instance: Optional['DataAccessService'] = None
     _initialized: bool = False
+    _lock: asyncio.Lock = None
+    
+    @classmethod
+    async def get_instance(cls) -> 'DataAccessService':
+        """
+        Get the singleton instance using async-safe double-checked locking.
+        
+        This is the ONLY way to obtain a DataAccessService instance.
+        Direct instantiation via DataAccessService() is deprecated.
+        
+        Returns:
+            The singleton DataAccessService instance, fully initialized
+        """
+        if cls._lock is None:
+            cls._lock = asyncio.Lock()
+        
+        if cls._instance is None:
+            async with cls._lock:
+                if cls._instance is None:
+                    instance = cls.__new__(cls)
+                    await instance._initialize()
+                    cls._instance = instance
+        
+        # Wait for initialization to complete if another coroutine is initializing
+        while not cls._initialized:
+            await asyncio.sleep(0.001)
+        
+        return cls._instance
     
     def __new__(cls):
         """Singleton pattern - only one instance allowed."""
@@ -72,15 +100,24 @@ class DataAccessService:
         return cls._instance
     
     def __init__(self):
-        """Initialize the service (only runs once due to singleton pattern)."""
-        # Guard: Don't re-initialize if __init__ was already called
-        if hasattr(self, '_init_done') and self._init_done:
-            return
+        """
+        Deprecated: Use await DataAccessService.get_instance() instead.
         
+        This method is kept for backward compatibility but should not be used.
+        """
+        pass
+    
+    async def _initialize(self) -> None:
+        """
+        Private async initialization method called by get_instance().
+        
+        Initializes all instance attributes, loads data, and starts background worker.
+        This ensures initialization happens only once, atomically.
+        """
         if DataAccessService._initialized:
             return
         
-        print("[DataAccessService] Initializing...")
+        print("[DataAccessService] Initializing singleton instance...")
         
         # Database access for initial load and write-back
         self._db_reader = DatabaseReader()
@@ -98,46 +135,42 @@ class DataAccessService:
         self._writer_task: Optional[asyncio.Task] = None
         self._write_queue: asyncio.Queue = asyncio.Queue()
         self._init_lock = asyncio.Lock()
-        self._main_loop: Optional[asyncio.AbstractEventLoop] = None  # Store a reference to the main loop
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Performance stats
         self._write_queue_size_peak = 0
         self._total_writes_queued = 0
         self._total_writes_completed = 0
         
-        self._init_done = True  # Mark that __init__ has completed
-        print("[DataAccessService] Singleton initialized (DataFrames not loaded yet)")
+        print("[DataAccessService] Starting async initialization...")
+        self._main_loop = asyncio.get_running_loop()
+        start_time = time.time()
+        
+        # Load all hot tables into memory
+        await self._load_all_tables()
+        
+        # Start background write worker
+        self._writer_task = self._main_loop.create_task(self._db_writer_worker())
+        
+        elapsed = (time.time() - start_time) * 1000
+        print(f"[DataAccessService] Initialization complete in {elapsed:.2f}ms")
+        print(f"[DataAccessService]    - Players: {len(self._players_df) if self._players_df is not None else 0} rows")
+        print(f"[DataAccessService]    - MMRs: {len(self._mmrs_df) if self._mmrs_df is not None else 0} rows")
+        print(f"[DataAccessService]    - Preferences: {len(self._preferences_df) if self._preferences_df is not None else 0} rows")
+        print(f"[DataAccessService]    - Matches: {len(self._matches_df) if self._matches_df is not None else 0} rows")
+        print(f"[DataAccessService]    - Replays: {len(self._replays_df) if self._replays_df is not None else 0} rows")
+        
+        DataAccessService._initialized = True
     
     async def initialize_async(self) -> None:
         """
-        Async initialization - loads all data and starts background worker.
+        Deprecated: Initialization now happens automatically via get_instance().
         
-        This MUST be called during bot startup after the event loop is running.
+        This method is kept for backward compatibility.
         """
-        async with self._init_lock:
-            if DataAccessService._initialized:
-                print("[DataAccessService] Already initialized, skipping")
-                return
-            
-            print("[DataAccessService] Starting async initialization...")
-            self._main_loop = asyncio.get_running_loop() # Store the loop on which this was initialized
-            start_time = time.time()
-            
-            # Load all hot tables into memory
-            await self._load_all_tables()
-            
-            # Start background write worker
-            self._writer_task = self._main_loop.create_task(self._db_writer_worker())
-            
-            elapsed = (time.time() - start_time) * 1000
-            print(f"[DataAccessService] Async initialization complete in {elapsed:.2f}ms")
-            print(f"[DataAccessService]    - Players: {len(self._players_df) if self._players_df is not None else 0} rows")
-            print(f"[DataAccessService]    - MMRs: {len(self._mmrs_df) if self._mmrs_df is not None else 0} rows")
-            print(f"[DataAccessService]    - Preferences: {len(self._preferences_df) if self._preferences_df is not None else 0} rows")
-            print(f"[DataAccessService]    - Matches: {len(self._matches_df) if self._matches_df is not None else 0} rows")
-            print(f"[DataAccessService]    - Replays: {len(self._replays_df) if self._replays_df is not None else 0} rows")
-            
-            self._initialized = True
+        print("[DataAccessService] WARNING: initialize_async() is deprecated. Use await DataAccessService.get_instance() instead.")
+        if not DataAccessService._initialized:
+            await self._initialize()
     
     async def _load_all_tables(self) -> None:
         """Load all hot tables from the database into Polars DataFrames."""
@@ -1779,6 +1812,7 @@ class DataAccessService:
             return False
 
 
-# Global singleton instance
-data_access_service = DataAccessService()
+# Global singleton instance - deprecated, use await DataAccessService.get_instance() instead
+# This is kept for backward compatibility only
+data_access_service = None
 
