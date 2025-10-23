@@ -128,10 +128,16 @@ class MatchCompletionService:
                 print(f"🔍 CHECK: Manual completion check for match {match_id}")
                 # Get match data from DataAccessService (in-memory, instant)
                 from src.backend.services.data_access_service import DataAccessService
-                data_service = DataAccessService()
+                data_service = await DataAccessService.get_instance()
                 match_data = data_service.get_match(match_id)
                 if not match_data:
                     raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
+                
+                # Check 1: Has this match already been processed?
+                current_status = match_data.get('status', 'IN_PROGRESS')
+                if current_status != 'IN_PROGRESS':
+                    print(f"🔍 CHECK: Match {match_id} status is {current_status}, already handled")
+                    return True
                 
                 # Check if both players have reported
                 p1_report = match_data.get('player_1_report')
@@ -143,7 +149,11 @@ class MatchCompletionService:
                 # Abort if any report is -3 (initiator) or both are -1/-3 with match_result=-1
                 if (p1_report == -3 or p2_report == -3) or (match_result == -1 and (p1_report in (-3, -1) and p2_report in (-3, -1))):
                     print(f"🚫 Match {match_id} was aborted")
-                    self.processed_matches.add(match_id)  # Mark as processed
+                    # Set status to ABORTED to prevent further processing
+                    data_service.update_match_status(match_id, 'ABORTED')
+                    self.processed_matches.add(match_id)
+                    
+                    # Handle abort within the lock
                     await self._handle_match_abort(match_id, match_data)
                     
                     # Notify any waiting tasks
@@ -157,12 +167,23 @@ class MatchCompletionService:
                     if match_result == -2:
                         # Conflicting reports - manual resolution needed
                         print(f"⚠️ Conflicting reports for match {match_id}, manual resolution required")
+                        # Set status to prevent further processing
+                        data_service.update_match_status(match_id, 'CONFLICT')
+                        self.processed_matches.add(match_id)
+                        
                         await self._handle_match_conflict(match_id)
                     elif match_result is not None:
-                        # Match is complete and processed
+                        # Match is complete and ready to process
                         print(f"✅ CHECK: Match {match_id} completed successfully")
-                        self.processed_matches.add(match_id)  # Mark as processed
+                        # Set status to PROCESSING_COMPLETION to prevent race conditions
+                        data_service.update_match_status(match_id, 'PROCESSING_COMPLETION')
+                        self.processed_matches.add(match_id)
+                        
+                        # Handle completion within the lock
                         await self._handle_match_completion(match_id, match_data)
+                        
+                        # Mark as fully complete
+                        data_service.update_match_status(match_id, 'COMPLETE')
                         
                         # Invalidate leaderboard cache since MMR values changed
                         LeaderboardService.invalidate_cache()
@@ -196,10 +217,16 @@ class MatchCompletionService:
                 async with lock:
                     # Get match data from DataAccessService (in-memory, instant)
                     from src.backend.services.data_access_service import DataAccessService
-                    data_service = DataAccessService()
+                    data_service = await DataAccessService.get_instance()
                     match_data = data_service.get_match(match_id)
                     if not match_data:
                         raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
+                    
+                    # Check if already processed
+                    current_status = match_data.get('status', 'IN_PROGRESS')
+                    if current_status != 'IN_PROGRESS':
+                        print(f"[Monitor] Match {match_id} status is {current_status}, stopping monitor")
+                        break
                     
                     # Check if both players have reported
                     p1_report = match_data.get('player_1_report')
@@ -208,14 +235,21 @@ class MatchCompletionService:
                     
                     # Check for aborts (-3 initiator, -1 other)
                     if (p1_report == -3 or p2_report == -3) or (match_result == -1 and (p1_report in (-3, -1) and p2_report in (-3, -1))):
+                        # Set status and handle within lock
+                        data_service.update_match_status(match_id, 'ABORTED')
                         await self._handle_match_abort(match_id, match_data)
                         break
                     
                     if p1_report is not None and p2_report is not None:
                         # If both reports are in, process the result
                         if match_data.get('player_1_report') == match_data.get('player_2_report'):
+                            # Set status and handle within lock
+                            data_service.update_match_status(match_id, 'PROCESSING_COMPLETION')
                             await self._handle_match_completion(match_id, match_data)
+                            data_service.update_match_status(match_id, 'COMPLETE')
                         else:
+                            # Set status and handle within lock
+                            data_service.update_match_status(match_id, 'CONFLICT')
                             await self._handle_match_conflict(match_id)
                         
                         # Match is processed, break the loop

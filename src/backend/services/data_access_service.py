@@ -22,37 +22,12 @@ Performance Benefits:
 import asyncio
 import time
 from typing import Any, Dict, List, Optional
-from dataclasses import dataclass
-from enum import Enum
 
 import polars as pl
 
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
-
-
-class WriteJobType(Enum):
-    """Types of database write operations."""
-    UPDATE_PLAYER = "update_player"
-    CREATE_PLAYER = "create_player"
-    UPDATE_MMR = "update_mmr"
-    CREATE_MMR = "create_mmr"
-    UPDATE_PREFERENCES = "update_preferences"
-    CREATE_MATCH = "create_match"
-    UPDATE_MATCH = "update_match"
-    UPDATE_MATCH_REPORT = "update_match_report"
-    UPDATE_MATCH_MMR_CHANGE = "update_match_mmr_change"
-    INSERT_REPLAY = "insert_replay"
-    LOG_PLAYER_ACTION = "log_player_action"
-    INSERT_COMMAND_CALL = "insert_command_call"
-    ABORT_MATCH = "abort_match"
-
-
-@dataclass
-class WriteJob:
-    """Represents a queued database write operation."""
-    job_type: WriteJobType
-    data: Dict[str, Any]
-    timestamp: float
+from src.backend.services.write_job import WriteJob, WriteJobType
+from src.backend.services.write_log import WriteLog
 
 
 class DataAccessService:
@@ -133,7 +108,7 @@ class DataAccessService:
         # System state
         self._shutdown_event = asyncio.Event()
         self._writer_task: Optional[asyncio.Task] = None
-        self._write_queue: asyncio.Queue = asyncio.Queue()
+        self._write_log: WriteLog = WriteLog()
         self._init_lock = asyncio.Lock()
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -148,6 +123,9 @@ class DataAccessService:
         
         # Load all hot tables into memory
         await self._load_all_tables()
+        
+        # Process any pending writes from previous run (startup recovery)
+        await self._recover_pending_writes()
         
         # Start background write worker
         self._writer_task = self._main_loop.create_task(self._db_writer_worker())
@@ -249,6 +227,11 @@ class DataAccessService:
         )
         if matches_data:
             self._matches_df = pl.DataFrame(matches_data, infer_schema_length=None)
+            # Add status column if it doesn't exist (for backward compatibility)
+            if "status" not in self._matches_df.columns:
+                self._matches_df = self._matches_df.with_columns(
+                    pl.lit("IN_PROGRESS").alias("status")
+                )
         else:
             # Create empty DataFrame with complete schema matching matches_1v1 table
             self._matches_df = pl.DataFrame({
@@ -270,6 +253,7 @@ class DataAccessService:
                 "player_2_replay_path": pl.Series([], dtype=pl.Utf8),
                 "player_1_replay_time": pl.Series([], dtype=pl.Utf8),
                 "player_2_replay_time": pl.Series([], dtype=pl.Utf8),
+                "status": pl.Series([], dtype=pl.Utf8),
             })
         print(f"[DataAccessService]   Matches loaded: {len(self._matches_df)} rows")
         
@@ -292,41 +276,87 @@ class DataAccessService:
             })
         print(f"[DataAccessService]   Replays loaded: {len(self._replays_df)} rows")
     
+    async def _recover_pending_writes(self) -> None:
+        """
+        Process any pending writes from the persistent write log.
+        
+        This is called during initialization to ensure writes from a previous
+        run that didn't complete are processed, preventing data loss.
+        """
+        print("[DataAccessService] Checking for pending writes from previous run...")
+        
+        pending_jobs = self._write_log.get_pending_jobs(limit=1000)
+        
+        if not pending_jobs:
+            print("[DataAccessService] No pending writes found")
+            return
+        
+        print(f"[DataAccessService] Found {len(pending_jobs)} pending writes, processing...")
+        
+        for job_id, job in pending_jobs:
+            try:
+                await self._process_write_job(job)
+                self._write_log.mark_completed(job_id)
+                self._total_writes_completed += 1
+            except Exception as e:
+                print(f"[DataAccessService] ERROR recovering write job {job_id}: {e}")
+                retry_count = self._write_log.increment_retry_count(job_id)
+                
+                # After 3 retries, mark as failed
+                if retry_count >= 3:
+                    self._write_log.mark_failed(job_id, str(e))
+                    print(f"[DataAccessService] Write job {job_id} marked as FAILED after {retry_count} retries")
+        
+        print(f"[DataAccessService] Startup recovery complete")
+    
     async def _db_writer_worker(self) -> None:
         """
-        Background worker that processes the write queue and persists to database.
+        Background worker that processes the write log and persists to database.
         
-        This runs continuously until shutdown, ensuring all in-memory changes
-        are eventually written to the persistent database.
+        This runs continuously until shutdown, polling the persistent write log
+        for pending jobs and processing them. This ensures durability across restarts.
         """
         print("[DataAccessService] Database write worker started")
         
         while not self._shutdown_event.is_set():
             try:
-                # Wait for a job with a timeout so we can check shutdown event
-                job = await asyncio.wait_for(self._write_queue.get(), timeout=1.0)
+                # Poll for pending jobs from the persistent write log
+                pending_jobs = self._write_log.get_pending_jobs(limit=50)
+                
+                if not pending_jobs:
+                    # No jobs available, wait before polling again
+                    await asyncio.sleep(0.5)
+                    continue
                 
                 # Track queue size
-                current_size = self._write_queue.qsize()
+                current_size = len(pending_jobs)
                 if current_size > self._write_queue_size_peak:
                     self._write_queue_size_peak = current_size
                 
-                # Process the job
-                await self._process_write_job(job)
-                
-                self._total_writes_completed += 1
+                # Process each job
+                for job_id, job in pending_jobs:
+                    try:
+                        await self._process_write_job(job)
+                        self._write_log.mark_completed(job_id)
+                        self._total_writes_completed += 1
+                    except Exception as e:
+                        print(f"[DataAccessService] ERROR processing write job {job_id}: {e}")
+                        retry_count = self._write_log.increment_retry_count(job_id)
+                        
+                        # After 3 retries, mark as failed
+                        if retry_count >= 3:
+                            self._write_log.mark_failed(job_id, str(e))
+                            print(f"[DataAccessService] Write job {job_id} marked as FAILED after {retry_count} retries")
                 
                 # Log if queue is backing up
                 if current_size > 10:
                     print(f"[DataAccessService] WARNING: Write queue backed up: {current_size} jobs pending")
                 
-            except asyncio.TimeoutError:
-                # No job available, check shutdown and loop
-                continue
             except Exception as e:
                 print(f"[DataAccessService] ERROR in write worker: {e}")
                 import traceback
                 traceback.print_exc()
+                await asyncio.sleep(1.0)
         
         print("[DataAccessService] Database write worker stopped")
     
@@ -554,7 +584,7 @@ class DataAccessService:
             if job.retry_count <= max_retries:
                 print(f"[DataAccessService] Retrying write job {job.job_type} (attempt {job.retry_count}/{max_retries})")
                 # Re-queue the job for retry
-                await self._write_queue.put(job)
+                self._write_log.enqueue(job)
             else:
                 # Move to dead-letter queue after max retries
                 await self._log_failed_write_job(job, str(e))
@@ -875,13 +905,8 @@ class DataAccessService:
                 timestamp=time.time()
             )
             
-            # Note: We can't await here since this is called from sync context
-            # The write will be queued and processed by the background worker
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(self._write_queue.put(job))
-            else:
-                loop.run_until_complete(self._write_queue.put(job))
+            # Enqueue to persistent write log (synchronous, durable)
+            self._write_log.enqueue(job)
             
             self._total_writes_queued += 1
             return True
@@ -935,7 +960,7 @@ class DataAccessService:
             timestamp=time.time()
         )
         
-        await self._write_queue.put(job)
+        self._write_log.enqueue(job)
         self._total_writes_queued += 1
         
         return True
@@ -1022,7 +1047,7 @@ class DataAccessService:
                 timestamp=time.time()
             )
             
-            await self._write_queue.put(job)
+            self._write_log.enqueue(job)
             self._total_writes_queued += 1
         
         return True
@@ -1089,7 +1114,7 @@ class DataAccessService:
             timestamp=time.time()
         )
         
-        await self._write_queue.put(job)
+        self._write_log.enqueue(job)
         self._total_writes_queued += 1
         
         print(f"[DataAccessService] Created player {discord_uid} ({discord_username})")
@@ -1171,7 +1196,7 @@ class DataAccessService:
             timestamp=time.time()
         )
         
-        await self._write_queue.put(job)
+        self._write_log.enqueue(job)
         self._total_writes_queued += 1
         
         return True
@@ -1257,7 +1282,7 @@ class DataAccessService:
             timestamp=time.time()
         )
         
-        await self._write_queue.put(job)
+        self._write_log.enqueue(job)
         self._total_writes_queued += 1
         
         return True
@@ -1373,7 +1398,7 @@ class DataAccessService:
             timestamp=time.time()
         )
         
-        await self._write_queue.put(job)
+        self._write_log.enqueue(job)
         self._total_writes_queued += 1
         
         return True
@@ -1472,6 +1497,10 @@ class DataAccessService:
         if match_id:
             match = await loop.run_in_executor(None, self._db_reader.get_match_1v1, match_id)
             if match:
+                # Add status field if not present
+                if 'status' not in match:
+                    match['status'] = 'IN_PROGRESS'
+                
                 # Create new row with explicit schema alignment
                 new_row = pl.DataFrame([match], infer_schema_length=None)
                 # Use diagonal concat to handle any missing columns gracefully
@@ -1551,7 +1580,7 @@ class DataAccessService:
             timestamp=time.time()
         )
         
-        await self._write_queue.put(job)
+        self._write_log.enqueue(job)
         self._total_writes_queued += 1
         
         return True
@@ -1566,7 +1595,7 @@ class DataAccessService:
             timestamp=time.time()
         )
         
-        await self._write_queue.put(job)
+        self._write_log.enqueue(job)
         self._total_writes_queued += 1
         
         return True
@@ -1608,7 +1637,7 @@ class DataAccessService:
             timestamp=time.time()
         )
         
-        await self._write_queue.put(job)
+        self._write_log.enqueue(job)
         self._total_writes_queued += 1
     
     async def insert_command_call(
@@ -1637,7 +1666,7 @@ class DataAccessService:
             timestamp=time.time()
         )
         
-        await self._write_queue.put(job)
+        self._write_log.enqueue(job)
         self._total_writes_queued += 1
     
     # ========== Match Operations ==========
@@ -1662,6 +1691,13 @@ class DataAccessService:
                 print(f"[DataAccessService] Match {match_id} not found in memory")
                 return False
             
+            # Check status first to prevent race conditions
+            current_status = match.get('status', 'IN_PROGRESS')
+            if current_status != 'IN_PROGRESS':
+                print(f"[DataAccessService] Match {match_id} has status {current_status}, cannot abort")
+                # Return True if already aborted, False for other states
+                return current_status == 'ABORTED'
+            
             p1_discord_uid = match.get('player_1_discord_uid')
             p2_discord_uid = match.get('player_2_discord_uid')
             
@@ -1670,7 +1706,7 @@ class DataAccessService:
                 print(f"[DataAccessService] Player {player_discord_uid} not in match {match_id}")
                 return False
             
-            # Check if match is already aborted
+            # Check if match is already aborted (legacy check)
             match_result = match.get('match_result')
             if match_result == -1:
                 print(f"[DataAccessService] Match {match_id} already aborted, treating as success for player {player_discord_uid}")
@@ -1719,7 +1755,7 @@ class DataAccessService:
                 timestamp=time.time()
             )
             
-            await self._write_queue.put(job)
+            self._write_log.enqueue(job)
             self._total_writes_queued += 1
             return True
             
@@ -1768,7 +1804,7 @@ class DataAccessService:
                 timestamp=time.time()
             )
             
-            await self._write_queue.put(job)
+            self._write_log.enqueue(job)
             self._total_writes_queued += 1
             return True
             
@@ -1778,6 +1814,47 @@ class DataAccessService:
             traceback.print_exc()
             return False
 
+    def update_match_status(self, match_id: int, new_status: str) -> bool:
+        """
+        Update the status of a match in-memory (synchronous, atomic).
+        
+        This method is used to prevent race conditions during match state transitions.
+        Valid statuses: 'IN_PROGRESS', 'PROCESSING_COMPLETION', 'COMPLETE', 'ABORTED'
+        
+        Args:
+            match_id: Match ID
+            new_status: New status value
+            
+        Returns:
+            True if updated successfully
+        """
+        if self._matches_df is None:
+            print("[DataAccessService] WARNING: Matches DataFrame not initialized")
+            return False
+        
+        try:
+            # Check if match exists
+            if len(self._matches_df.filter(pl.col("id") == match_id)) == 0:
+                print(f"[DataAccessService] WARNING: Match {match_id} not found in memory")
+                return False
+            
+            # Update status in-memory immediately (atomic operation)
+            self._matches_df = self._matches_df.with_columns(
+                pl.when(pl.col("id") == match_id)
+                .then(pl.lit(new_status))
+                .otherwise(pl.col("status"))
+                .alias("status")
+            )
+            
+            print(f"[DataAccessService] Updated match {match_id} status to {new_status} in memory")
+            return True
+            
+        except Exception as e:
+            print(f"[DataAccessService] Error updating match {match_id} status: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
     async def update_match_mmr_change(self, match_id: int, mmr_change: int) -> bool:
         """
         Update the MMR change for a match.
@@ -1801,7 +1878,7 @@ class DataAccessService:
                 timestamp=time.time()
             )
             
-            await self._write_queue.put(job)
+            self._write_log.enqueue(job)
             self._total_writes_queued += 1
             return True
             
