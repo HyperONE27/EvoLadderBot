@@ -121,3 +121,31 @@ QUEUE_MESSAGE_PROTECTION_DAYS = 7
 
 # Prune command delay (seconds) - delay between message deletions to avoid rate limits
 PRUNE_DELETE_DELAY_SECONDS = 1
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+
+# Base logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+LOG_LEVEL = "INFO"
+
+# Category-specific logging levels
+# Set to DEBUG for verbose logging, WARNING to reduce noise, or CRITICAL to disable
+LOG_GENERAL = "INFO"
+LOG_PERFORMANCE = "WARNING"  # Only log slow operations by default
+LOG_MEMORY = "INFO"
+LOG_DATABASE = "WARNING"    # Only log database errors by default
+LOG_DISCORD = "WARNING"      # Reduce Discord library noise
+LOG_QUEUE = "INFO"
+LOG_MATCHMAKING = "INFO"
+LOG_NOTIFICATIONS = "INFO"
+LOG_PROCESS_POOL = "INFO"
+LOG_REPLAY = "WARNING"       # Only log replay processing errors by default
+
+# Performance logging thresholds (milliseconds)
+PERF_SLOW_OPERATION_THRESHOLD = 100      # Log operations slower than 100ms
+PERF_CRITICAL_OPERATION_THRESHOLD = 1000  # Critical threshold for very slow operations
+
+# Memory logging thresholds (MB)
+MEMORY_LEAK_THRESHOLD = 50.0      # Alert when memory grows by 50MB
+MEMORY_HIGH_USAGE_THRESHOLD = 500.0  # Alert when total memory exceeds 500MB

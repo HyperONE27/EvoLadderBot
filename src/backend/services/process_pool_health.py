@@ -6,10 +6,9 @@ from anywhere in the application to check process pool health on-demand.
 """
 
 import asyncio
-import logging
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+from src.bot.logging_config import log_process_pool, LogLevel
 
 # Global reference to the bot instance for health checking
 _bot_instance: Optional[object] = None
@@ -32,11 +31,11 @@ async def ensure_process_pool_healthy() -> bool:
         True if pool is healthy or was successfully restarted, False otherwise
     """
     if _bot_instance is None:
-        logger.warning("[Process Pool] No bot instance available for health check")
+        log_process_pool(LogLevel.WARNING, "No bot instance available for health check")
         return False
     
     if not hasattr(_bot_instance, '_ensure_process_pool_healthy'):
-        logger.warning("[Process Pool] Bot instance does not have health check method")
+        log_process_pool(LogLevel.WARNING, "Bot instance does not have health check method")
         return False
     
     return await _bot_instance._ensure_process_pool_healthy()

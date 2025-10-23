@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import sys
 
 import discord
@@ -17,20 +16,10 @@ from src.bot.commands.setcountry_command import register_setcountry_command
 from src.bot.commands.setup_command import register_setup_command
 from src.bot.commands.termsofservice_command import register_termsofservice_command
 from src.bot.config import EVOLADDERBOT_TOKEN
+from src.bot.logging_config import log_general, LogLevel
 
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-# Set specific log levels
-logging.getLogger('discord').setLevel(logging.WARNING)  # Reduce Discord library noise
-logging.getLogger('src.backend.services.performance_service').setLevel(logging.INFO)  # Show performance logs
-
-logger = logging.getLogger(__name__)
+# Initialize logging configuration (this sets up all category loggers)
+from src.bot.logging_config import _logging_config
 
 intents = discord.Intents.default()
 intents.messages = True
@@ -41,19 +30,19 @@ bot = EvoLadderBot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"Bot online as {bot.user}")
+    log_general(LogLevel.INFO, f"Bot online as {bot.user}")
     try:
         register_commands(bot)
         synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} command(s)")
+        log_general(LogLevel.INFO, f"Synced {len(synced)} command(s)")
         
         # Start the matchmaker
         asyncio.create_task(matchmaker.run())
-        print("Matchmaker started")
+        log_general(LogLevel.INFO, "Matchmaker started")
         
         # Background tasks are started in bot_setup.py setup_hook
     except Exception as e:
-        print("Sync failed:", e)
+        log_general(LogLevel.ERROR, f"Sync failed: {e}")
 
 @bot.event
 async def on_message(message):
@@ -80,7 +69,7 @@ def setup_signal_handlers(bot: discord.Client):
         loop = asyncio.new_event_loop()
 
     def signal_handler(signum, frame):
-        print(f"Received signal {signum}. Shutting down gracefully.")
+        log_general(LogLevel.INFO, f"Received signal {signum}. Shutting down gracefully.")
         if loop.is_running():
             loop.create_task(bot.close())
         else:
@@ -98,10 +87,10 @@ def main():
         # The new setup_hook will handle async initialization.
         bot.run(EVOLADDERBOT_TOKEN, log_handler=None, log_level=logging.INFO)
     except discord.errors.LoginFailure:
-        logger.fatal("Invalid Discord token. Please check your config.py file.")
+        log_general(LogLevel.CRITICAL, "Invalid Discord token. Please check your config.py file.")
         sys.exit(1)
     except Exception as e:
-        logger.fatal(f"An unexpected error occurred: {e}")
+        log_general(LogLevel.CRITICAL, f"An unexpected error occurred: {e}")
     finally:
         # On exit, ensure resources are cleaned up
         # We need a new loop to run the async shutdown function
@@ -116,7 +105,7 @@ def main():
         except RuntimeError: # No running loop
             asyncio.run(shutdown_bot_resources(bot))
         except Exception as e:
-            print(f"[Shutdown] An error occurred during final shutdown: {e}")
+            log_general(LogLevel.ERROR, f"An error occurred during final shutdown: {e}")
 
 
 if __name__ == "__main__":
