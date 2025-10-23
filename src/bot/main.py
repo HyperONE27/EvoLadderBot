@@ -85,14 +85,12 @@ def main():
     try:
         # The bot's run method is blocking, so we run it here.
         # The new setup_hook will handle async initialization.
-        bot.run(EVOLADDERBOT_TOKEN, log_handler=None)
+        bot.run(EVOLADDERBOT_TOKEN, log_handler=None, log_level=logging.INFO)
     except discord.errors.LoginFailure:
         log_general(LogLevel.CRITICAL, "Invalid Discord token. Please check your config.py file.")
         sys.exit(1)
     except Exception as e:
-        import traceback
         log_general(LogLevel.CRITICAL, f"An unexpected error occurred: {e}")
-        traceback.print_exc()
     finally:
         # On exit, ensure resources are cleaned up
         # We need a new loop to run the async shutdown function

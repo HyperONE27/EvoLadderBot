@@ -5,11 +5,13 @@ Wraps database operations to automatically measure and log query times.
 """
 
 import time
+import logging
 from typing import Any, Dict, List, Optional
 from contextlib import contextmanager
 
 from src.backend.db.adapters.database_adapter import DatabaseAdapter
-from src.bot.logging_config import log_database, LogLevel
+
+logger = logging.getLogger(__name__)
 
 
 class TimedDatabaseAdapter:
@@ -62,22 +64,16 @@ class TimedDatabaseAdapter:
         
         # Log based on duration
         if duration_ms > self.VERY_SLOW_QUERY_THRESHOLD:
-            log_database(
-                LogLevel.ERROR,
-                f"🔴 VERY SLOW: {operation_name} {duration_ms:.1f}ms - {query_snippet}",
-                operation=operation_name
+            logger.error(
+                f"🔴 VERY SLOW: {operation_name} {duration_ms:.1f}ms - {query_snippet}"
             )
         elif duration_ms > self.SLOW_QUERY_THRESHOLD:
-            log_database(
-                LogLevel.WARNING,
-                f"🟡 SLOW: {operation_name} {duration_ms:.1f}ms - {query_snippet}",
-                operation=operation_name
+            logger.warning(
+                f"🟡 SLOW: {operation_name} {duration_ms:.1f}ms - {query_snippet}"
             )
         elif duration_ms > 10:
-            log_database(
-                LogLevel.DEBUG,
-                f"{operation_name}: {duration_ms:.2f}ms",
-                operation=operation_name
+            logger.debug(
+                f"[DB] {operation_name}: {duration_ms:.2f}ms"
             )
     
     def get_stats(self) -> Dict[str, Any]:

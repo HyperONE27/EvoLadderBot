@@ -118,7 +118,7 @@ class StorageService:
         try:
             print(f"[Storage] Downloading replay from: {file_path}")
             response = self.supabase.storage.from_(self.bucket_name).download(file_path)
-            print(f"[Storage] OK Download successful: {len(response)} bytes")
+            print(f"[Storage] ✓ Download successful: {len(response)} bytes")
             return response
         except Exception as e:
             print(f"[Storage] ERROR downloading replay: {e}")
@@ -162,7 +162,7 @@ class StorageService:
         try:
             print(f"[Storage] Deleting replay: {file_path}")
             self.supabase.storage.from_(self.bucket_name).remove([file_path])
-            print(f"[Storage] OK Deletion successful")
+            print(f"[Storage] ✓ Deletion successful")
             return True
         except Exception as e:
             print(f"[Storage] ERROR deleting replay: {e}")
@@ -217,7 +217,7 @@ class StorageService:
             )
             
             public_url = self.supabase.storage.from_(self.bucket_name).get_public_url(file_path)
-            print(f"[Storage] OK Upload successful: {public_url}")
+            print(f"[Storage] ✓ Upload successful: {public_url}")
             return public_url
             
         except Exception as e:

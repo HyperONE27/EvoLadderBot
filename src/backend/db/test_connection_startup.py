@@ -11,82 +11,110 @@ from src.backend.db.db_connection import (
     get_database_connection_string,
     is_postgresql
 )
-import sys
 
 
-def test_database_connection(db_type: str, db_url: str, sqlite_path: str):
-    print("\n" + "="*70)
-    print("DATABASE CONNECTION TEST")
-    print("="*70)
-
+def test_database_connection() -> Tuple[bool, str]:
+    """
+    Test database connection and verify tables exist.
+    
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    db_type = get_database_type()
+    conn_str = get_database_connection_string()
+    
+    print(f"\n{'='*70}")
+    print(f"DATABASE CONNECTION TEST")
+    print(f"{'='*70}")
     print(f"Database Type: {db_type}")
-
+    
     if db_type == "postgresql":
-        ok, msg = _test_postgresql_connection(db_url)
-    elif db_type == "sqlite":
-        ok, msg = _test_sqlite_connection(sqlite_path)
+        return _test_postgresql_connection(conn_str)
     else:
-        ok, msg = False, "Invalid DATABASE_TYPE"
-
-    if not ok:
-        print(f"\n[FATAL] Database connection test failed: {msg}")
-        sys.exit(1)
-    else:
-        print(f"\n[INFO] Database connection test passed: {msg}")
-
-    print(f"{'='*70}\n")
+        return _test_sqlite_connection(conn_str)
 
 
-def print_check(name: str, ok: bool, msg: str):
-    status = "OK" if ok else "FAIL"
-    print(f"- {name}: [{status}] {msg}")
-
-
-def _test_postgresql_connection(db_url: str):
-    print("Testing PostgreSQL connection...")
-    conn = None
+def _test_postgresql_connection(conn_str: str) -> Tuple[bool, str]:
+    """Test PostgreSQL connection."""
     try:
         import psycopg2
         
-        conn = psycopg2.connect(db_url)
+        print("Testing PostgreSQL connection...")
+        conn = psycopg2.connect(conn_str)
         cur = conn.cursor()
         
         # Test connection
         cur.execute("SELECT version();")
         version = cur.fetchone()
-        msg = f"OK, Connected to PostgreSQL"
-        ok = True
-        print(f"  - Connection: {msg}")
-        print_check("PostgreSQL Connection", ok, msg)
+        print(f"✓ Connected to PostgreSQL")
+        print(f"  Version: {version[0][:80]}...")
+        
+        # Check for tables
+        cur.execute("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name IN ('players', 'mmrs_1v1', 'matches_1v1', 'preferences_1v1')
+            ORDER BY table_name;
+        """)
+        tables = [row[0] for row in cur.fetchall()]
+        
+        expected_tables = ['matches_1v1', 'mmrs_1v1', 'players', 'preferences_1v1']
+        
+        if not tables:
+            msg = "✗ No tables found! Run schema SQL in Supabase SQL Editor."
+            print(f"\n{msg}")
+            print(f"  Expected tables: {', '.join(expected_tables)}")
+            cur.close()
+            conn.close()
+            print(f"{'='*70}\n")
+            return False, msg
+        
+        missing_tables = [t for t in expected_tables if t not in tables]
+        if missing_tables:
+            msg = f"✗ Missing tables: {', '.join(missing_tables)}"
+            print(f"\n{msg}")
+            print(f"  Found: {', '.join(tables)}")
+            cur.close()
+            conn.close()
+            print(f"{'='*70}\n")
+            return False, msg
+        
+        print(f"✓ All required tables exist: {', '.join(tables)}")
+        
+        # Test a simple query
+        cur.execute("SELECT COUNT(*) FROM players;")
+        player_count = cur.fetchone()[0]
+        print(f"✓ Database query successful")
+        print(f"  Players in database: {player_count}")
+        
+        cur.close()
+        conn.close()
+        
+        print(f"\n✓ PostgreSQL connection test PASSED")
+        print(f"{'='*70}\n")
+        return True, "PostgreSQL connection successful"
         
     except ImportError:
-        msg = "X psycopg2 not installed"
-        ok = False
-        print(f"  - Connection: {msg}")
-        print_check("PostgreSQL Connection", ok, msg)
+        msg = "✗ psycopg2 not installed"
+        print(f"\n{msg}")
+        print(f"{'='*70}\n")
+        return False, msg
     except Exception as e:
-        msg = f"X Connection failed: {str(e)}"
-        ok = False
-        print(f"  - Connection: {msg}")
-        print_check("PostgreSQL Connection", ok, msg)
-
-    if not ok:
+        msg = f"✗ Connection failed: {str(e)}"
+        print(f"\n{msg}")
+        print(f"{'='*70}\n")
         return False, msg
 
-    # Check for tables
-    ok, msg = _check_tables(conn, ["players", "matches_1v1", "preferences_1v1"])
-    print(f"  - Table check: {msg}")
-    print_check("Table Check", ok, msg)
 
-    return ok, msg
-
-
-def _test_sqlite_connection(db_path: str):
-    print("Testing SQLite connection...")
-    conn = None
+def _test_sqlite_connection(conn_str: str) -> Tuple[bool, str]:
+    """Test SQLite connection."""
     try:
         # Extract path from sqlite:///path
-        db_path = db_path.replace("sqlite:///", "")
+        db_path = conn_str.replace("sqlite:///", "")
+        
+        print(f"Testing SQLite connection...")
+        print(f"  Path: {db_path}")
         
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
@@ -103,67 +131,46 @@ def _test_sqlite_connection(db_path: str):
         expected_tables = ['matches_1v1', 'mmrs_1v1', 'players', 'preferences_1v1']
         
         if not tables:
-            msg = "X No tables found! Run create_table.py first."
-            ok = False
-        else:
-            missing_tables = [t for t in expected_tables if t not in tables]
-            if missing_tables:
-                msg = f"X Missing tables: {', '.join(missing_tables)}"
-                ok = False
-            else:
-                msg = "OK, All required tables exist"
-                ok = True
+            msg = "✗ No tables found! Run create_table.py first."
+            print(f"\n{msg}")
+            cur.close()
+            conn.close()
+            print(f"{'='*70}\n")
+            return False, msg
         
-    except Exception as e:
-        msg = f"X Connection failed: {str(e)}"
-        ok = False
-        print(f"  - Connection: {msg}")
-        print_check("SQLite3 Connection", ok, msg)
-
-    if not ok:
-        return False, msg
-
-    # Check for tables
-    ok, msg = _check_tables(conn, ["players", "matches", "player_preferences"])
-    print(f"  - Table check: {msg}")
-    print_check("Table Check", ok, msg)
-    
-    return ok, msg
-
-
-def _check_tables(conn, required_tables):
-    msg = ""
-    ok = True
-    try:
-        cur = conn.cursor()
-        # Get list of tables
-        cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-        tables = {row[0] for row in cur.fetchall()}
+        missing_tables = [t for t in expected_tables if t not in tables]
+        if missing_tables:
+            msg = f"✗ Missing tables: {', '.join(missing_tables)}"
+            print(f"\n{msg}")
+            print(f"  Found: {', '.join(tables)}")
+            cur.close()
+            conn.close()
+            print(f"{'='*70}\n")
+            return False, msg
+        
+        print(f"✓ All required tables exist: {', '.join(tables)}")
+        
+        # Test a simple query
+        cur.execute("SELECT COUNT(*) FROM players;")
+        player_count = cur.fetchone()[0]
+        print(f"✓ Database query successful")
+        print(f"  Players in database: {player_count}")
+        
         cur.close()
-
-        required_tables = set(required_tables)
-        if required_tables.issubset(tables):
-            msg = "OK, All required tables exist"
-        else:
-            missing_tables = required_tables - tables
-            if not tables:
-                msg = "X No tables found! Run schema SQL in Supabase SQL Editor."
-                ok = False
-            else:
-                msg = f"X Missing tables: {', '.join(missing_tables)}"
-                ok = False
+        conn.close()
+        
+        print(f"\n✓ SQLite connection test PASSED")
+        print(f"{'='*70}\n")
+        return True, "SQLite connection successful"
         
     except Exception as e:
-        msg = f"Error checking tables: {e}"
-        ok = False
-
-    return ok, msg
+        msg = f"✗ Connection failed: {str(e)}"
+        print(f"\n{msg}")
+        print(f"{'='*70}\n")
+        return False, msg
 
 
 if __name__ == "__main__":
-    db_type = get_database_type()
-    db_url = get_database_connection_string()
-    sqlite_path = db_url.replace("sqlite:///", "") if db_type == "sqlite" else ""
-
-    test_database_connection(db_type, db_url, sqlite_path)
+    success, message = test_database_connection()
+    exit(0 if success else 1)
 

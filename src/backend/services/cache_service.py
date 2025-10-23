@@ -38,10 +38,10 @@ class StaticDataCache:
             self._load_from_json()
             self._initialized = True
             
-            print(f"[Cache] OK Loaded {len(self._maps)} maps")
-            print(f"[Cache] OK Loaded {len(self._races)} races")
-            print(f"[Cache] OK Loaded {len(self._regions)} regions")
-            print(f"[Cache] OK Loaded {len(self._countries)} countries")
+            print(f"[Cache] ✓ Loaded {len(self._maps)} maps")
+            print(f"[Cache] ✓ Loaded {len(self._races)} races")
+            print(f"[Cache] ✓ Loaded {len(self._regions)} regions")
+            print(f"[Cache] ✓ Loaded {len(self._countries)} countries")
             print("[Cache] Static data cache ready!")
             
         except Exception as e:
