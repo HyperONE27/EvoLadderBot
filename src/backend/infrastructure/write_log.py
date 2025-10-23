@@ -7,7 +7,6 @@ are persisted to disk before being acknowledged.
 """
 
 import json
-import logging
 import sqlite3
 import uuid
 from datetime import datetime
@@ -16,8 +15,6 @@ from typing import Any, Dict, List, Optional
 from dataclasses import asdict
 
 from src.backend.types.write_job import WriteJob, WriteJobType
-
-logger = logging.getLogger(__name__)
 
 
 class WriteLog:
@@ -73,7 +70,7 @@ class WriteLog:
             """)
             
             conn.commit()
-            logger.info("Write log initialized", extra={"db_path": str(self.db_path)})
+            print(f"[Write Log] Initialized at {self.db_path}")
     
     def enqueue(self, job: WriteJob) -> str:
         """
@@ -140,7 +137,7 @@ class WriteLog:
                         job.retry_count = retry_count
                     results.append((job_id, job))
                 except (json.JSONDecodeError, KeyError, ValueError) as e:
-                    logger.error("Error deserializing write job", extra={"job_id": job_id, "error": str(e)})
+                    print(f"[Write Log] Error deserializing job {job_id}: {e}")
                     # Mark as failed so we don't keep retrying
                     self.mark_failed(job_id, f"Deserialization error: {e}")
             

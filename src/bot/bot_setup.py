@@ -134,13 +134,13 @@ class EvoLadderBot(commands.Bot):
         """Track that work is starting on the process pool."""
         self._active_work_count += 1
         self._last_work_time = time.time()
-        logger.debug("Process pool work started", extra={"active_count": self._active_work_count})
+        print(f"[Process Pool] Work started (active: {self._active_work_count})")
     
     def _track_work_end(self):
         """Track that work has completed on the process pool."""
         if self._active_work_count > 0:
             self._active_work_count -= 1
-        logger.debug("Process pool work completed", extra={"active_count": self._active_work_count})
+        print(f"[Process Pool] Work completed (active: {self._active_work_count})")
     
     def _is_worker_busy(self) -> bool:
         """Check if workers are currently busy with legitimate work."""
@@ -163,16 +163,16 @@ class EvoLadderBot(commands.Bot):
             try:
                 # Shutdown old pool
                 if self.process_pool:
-                    logger.warning("Shutting down crashed process pool")
+                    print("[Process Pool] Shutting down crashed pool...")
                     try:
                         self.process_pool.shutdown(wait=False, cancel_futures=True)
                     except Exception as e:
-                        logger.warning("Error during process pool shutdown", extra={"error": str(e)})
+                        logger.warning(f"[Process Pool] Error during shutdown: {e}")
                 
                 # Create new pool
-                logger.info("Creating new process pool", extra={"worker_count": WORKER_PROCESSES})
+                print(f"[Process Pool] Creating new pool with {WORKER_PROCESSES} worker(s)...")
                 self.process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
-                logger.info("Process pool restarted successfully")
+                print("[Process Pool] ✅ Process pool restarted successfully")
                 return True
                 
             except Exception as e:
@@ -200,11 +200,10 @@ class EvoLadderBot(commands.Bot):
             # If workers are busy, give them more time based on how long they've been working
             # Cap at 30 seconds to avoid infinite waits
             timeout = min(5.0 + (work_age * 0.1), 30.0)
-            logger.debug("Process pool workers busy, using extended timeout", 
-                        extra={"work_age_seconds": round(work_age, 1), "timeout_seconds": round(timeout, 1)})
+            print(f"[Process Pool] Workers busy (age: {work_age:.1f}s), using extended timeout: {timeout:.1f}s")
         else:
             timeout = 5.0  # Standard timeout for idle workers
-            logger.debug("Process pool workers idle, using standard timeout", extra={"timeout_seconds": timeout})
+            print(f"[Process Pool] Workers idle, using standard timeout: {timeout:.1f}s")
         
         # Test pool health with a simple task
         try:
@@ -219,7 +218,7 @@ class EvoLadderBot(commands.Bot):
             
             # Validate the health check result
             if isinstance(result, dict) and result.get("status") == "healthy":
-                logger.debug("Process pool health check passed", extra={"worker_pid": result['pid']})
+                print(f"[Process Pool] ✅ Health check passed (PID: {result['pid']})")
                 return True
             else:
                 logger.error(f"[Process Pool] Health check returned invalid result: {result}")
@@ -230,8 +229,7 @@ class EvoLadderBot(commands.Bot):
             if self._is_worker_busy():
                 work_age = self._get_work_age()
                 if work_age < 60:  # If work is less than 1 minute old, might be legitimate
-                    logger.debug("Process pool health check timeout but workers busy, will retry", 
-                                extra={"work_age_seconds": round(work_age, 1)})
+                    print(f"[Process Pool] Health check timeout but workers busy (age: {work_age:.1f}s) - retrying later")
                     # Don't restart immediately, let the work complete
                     return True
                 else:
@@ -255,7 +253,7 @@ class EvoLadderBot(commands.Bot):
         Reports every 5 minutes and checks for potential memory leaks.
         """
         await self.wait_until_ready()
-        logger.info("Starting periodic memory monitoring")
+        print("[Memory Monitor] Starting periodic memory monitoring...")
         
         from src.backend.monitoring.memory_monitor import get_memory_monitor
         
@@ -272,7 +270,7 @@ class EvoLadderBot(commands.Bot):
                     if monitor.check_memory_leak(threshold_mb=100.0):
                         # Generate detailed report
                         report = monitor.generate_report(include_allocations=True)
-                        logger.info("Memory monitor report", extra={"report": report})
+                        print(report)
                         logger.warning("[Memory Monitor] Memory leak detected - see report above")
                         
                         # Force garbage collection
@@ -285,22 +283,22 @@ class EvoLadderBot(commands.Bot):
     
     def start_background_tasks(self):
         """Start all background tasks for the bot."""
-        logger.info("Starting background tasks")
+        print("[Background Tasks] Starting background tasks...")
         
         # Start memory monitoring task
         self._memory_monitor_task = asyncio.create_task(self._memory_monitor_task_loop())
-        logger.info("Memory monitor task started")
+        print("[Background Tasks] Memory monitor task started")
 
         # Background refresh tasks removed - DataAccessService handles this now
     
     def stop_background_tasks(self):
         """Stop all background tasks for the bot."""
-        logger.info("Stopping background tasks")
+        print("[Background Tasks] Stopping background tasks...")
         
         # Stop memory monitor task
         if self._memory_monitor_task and not self._memory_monitor_task.done():
             self._memory_monitor_task.cancel()
-            logger.info("Memory monitor task stopped")
+            print("[Background Tasks] Memory monitor task stopped")
         
         # Background refresh tasks removed - DataAccessService handles this now
 
@@ -322,10 +320,10 @@ async def initialize_backend_services(bot: EvoLadderBot) -> None:
     Raises:
         SystemExit: If any critical resource fails to initialize
     """
-    logger.info("Initializing backend services")
+    print("[Startup] Initializing backend services...")
     
     # 1. Initialize Memory Monitor
-    logger.info("Initializing memory monitor")
+    print("[Startup] Initializing memory monitor...")
     initialize_memory_monitor(enable_tracemalloc=True)
     log_memory("Startup - baseline")
     
@@ -338,56 +336,60 @@ async def initialize_backend_services(bot: EvoLadderBot) -> None:
         )
         log_memory("After DB pool init")
     except Exception as e:
-        logger.fatal("Failed to initialize connection pool", exc_info=True)
+        print(f"\n[FATAL] Failed to initialize connection pool: {e}")
         sys.exit(1)
     
     # 3. Test Database Connection
     success, message = test_database_connection()
     if not success:
-        logger.fatal("Database connection test failed", extra={"error_message": message})
+        print(f"\n[FATAL] Database connection test failed: {message}")
         sys.exit(1)
         
     # 4. Initialize Static Data Cache
-    logger.info("Initializing static data cache")
+    print("[Startup] Initializing static data cache...")
     try:
         static_cache.initialize()
         log_memory("After static cache init")
     except Exception as e:
-        logger.fatal("Failed to initialize static data cache", exc_info=True)
+        print(f"\n[FATAL] Failed to initialize static data cache: {e}")
         sys.exit(1)
         
     # 5. Create and Attach Process Pool
     bot.process_pool = ProcessPoolExecutor(max_workers=WORKER_PROCESSES)
-    logger.info("Initialized Process Pool", extra={"worker_count": WORKER_PROCESSES})
+    print(f"[INFO] Initialized Process Pool with {WORKER_PROCESSES} worker(s)")
     log_memory("After process pool init")
     
     # 6. Register bot instance for global process pool health checking
     set_bot_instance(bot)
-    logger.info("Process pool health checker registered")
+    print("[INFO] Process pool health checker registered")
     
     # 7. Initialize DataAccessService
-    logger.info("Initializing DataAccessService")
+    print("[Startup] Initializing DataAccessService...")
     try:
         data_service = await DataAccessService.get_instance()
         log_memory("After DataAccessService init")
-        logger.info("DataAccessService initialized successfully")
+        print("[INFO] DataAccessService initialized successfully")
     except Exception as e:
-        logger.fatal("Failed to initialize DataAccessService", exc_info=True)
+        print(f"\n[FATAL] Failed to initialize DataAccessService: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
         
     # 8. Refresh Ranking Service (depends on DataAccessService)
-    logger.info("Performing initial rank calculation")
+    print("[Startup] Performing initial rank calculation...")
     try:
         # Use the singleton from app_context
         await app_context.ranking_service.trigger_refresh()
         log_memory("After ranking service refresh")
-        logger.info("Ranking service refreshed successfully")
+        print("[INFO] Ranking service refreshed successfully")
     except Exception as e:
-        logger.fatal("Failed to refresh ranking service", exc_info=True)
+        print(f"\n[FATAL] Failed to refresh ranking service: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
     
     # 9. Performance monitoring is active
-    logger.info("Performance monitoring ACTIVE")
+    print("[INFO] Performance monitoring ACTIVE")
 
 
 async def shutdown_bot_resources(bot: EvoLadderBot) -> None:
@@ -397,7 +399,7 @@ async def shutdown_bot_resources(bot: EvoLadderBot) -> None:
     Args:
         bot: The EvoLadderBot instance to clean up
     """
-    logger.info("Closing application resources")
+    print("[Shutdown] Closing application resources...")
     
     # 1. Stop Background Tasks
     bot.stop_background_tasks()
@@ -407,18 +409,18 @@ async def shutdown_bot_resources(bot: EvoLadderBot) -> None:
         data_access_service = await DataAccessService.get_instance()
         if DataAccessService._initialized:
             await data_access_service.shutdown()
-            logger.info("DataAccessService shutdown complete")
+            print("[Shutdown] DataAccessService shutdown complete.")
     except Exception as e:
-        logger.error("Error shutting down DataAccessService", exc_info=True)
+        print(f"[Shutdown] Error shutting down DataAccessService: {e}")
     
     # 3. Close Database Connection Pool
     close_pool()
     
     # 4. Shutdown Process Pool
     if bot.process_pool:
-        logger.info("Shutting down process pool")
+        print("[Shutdown] Shutting down process pool...")
         bot.process_pool.shutdown(wait=True)
-        logger.info("Process pool shutdown complete")
+        print("[Shutdown] Process pool shutdown complete.")
     
-    logger.info("All resources closed")
+    print("[Shutdown] All resources closed.")
 

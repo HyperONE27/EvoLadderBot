@@ -5,14 +5,12 @@ This module provides connection pooling to significantly improve database
 performance by reusing connections instead of creating new ones for each query.
 """
 
-import logging
 from typing import Optional
 import psycopg2
 import psycopg2.extras
 from psycopg2 import pool
 from contextlib import contextmanager
 
-logger = logging.getLogger(__name__)
 
 # This global variable will hold the single pool instance.
 _global_pool: Optional[pool.SimpleConnectionPool] = None
@@ -36,11 +34,11 @@ def initialize_pool(dsn: str, min_conn: int = 2, max_conn: int = 15, force: bool
     global _global_pool
     if _global_pool is not None:
         if not force:
-            logger.warning("Pool already initialized")
+            print("[DB Pool] WARNING: Pool already initialized.")
             return
         else:
             # Close existing pool and reinitialize (worker process scenario)
-            logger.warning("Force reinitialization - closing existing pool")
+            print("[DB Pool] Force reinitialization - closing existing pool...")
             try:
                 _global_pool.closeall()
             except Exception:
@@ -48,16 +46,16 @@ def initialize_pool(dsn: str, min_conn: int = 2, max_conn: int = 15, force: bool
             _global_pool = None
 
     try:
-        logger.info("Initializing connection pool", extra={"min_conn": min_conn, "max_conn": max_conn})
+        print(f"[DB Pool] Initializing pool (min={min_conn}, max={max_conn})...")
         _global_pool = pool.SimpleConnectionPool(
             minconn=min_conn,
             maxconn=max_conn,
             dsn=dsn,
             cursor_factory=psycopg2.extras.RealDictCursor
         )
-        logger.info("Connection pool initialized successfully")
+        print("[DB Pool] Connection pool initialized successfully.")
     except psycopg2.OperationalError as e:
-        logger.fatal("Failed to initialize connection pool", exc_info=True)
+        print(f"[DB Pool] FATAL: Failed to initialize connection pool: {e}")
         _global_pool = None
         raise
 
@@ -112,18 +110,18 @@ def get_connection():
         conn = _global_pool.getconn()
         yield conn
         conn.commit()
-        logger.debug("Transaction committed successfully")
+        print("[DB Pool] Transaction committed successfully")
         
     except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
         # Connection-level errors indicate the connection is dead
         connection_is_bad = True
-        logger.warning("Connection error detected, marking connection as bad", extra={"error": str(e)})
+        print(f"[DB Pool] Connection error detected: {e}. Marking connection as bad.")
         if conn:
             try:
                 conn.close()
-                logger.debug("Bad connection closed successfully")
+                print("[DB Pool] Bad connection closed successfully")
             except Exception as close_exc:
-                logger.error("Error closing bad connection", extra={"error": str(close_exc)})
+                print(f"[DB Pool] Error closing bad connection: {close_exc}")
         conn = None  # Prevent returning to pool
         raise
         
@@ -132,25 +130,25 @@ def get_connection():
         if conn:
             try:
                 conn.rollback()
-                logger.debug("Transaction rolled back due to error")
+                print("[DB Pool] Transaction rolled back due to error")
             except Exception as rollback_exc:
                 # If rollback fails, connection is probably dead
                 connection_is_bad = True
-                logger.error("Rollback failed, marking connection as bad", extra={"error": str(rollback_exc)})
+                print(f"[DB Pool] Rollback failed: {rollback_exc}. Marking connection as bad.")
         raise
         
     finally:
         # Deterministic cleanup: always return to pool unless explicitly marked bad
         if conn and not connection_is_bad:
             _global_pool.putconn(conn)
-            logger.debug("Connection returned to pool")
+            print("[DB Pool] Connection returned to pool")
         elif conn:
             # Connection is bad but wasn't closed yet
             try:
                 conn.close()
-                logger.debug("Bad connection closed in finally block")
+                print("[DB Pool] Bad connection closed in finally block")
             except Exception as final_close_exc:
-                logger.error("Failed to close bad connection in finally block", extra={"error": str(final_close_exc)})
+                print(f"[DB Pool] Failed to close bad connection in finally: {final_close_exc}")
 
 
 def close_pool() -> None:
@@ -159,8 +157,8 @@ def close_pool() -> None:
     """
     global _global_pool
     if _global_pool:
-        logger.info("Closing all connections in the pool")
+        print("[DB Pool] Closing all connections in the pool...")
         _global_pool.closeall()
         _global_pool = None
-        logger.info("Connection pool closed")
+        print("[DB Pool] Connection pool closed.")
 
