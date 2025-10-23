@@ -6,13 +6,14 @@ enabling performance optimization and bottleneck identification.
 """
 
 import time
+import logging
 import sys
 from contextlib import contextmanager
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from src.bot.logging_config import log_performance, LogLevel
+logger = logging.getLogger(__name__)
 
 # Check if we can use emojis (not Windows console)
 USE_EMOJIS = sys.stdout.encoding.lower() not in ('cp1252', 'windows-1252')
@@ -63,7 +64,7 @@ class FlowTracker:
     def checkpoint(self, name: str, metadata: Optional[Dict[str, Any]] = None) -> None:
         """Record a checkpoint in the flow."""
         if self._completed:
-            log_performance(LogLevel.WARNING, f"Checkpoint '{name}' called after flow completion")
+            logger.warning(f"Checkpoint '{name}' called after flow completion")
             return
             
         current_time = time.perf_counter()
@@ -83,11 +84,9 @@ class FlowTracker:
             duration = elapsed_ms - prev_checkpoint.elapsed_ms
             
             if duration > 100:  # Log if operation took >100ms
-                log_performance(
-                    LogLevel.WARNING,
-                    f"{self.flow_name}.{name}",
-                    duration_ms=duration,
-                    extra={"total_ms": elapsed_ms}
+                logger.warning(
+                    f"[PERF] {self.flow_name}.{name}: {duration:.2f}ms "
+                    f"(total: {elapsed_ms:.2f}ms)"
                 )
                 warning_emoji = "⚠️" if USE_EMOJIS else "[W]"
                 print(f"  {warning_emoji} {self.flow_name}.{name}: {duration:.1f}ms")
@@ -104,7 +103,7 @@ class FlowTracker:
             Total duration in milliseconds
         """
         if self._completed:
-            log_performance(LogLevel.WARNING, f"Flow '{self.flow_name}' completed multiple times")
+            logger.warning(f"Flow '{self.flow_name}' completed multiple times")
             return 0.0
             
         self._completed = True
@@ -167,11 +166,10 @@ class FlowTracker:
         )
         
         # Also log structured data for potential database storage
-        log_performance(
-            LogLevel.DEBUG,
-            "Flow completed",
-            duration_ms=total_duration_ms,
-            extra={
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Flow completed",
+                extra={
                     "flow_name": self.flow_name,
                     "user_id": self.user_id,
                     "duration_ms": total_duration_ms,
@@ -211,17 +209,13 @@ def measure_time(operation_name: str, metadata: Optional[Dict[str, Any]] = None)
         
         # Log if operation is slow
         if duration_ms > 100:
-            log_performance(
-                LogLevel.WARNING,
-                operation_name,
-                duration_ms=duration_ms,
+            logger.warning(
+                f"[PERF] {operation_name}: {duration_ms:.2f}ms",
                 extra={"operation": operation_name, "duration_ms": duration_ms, **(metadata or {})}
             )
         elif duration_ms > 10:
-            log_performance(
-                LogLevel.DEBUG,
-                operation_name,
-                duration_ms=duration_ms,
+            logger.debug(
+                f"[PERF] {operation_name}: {duration_ms:.2f}ms",
                 extra={"operation": operation_name, "duration_ms": duration_ms, **(metadata or {})}
             )
 
@@ -267,14 +261,9 @@ class PerformanceMonitor:
         threshold: float
     ) -> None:
         """Alert on slow operations."""
-        log_performance(
-            LogLevel.WARNING,
-            f"SLOW: {flow_name}",
-            duration_ms=duration_ms,
-            extra={
-                "threshold_ms": threshold,
-                "over_threshold_percent": ((duration_ms/threshold - 1) * 100)
-            }
+        logger.warning(
+            f"⚠️ SLOW: {flow_name} {duration_ms:.1f}ms "
+            f"(+{((duration_ms/threshold - 1) * 100):.0f}% over {threshold}ms)"
         )
 
 

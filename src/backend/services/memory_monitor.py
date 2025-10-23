@@ -5,12 +5,13 @@ Provides comprehensive memory tracking for both main and worker processes.
 """
 
 import gc
+import logging
 import os
 import psutil
 import tracemalloc
 from typing import Dict, Optional, Tuple
 
-from src.bot.logging_config import log_memory, LogLevel
+logger = logging.getLogger(__name__)
 
 
 class MemoryMonitor:
@@ -36,13 +37,13 @@ class MemoryMonitor:
             try:
                 tracemalloc.start()
                 self.tracemalloc_enabled = True
-                log_memory(LogLevel.INFO, "tracemalloc started")
+                logger.info("[Memory Monitor] tracemalloc started")
             except Exception as e:
-                log_memory(LogLevel.WARNING, f"Failed to start tracemalloc: {e}")
+                logger.warning(f"[Memory Monitor] Failed to start tracemalloc: {e}")
         
         # Record baseline
         self.baseline_memory = self.get_memory_usage()
-        log_memory(LogLevel.INFO, f"Baseline memory: {self.baseline_memory:.2f} MB", memory_mb=self.baseline_memory)
+        logger.info(f"[Memory Monitor] Baseline memory: {self.baseline_memory:.2f} MB")
     
     def get_memory_usage(self) -> float:
         """
@@ -56,7 +57,7 @@ class MemoryMonitor:
             memory_info = self.process.memory_info()
             return memory_info.rss / 1024 / 1024  # Convert to MB
         except Exception as e:
-            log_memory(LogLevel.ERROR, f"Failed to get memory usage: {e}")
+            logger.error(f"[Memory Monitor] Failed to get memory usage: {e}")
             return 0.0
     
     def get_memory_details(self) -> Dict[str, float]:
@@ -81,7 +82,7 @@ class MemoryMonitor:
             
             return details
         except Exception as e:
-            log_memory(LogLevel.ERROR, f"Failed to get memory details: {e}")
+            logger.error(f"[Memory Monitor] Failed to get memory details: {e}")
             return {}
     
     def get_memory_delta(self) -> float:
@@ -121,7 +122,7 @@ class MemoryMonitor:
             
             return allocations
         except Exception as e:
-            log_memory(LogLevel.ERROR, f"Failed to get top allocations: {e}")
+            logger.error(f"[Memory Monitor] Failed to get top allocations: {e}")
             return None
     
     def force_garbage_collection(self) -> Tuple[int, float]:
@@ -136,7 +137,8 @@ class MemoryMonitor:
         after = self.get_memory_usage()
         freed = before - after
         
-        log_memory(LogLevel.INFO, f"GC: Collected {collected} objects, freed {freed:.2f} MB", memory_mb=freed)
+        logger.info(f"[Memory Monitor] GC: Collected {collected} objects, "
+                   f"freed {freed:.2f} MB")
         
         return collected, freed
     
@@ -198,7 +200,7 @@ class MemoryMonitor:
         if context:
             log_msg += f" - {context}"
         
-        log_memory(LogLevel.INFO, log_msg)
+        logger.info(log_msg)
     
     def check_memory_leak(self, threshold_mb: float = 50.0) -> bool:
         """
@@ -213,7 +215,8 @@ class MemoryMonitor:
         delta = self.get_memory_delta()
         
         if delta > threshold_mb:
-            log_memory(LogLevel.WARNING, f"Potential memory leak detected! Growth: {delta:.2f} MB (threshold: {threshold_mb:.2f} MB)", memory_mb=delta)
+            logger.warning(f"[Memory Monitor] Potential memory leak detected! "
+                          f"Growth: {delta:.2f} MB (threshold: {threshold_mb:.2f} MB)")
             return True
         
         return False

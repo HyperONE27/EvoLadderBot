@@ -7,10 +7,12 @@ conditions and inconsistencies.
 """
 
 import asyncio
+import logging
 from typing import Dict, List, Optional
 
 from src.backend.services.matchmaking_service import Player
-from src.bot.logging_config import log_queue, LogLevel
+
+logger = logging.getLogger(__name__)
 
 
 class QueueService:
@@ -35,11 +37,11 @@ class QueueService:
         """
         async with self._lock:
             if player.discord_user_id in self._queued_players:
-                log_queue(LogLevel.WARNING, f"Player {player.discord_user_id} already in queue", player_id=player.discord_user_id)
+                logger.warning(f"[QueueService] Player {player.discord_user_id} already in queue")
                 return
             
             self._queued_players[player.discord_user_id] = player
-            log_queue(LogLevel.INFO, f"Player added to queue (total: {len(self._queued_players)})", player_id=player.discord_user_id)
+            logger.info(f"[QueueService] Player {player.discord_user_id} added to queue (total: {len(self._queued_players)})")
     
     async def remove_player(self, player_id: int) -> bool:
         """
@@ -54,10 +56,10 @@ class QueueService:
         async with self._lock:
             if player_id in self._queued_players:
                 del self._queued_players[player_id]
-                log_queue(LogLevel.INFO, f"Player removed from queue (total: {len(self._queued_players)})", player_id=player_id)
+                logger.info(f"[QueueService] Player {player_id} removed from queue (total: {len(self._queued_players)})")
                 return True
             else:
-                log_queue(LogLevel.WARNING, f"Player not in queue, cannot remove", player_id=player_id)
+                logger.warning(f"[QueueService] Player {player_id} not in queue, cannot remove")
                 return False
     
     def get_snapshot(self) -> List[Player]:
@@ -94,7 +96,7 @@ class QueueService:
                     del self._queued_players[player_id]
                     removed_count += 1
             
-            log_queue(LogLevel.INFO, f"Removed {removed_count} matched players from queue (total: {len(self._queued_players)})")
+            logger.info(f"[QueueService] Removed {removed_count} matched players from queue (total: {len(self._queued_players)})")
             return removed_count
     
     def get_queue_size(self) -> int:
@@ -144,7 +146,7 @@ class QueueService:
         async with self._lock:
             count = len(self._queued_players)
             self._queued_players.clear()
-            log_queue(LogLevel.INFO, f"Queue cleared ({count} players removed)")
+            logger.info(f"[QueueService] Queue cleared ({count} players removed)")
             return count
 
 
@@ -161,7 +163,7 @@ def initialize_queue_service() -> QueueService:
     """
     global _queue_service
     _queue_service = QueueService()
-    log_queue(LogLevel.INFO, "Global instance initialized")
+    logger.info("[QueueService] Global instance initialized")
     return _queue_service
 
 

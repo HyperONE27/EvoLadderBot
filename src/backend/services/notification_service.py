@@ -7,10 +7,12 @@ need for polling and enables instant match notifications.
 """
 
 import asyncio
+import logging
 from typing import Dict, Optional
 
 from src.backend.services.matchmaking_service import MatchResult
-from src.bot.logging_config import log_notifications, LogLevel
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationService:
@@ -38,12 +40,12 @@ class NotificationService:
         """
         async with self._lock:
             if player_id in self._player_listeners:
-                log_notifications(LogLevel.WARNING, f"Player {player_id} already subscribed", player_id=player_id)
+                logger.warning(f"[NotificationService] Player {player_id} already subscribed")
                 return self._player_listeners[player_id]
             
             queue = asyncio.Queue()
             self._player_listeners[player_id] = queue
-            log_notifications(LogLevel.INFO, f"Player subscribed", player_id=player_id)
+            logger.info(f"[NotificationService] Player {player_id} subscribed")
             return queue
     
     async def unsubscribe(self, player_id: int) -> None:
@@ -56,9 +58,9 @@ class NotificationService:
         async with self._lock:
             if player_id in self._player_listeners:
                 del self._player_listeners[player_id]
-                log_notifications(LogLevel.INFO, f"Player unsubscribed", player_id=player_id)
+                logger.info(f"[NotificationService] Player {player_id} unsubscribed")
             else:
-                log_notifications(LogLevel.WARNING, f"Player was not subscribed", player_id=player_id)
+                logger.warning(f"[NotificationService] Player {player_id} was not subscribed")
     
     async def publish_match_found(self, match: MatchResult) -> None:
         """
@@ -78,23 +80,23 @@ class NotificationService:
             if player_1_id in self._player_listeners:
                 queue = self._player_listeners[player_1_id]
                 await queue.put(match)
-                log_notifications(LogLevel.INFO, f"Notified player of match {match.match_id}", player_id=player_1_id)
+                logger.info(f"[NotificationService] Notified player {player_1_id} of match {match.match_id}")
             else:
-                log_notifications(LogLevel.WARNING, f"Player not subscribed when match {match.match_id} found", player_id=player_1_id)
+                logger.warning(f"[NotificationService] Player {player_1_id} not subscribed when match {match.match_id} found")
             
             # Notify player 2
             if player_2_id in self._player_listeners:
                 queue = self._player_listeners[player_2_id]
                 await queue.put(match)
-                log_notifications(LogLevel.INFO, f"Notified player of match {match.match_id}", player_id=player_2_id)
+                logger.info(f"[NotificationService] Notified player {player_2_id} of match {match.match_id}")
             else:
-                log_notifications(LogLevel.WARNING, f"Player not subscribed when match {match.match_id} found", player_id=player_2_id)
+                logger.warning(f"[NotificationService] Player {player_2_id} not subscribed when match {match.match_id} found")
         
         duration_ms = (time.perf_counter() - start_time) * 1000
         if duration_ms > 10:
-            log_notifications(LogLevel.WARNING, f"Match {match.match_id} notification took {duration_ms:.1f}ms")
+            logger.warning(f"[NS] Match {match.match_id}: {duration_ms:.1f}ms")
         else:
-            log_notifications(LogLevel.DEBUG, f"Match {match.match_id} notification took {duration_ms:.1f}ms")
+            logger.debug(f"[NS] Match {match.match_id}: {duration_ms:.1f}ms")
     
     def get_subscriber_count(self) -> int:
         """
@@ -111,7 +113,7 @@ class NotificationService:
         """
         async with self._lock:
             self._player_listeners.clear()
-            log_notifications(LogLevel.INFO, "All subscriptions cleared")
+            logger.info("[NotificationService] All subscriptions cleared")
 
 
 # Global notification service instance
@@ -127,7 +129,7 @@ def initialize_notification_service() -> NotificationService:
     """
     global _notification_service
     _notification_service = NotificationService()
-    log_notifications(LogLevel.INFO, "Global instance initialized")
+    logger.info("[NotificationService] Global instance initialized")
     return _notification_service
 
 
