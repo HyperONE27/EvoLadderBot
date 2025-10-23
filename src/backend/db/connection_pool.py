@@ -83,11 +83,11 @@ def _validate_connection(conn) -> bool:
 @contextmanager
 def get_connection():
     """
-    Provide a managed connection from the pool.
+    Provide a managed connection from the pool with deterministic cleanup.
     
-    This function validates connections before use and handles stale connections
-    by getting a fresh one from the pool. If a connection is closed/stale, it's
-    discarded and a new one is obtained.
+    This context manager ensures connections are always properly returned to the pool
+    or explicitly closed if invalid. The cleanup logic is simplified to prevent
+    connection leaks from swallowed exceptions.
     
     Usage:
         with get_connection() as conn:
@@ -98,84 +98,57 @@ def get_connection():
         
     Raises:
         RuntimeError: If pool has not been initialized
+        psycopg2.OperationalError: If connection cannot be obtained after retries
     """
     if _global_pool is None:
         raise RuntimeError("Database connection pool has not been initialized.")
     
     conn = None
-    max_retries = 3
-    retry_count = 0
+    connection_is_bad = False
     
-    while retry_count < max_retries:
-        try:
-            conn = _global_pool.getconn()
-            
-            # Validate the connection before using it
-            if not _validate_connection(conn):
-                print(f"[DB Pool] Connection validation failed (attempt {retry_count + 1}/{max_retries}), getting fresh connection...")
-                # Close the stale connection and remove it from pool
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-                # Get a new connection on next iteration
-                conn = None
-                retry_count += 1
-                continue
-            
-            # Connection is valid, use it
-            yield conn
-            
-            # Only commit if connection is still open
-            if conn and not conn.closed:
-                conn.commit()
-            break
-            
-        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
-            # Connection errors - try to get a fresh connection
-            print(f"[DB Pool] Connection error (attempt {retry_count + 1}/{max_retries}): {e}")
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-                conn = None
-            retry_count += 1
-            if retry_count >= max_retries:
-                raise
-            
-        except Exception as e:
-            # Other errors - rollback if connection is still open
-            if conn and not conn.closed:
-                try:
-                    conn.rollback()
-                except Exception:
-                    # If rollback fails, connection is dead - close it
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
-            raise
-            
-        finally:
-            # Return connection to pool only if it's still valid
-            if conn:
-                try:
-                    # Check if connection is still usable before returning to pool
-                    if not conn.closed and _validate_connection(conn):
-                        _global_pool.putconn(conn)
-                    else:
-                        # Connection is dead, close it and don't return to pool
-                        try:
-                            conn.close()
-                        except Exception:
-                            pass
-                except Exception:
-                    # If validation fails, try to close the connection
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
+    try:
+        conn = _global_pool.getconn()
+        yield conn
+        conn.commit()
+        print("[DB Pool] Transaction committed successfully")
+        
+    except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+        # Connection-level errors indicate the connection is dead
+        connection_is_bad = True
+        print(f"[DB Pool] Connection error detected: {e}. Marking connection as bad.")
+        if conn:
+            try:
+                conn.close()
+                print("[DB Pool] Bad connection closed successfully")
+            except Exception as close_exc:
+                print(f"[DB Pool] Error closing bad connection: {close_exc}")
+        conn = None  # Prevent returning to pool
+        raise
+        
+    except Exception:
+        # Application-level errors - rollback transaction
+        if conn:
+            try:
+                conn.rollback()
+                print("[DB Pool] Transaction rolled back due to error")
+            except Exception as rollback_exc:
+                # If rollback fails, connection is probably dead
+                connection_is_bad = True
+                print(f"[DB Pool] Rollback failed: {rollback_exc}. Marking connection as bad.")
+        raise
+        
+    finally:
+        # Deterministic cleanup: always return to pool unless explicitly marked bad
+        if conn and not connection_is_bad:
+            _global_pool.putconn(conn)
+            print("[DB Pool] Connection returned to pool")
+        elif conn:
+            # Connection is bad but wasn't closed yet
+            try:
+                conn.close()
+                print("[DB Pool] Bad connection closed in finally block")
+            except Exception as final_close_exc:
+                print(f"[DB Pool] Failed to close bad connection in finally: {final_close_exc}")
 
 
 def close_pool() -> None:
