@@ -2,6 +2,10 @@ import asyncio
 import logging
 import sys
 
+# CRITICAL: Configure logging FIRST, before any other application imports
+from src.bot.logging_config import configure_logging
+configure_logging(log_level=logging.INFO)
+
 import discord
 from discord.ext import commands
 
@@ -18,18 +22,6 @@ from src.bot.commands.setup_command import register_setup_command
 from src.bot.commands.termsofservice_command import register_termsofservice_command
 from src.bot.config import EVOLADDERBOT_TOKEN
 
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-# Set specific log levels
-logging.getLogger('discord').setLevel(logging.WARNING)  # Reduce Discord library noise
-logging.getLogger('src.backend.services.performance_service').setLevel(logging.INFO)  # Show performance logs
-
 logger = logging.getLogger(__name__)
 
 intents = discord.Intents.default()
@@ -41,19 +33,19 @@ bot = EvoLadderBot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"Bot online as {bot.user}")
+    logger.info("Bot online", extra={"bot_user": str(bot.user), "bot_id": bot.user.id})
     try:
         register_commands(bot)
         synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} command(s)")
+        logger.info("Discord commands synced", extra={"command_count": len(synced)})
         
         # Start the matchmaker
         asyncio.create_task(matchmaker.run())
-        print("Matchmaker started")
+        logger.info("Matchmaker started")
         
         # Background tasks are started in bot_setup.py setup_hook
     except Exception as e:
-        print("Sync failed:", e)
+        logger.exception("Failed to sync Discord commands")
 
 @bot.event
 async def on_message(message):
@@ -80,7 +72,7 @@ def setup_signal_handlers(bot: discord.Client):
         loop = asyncio.new_event_loop()
 
     def signal_handler(signum, frame):
-        print(f"Received signal {signum}. Shutting down gracefully.")
+        logger.info("Received shutdown signal", extra={"signal": signum})
         if loop.is_running():
             loop.create_task(bot.close())
         else:
@@ -116,7 +108,7 @@ def main():
         except RuntimeError: # No running loop
             asyncio.run(shutdown_bot_resources(bot))
         except Exception as e:
-            print(f"[Shutdown] An error occurred during final shutdown: {e}")
+            logger.exception("Error occurred during final shutdown")
 
 
 if __name__ == "__main__":

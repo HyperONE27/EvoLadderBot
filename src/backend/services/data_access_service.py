@@ -20,6 +20,7 @@ Performance Benefits:
 """
 
 import asyncio
+import logging
 import os
 import time
 from typing import Any, Dict, List, Optional
@@ -30,6 +31,8 @@ from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
 from src.backend.types.write_job import WriteJob, WriteJobType
 from src.backend.infrastructure.write_log import WriteLog
 from src.bot.config import RAILWAY_PERSISTENT_STORAGE_PATH
+
+logger = logging.getLogger(__name__)
 
 
 class DataAccessService:
@@ -94,7 +97,7 @@ class DataAccessService:
         if DataAccessService._initialized:
             return
         
-        print("[DataAccessService] Initializing singleton instance...")
+        logger.info("Initializing DataAccessService singleton instance")
         
         # Database access for initial load and write-back
         self._db_reader = DatabaseReader()
@@ -123,7 +126,7 @@ class DataAccessService:
         self._total_writes_queued = 0
         self._total_writes_completed = 0
         
-        print("[DataAccessService] Starting async initialization...")
+        logger.info("Starting async initialization")
         self._main_loop = asyncio.get_running_loop()
         start_time = time.time()
         
@@ -137,12 +140,14 @@ class DataAccessService:
         self._writer_task = self._main_loop.create_task(self._db_writer_worker())
         
         elapsed = (time.time() - start_time) * 1000
-        print(f"[DataAccessService] Initialization complete in {elapsed:.2f}ms")
-        print(f"[DataAccessService]    - Players: {len(self._players_df) if self._players_df is not None else 0} rows")
-        print(f"[DataAccessService]    - MMRs: {len(self._mmrs_df) if self._mmrs_df is not None else 0} rows")
-        print(f"[DataAccessService]    - Preferences: {len(self._preferences_df) if self._preferences_df is not None else 0} rows")
-        print(f"[DataAccessService]    - Matches: {len(self._matches_df) if self._matches_df is not None else 0} rows")
-        print(f"[DataAccessService]    - Replays: {len(self._replays_df) if self._replays_df is not None else 0} rows")
+        logger.info("Initialization complete", extra={
+            "elapsed_ms": round(elapsed, 2),
+            "players_count": len(self._players_df) if self._players_df is not None else 0,
+            "mmrs_count": len(self._mmrs_df) if self._mmrs_df is not None else 0,
+            "preferences_count": len(self._preferences_df) if self._preferences_df is not None else 0,
+            "matches_count": len(self._matches_df) if self._matches_df is not None else 0,
+            "replays_count": len(self._replays_df) if self._replays_df is not None else 0
+        })
         
         DataAccessService._initialized = True
     
@@ -152,18 +157,18 @@ class DataAccessService:
         
         This method is kept for backward compatibility.
         """
-        print("[DataAccessService] WARNING: initialize_async() is deprecated. Use await DataAccessService.get_instance() instead.")
+        logger.warning("initialize_async() is deprecated, use await DataAccessService.get_instance() instead")
         if not DataAccessService._initialized:
             await self._initialize()
     
     async def _load_all_tables(self) -> None:
         """Load all hot tables from the database into Polars DataFrames."""
-        print("[DataAccessService] Loading all tables from database...")
+        logger.info("Loading all tables from database")
         
         loop = asyncio.get_running_loop()
         
         # Load players table
-        print("[DataAccessService]   Loading players...")
+        logger.debug("Loading players table")
         players_data = await loop.run_in_executor(None, self._db_reader.get_all_players)
         if players_data:
             self._players_df = pl.DataFrame(players_data, infer_schema_length=None)
@@ -176,10 +181,10 @@ class DataAccessService:
                 "country": pl.Series([], dtype=pl.Utf8),
                 "remaining_aborts": pl.Series([], dtype=pl.Int32),
             })
-        print(f"[DataAccessService]   Players loaded: {len(self._players_df)} rows")
+        logger.debug("Players table loaded", extra={"row_count": len(self._players_df)})
         
         # Load mmrs_1v1 table
-        print("[DataAccessService]   Loading mmrs_1v1...")
+        logger.debug("Loading mmrs_1v1 table")
         mmrs_data = await loop.run_in_executor(
             None, 
             self._db_reader.get_leaderboard_1v1,
@@ -201,10 +206,10 @@ class DataAccessService:
                 "games_lost": pl.Series([], dtype=pl.Int64),
                 "games_drawn": pl.Series([], dtype=pl.Int64),
             })
-        print(f"[DataAccessService]   MMRs loaded: {len(self._mmrs_df)} rows")
+        logger.debug("MMRs table loaded", extra={"row_count": len(self._mmrs_df)})
         
         # Load preferences_1v1 table
-        print("[DataAccessService]   Loading preferences_1v1...")
+        logger.debug("Loading preferences_1v1 table")
         # Load all preferences (should be one row per player at most)
         prefs_data = await loop.run_in_executor(
             None,
@@ -220,10 +225,10 @@ class DataAccessService:
                 "last_chosen_races": pl.Series([], dtype=pl.Utf8),
                 "last_chosen_vetoes": pl.Series([], dtype=pl.Utf8),
             })
-        print(f"[DataAccessService]   Preferences loaded: {len(self._preferences_df)} rows")
+        logger.debug("Preferences table loaded", extra={"row_count": len(self._preferences_df)})
         
         # Load matches_1v1 table
-        print("[DataAccessService]   Loading matches_1v1...")
+        logger.debug("Loading matches_1v1 table")
         # Load recent matches only (last 1000) to keep memory usage reasonable
         matches_data = await loop.run_in_executor(
             None,
@@ -261,10 +266,10 @@ class DataAccessService:
                 "player_2_replay_time": pl.Series([], dtype=pl.Utf8),
                 "status": pl.Series([], dtype=pl.Utf8),
             })
-        print(f"[DataAccessService]   Matches loaded: {len(self._matches_df)} rows")
+        logger.debug("Matches table loaded", extra={"row_count": len(self._matches_df)})
         
         # Load replays table
-        print("[DataAccessService]   Loading replays...")
+        logger.debug("Loading replays table")
         # Load recent replays only (last 1000)
         # Note: replays table may not have uploaded_at, use ID ordering
         replays_data = await loop.run_in_executor(
@@ -280,7 +285,7 @@ class DataAccessService:
                 "id": pl.Series([], dtype=pl.Int64),
                 "replay_path": pl.Series([], dtype=pl.Utf8),
             })
-        print(f"[DataAccessService]   Replays loaded: {len(self._replays_df)} rows")
+        logger.debug("Replays table loaded", extra={"row_count": len(self._replays_df)})
     
     async def _recover_pending_writes(self) -> None:
         """
@@ -289,15 +294,15 @@ class DataAccessService:
         This is called during initialization to ensure writes from a previous
         run that didn't complete are processed, preventing data loss.
         """
-        print("[DataAccessService] Checking for pending writes from previous run...")
+        logger.info("Checking for pending writes from previous run")
         
         pending_jobs = self._write_log.get_pending_jobs(limit=1000)
         
         if not pending_jobs:
-            print("[DataAccessService] No pending writes found")
+            logger.info("No pending writes found")
             return
         
-        print(f"[DataAccessService] Found {len(pending_jobs)} pending writes, processing...")
+        logger.info("Found pending writes from previous run", extra={"pending_count": len(pending_jobs)})
         
         for job_id, job in pending_jobs:
             try:
@@ -305,15 +310,15 @@ class DataAccessService:
                 self._write_log.mark_completed(job_id)
                 self._total_writes_completed += 1
             except Exception as e:
-                print(f"[DataAccessService] ERROR recovering write job {job_id}: {e}")
+                logger.error("Error recovering write job", extra={"job_id": job_id, "error": str(e)})
                 retry_count = self._write_log.increment_retry_count(job_id)
                 
                 # After 3 retries, mark as failed
                 if retry_count >= 3:
                     self._write_log.mark_failed(job_id, str(e))
-                    print(f"[DataAccessService] Write job {job_id} marked as FAILED after {retry_count} retries")
+                    logger.warning("Write job marked as FAILED after max retries", extra={"job_id": job_id, "retry_count": retry_count})
         
-        print(f"[DataAccessService] Startup recovery complete")
+        logger.info("Startup recovery complete")
     
     async def _db_writer_worker(self) -> None:
         """
@@ -322,7 +327,7 @@ class DataAccessService:
         This runs continuously until shutdown, polling the persistent write log
         for pending jobs and processing them. This ensures durability across restarts.
         """
-        print("[DataAccessService] Database write worker started")
+        logger.info("Database write worker started")
         
         while not self._shutdown_event.is_set():
             try:
@@ -346,25 +351,25 @@ class DataAccessService:
                         self._write_log.mark_completed(job_id)
                         self._total_writes_completed += 1
                     except Exception as e:
-                        print(f"[DataAccessService] ERROR processing write job {job_id}: {e}")
+                        logger.error("Error processing write job", extra={"job_id": job_id, "error": str(e)})
                         retry_count = self._write_log.increment_retry_count(job_id)
                         
                         # After 3 retries, mark as failed
                         if retry_count >= 3:
                             self._write_log.mark_failed(job_id, str(e))
-                            print(f"[DataAccessService] Write job {job_id} marked as FAILED after {retry_count} retries")
+                            logger.warning("Write job marked as FAILED after max retries", extra={"job_id": job_id, "retry_count": retry_count})
                 
                 # Log if queue is backing up
                 if current_size > 10:
-                    print(f"[DataAccessService] WARNING: Write queue backed up: {current_size} jobs pending")
+                    logger.warning("Write queue backed up", extra={"pending_jobs": current_size})
                 
             except Exception as e:
-                print(f"[DataAccessService] ERROR in write worker: {e}")
+                logger.error("Error in write worker", exc_info=True)
                 import traceback
                 traceback.print_exc()
                 await asyncio.sleep(1.0)
         
-        print("[DataAccessService] Database write worker stopped")
+        logger.info("Database write worker stopped")
     
     async def _process_write_job(self, job: WriteJob) -> None:
         """
@@ -526,23 +531,23 @@ class DataAccessService:
                             break  # Only process this once per job
             
             elif job.job_type == WriteJobType.UPDATE_MATCH_MMR_CHANGE:
-                print(f"[DataAccessService] Processing UPDATE_MATCH_MMR_CHANGE: match_id={job.data['match_id']}, mmr_change={job.data['mmr_change']}")
+                logger.debug("Processing UPDATE_MATCH_MMR_CHANGE", extra={"match_id": job.data['match_id'], "mmr_change": job.data['mmr_change']})
                 result = await loop.run_in_executor(
                     None,
                     self._db_writer.update_match_mmr_change,
                     job.data['match_id'],
                     job.data['mmr_change']
                 )
-                print(f"[DataAccessService] UPDATE_MATCH_MMR_CHANGE result: {result}")
+                logger.debug("UPDATE_MATCH_MMR_CHANGE completed", extra={"result": result})
             
             elif job.job_type == WriteJobType.INSERT_REPLAY:
-                print(f"[DataAccessService] Processing INSERT_REPLAY: replay_hash={job.data.get('replay_hash', 'unknown')}")
+                logger.debug("Processing INSERT_REPLAY", extra={"replay_hash": job.data.get('replay_hash', 'unknown')})
                 result = await loop.run_in_executor(
                     None,
                     self._db_writer.insert_replay,
                     job.data
                 )
-                print(f"[DataAccessService] INSERT_REPLAY result: {result}")
+                logger.debug("INSERT_REPLAY completed", extra={"result": result})
             
             elif job.job_type == WriteJobType.INSERT_COMMAND_CALL:
                 await loop.run_in_executor(
@@ -575,10 +580,10 @@ class DataAccessService:
             
             # Add other job types as we implement them
             else:
-                print(f"[DataAccessService] WARNING: Unknown job type: {job.job_type}")
+                logger.warning("Unknown job type", extra={"job_type": job.job_type})
         
         except Exception as e:
-            print(f"[DataAccessService] ERROR: Failed to process write job {job.job_type}: {e}")
+            logger.error("Failed to process write job", extra={"job_type": job.job_type, "error": str(e)})
             
             # Implement retry mechanism for failed writes
             if not hasattr(job, 'retry_count'):
@@ -588,7 +593,7 @@ class DataAccessService:
             max_retries = 3
             
             if job.retry_count <= max_retries:
-                print(f"[DataAccessService] Retrying write job {job.job_type} (attempt {job.retry_count}/{max_retries})")
+                logger.info("Retrying write job", extra={"job_type": job.job_type, "attempt": job.retry_count, "max_retries": max_retries})
                 # Re-queue the job for retry
                 self._write_log.enqueue(job)
             else:
@@ -625,7 +630,7 @@ class DataAccessService:
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry) + "\n")
         
-        print(f"[DataAccessService] CRITICAL: Write job {job.job_type} failed after {getattr(job, 'retry_count', 0)} retries. Logged to {log_file}")
+        logger.fatal("Write job failed after max retries", extra={"job_type": job.job_type, "retry_count": getattr(job, 'retry_count', 0), "log_file": log_file})
     
     async def shutdown(self) -> None:
         """
@@ -633,18 +638,19 @@ class DataAccessService:
         
         This should be called during bot shutdown.
         """
-        print("[DataAccessService] Shutting down...")
+        logger.info("Shutting down DataAccessService")
         
         # Signal shutdown
         self._shutdown_event.set()
         
-        # Wait for write queue to drain (with timeout)
-        queue_size = self._write_queue.qsize()
+        # Wait for write log to drain (with timeout)
+        pending_jobs = self._write_log.get_pending_jobs(limit=1000)
+        queue_size = len(pending_jobs)
         if queue_size > 0:
-            print(f"[DataAccessService] Waiting for {queue_size} pending writes to complete...")
+            logger.info("Waiting for pending writes to complete", extra={"queue_size": queue_size})
             timeout = 30  # 30 second timeout
             start = time.time()
-            while self._write_queue.qsize() > 0 and (time.time() - start) < timeout:
+            while len(self._write_log.get_pending_jobs(limit=1000)) > 0 and (time.time() - start) < timeout:
                 await asyncio.sleep(0.1)
         
         # Cancel worker task
@@ -656,11 +662,11 @@ class DataAccessService:
                     # Wait for the task to acknowledge cancellation
                     await asyncio.wait_for(self._writer_task, timeout=5.0)
                 except asyncio.CancelledError:
-                    print("[DataAccessService] Writer task cancelled successfully.")
+                    logger.info("Writer task cancelled successfully")
                 except asyncio.TimeoutError:
-                    print("[DataAccessService] WARN: Timeout waiting for writer task to cancel.")
+                    logger.warning("Timeout waiting for writer task to cancel")
                 except Exception as e:
-                    print(f"[DataAccessService] ERROR during writer task shutdown: {e}")
+                    logger.error("Error during writer task shutdown", exc_info=True)
             else:
                 # Fallback if loop is not running or not set
                 self._writer_task.cancel()
@@ -670,10 +676,11 @@ class DataAccessService:
                     pass  # Expected
         
         # Print stats
-        print(f"[DataAccessService] Shutdown complete")
-        print(f"[DataAccessService]   Total writes queued: {self._total_writes_queued}")
-        print(f"[DataAccessService]   Total writes completed: {self._total_writes_completed}")
-        print(f"[DataAccessService]   Peak queue size: {self._write_queue_size_peak}")
+        logger.info("Shutdown complete", extra={
+            "total_writes_queued": self._total_writes_queued,
+            "total_writes_completed": self._total_writes_completed,
+            "peak_queue_size": self._write_queue_size_peak
+        })
     
     # ========== Read Methods (Players Table) ==========
     
@@ -690,7 +697,7 @@ class DataAccessService:
             Player data dictionary or None if not found
         """
         if self._players_df is None:
-            print("[DataAccessService] WARNING: Players DataFrame not initialized")
+            logger.warning("Players DataFrame not initialized")
             return None
         
         result = self._players_df.filter(pl.col("discord_uid") == discord_uid)
@@ -747,7 +754,7 @@ class DataAccessService:
             MMR value or None if not found
         """
         if self._mmrs_df is None:
-            print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
+            logger.warning("MMRs DataFrame not initialized")
             return None
         
         result = self._mmrs_df.filter(
@@ -772,7 +779,7 @@ class DataAccessService:
             Dict mapping race code to MMR value
         """
         if self._mmrs_df is None:
-            print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
+            logger.warning("MMRs DataFrame not initialized")
             return {}
         
         result = self._mmrs_df.filter(pl.col("discord_uid") == discord_uid)
@@ -800,7 +807,7 @@ class DataAccessService:
             Polars DataFrame with complete leaderboard data, or None if not initialized
         """
         if self._mmrs_df is None or self._players_df is None:
-            print("[DataAccessService] WARNING: DataFrames not initialized")
+            logger.warning("DataFrames not initialized")
             return None
         
         # Join MMRs with Players data to get complete leaderboard information
@@ -869,13 +876,13 @@ class DataAccessService:
         """
         try:
             if self._matches_df is None:
-                print(f"[DataAccessService] Matches DataFrame not initialized")
+                logger.warning("Matches DataFrame not initialized")
                 return False
             
             # Get match data to verify player is in this match
             match = self.get_match(match_id)
             if not match:
-                print(f"[DataAccessService] Match {match_id} not found")
+                logger.warning("Match not found", extra={"match_id": match_id})
                 return False
             
             p1_discord_uid = match.get('player_1_discord_uid')
@@ -887,7 +894,7 @@ class DataAccessService:
             elif player_discord_uid == p2_discord_uid:
                 report_column = "player_2_report"
             else:
-                print(f"[DataAccessService] Player {player_discord_uid} not in match {match_id}")
+                logger.warning("Player not in match", extra={"player_discord_uid": player_discord_uid, "match_id": match_id})
                 return False
             
             # Update the report in memory
@@ -898,7 +905,7 @@ class DataAccessService:
                   .alias(report_column)
             ])
             
-            print(f"[DataAccessService] Updated {report_column} to {report_value} for match {match_id}")
+            logger.info("Updated match report", extra={"report_column": report_column, "report_value": report_value, "match_id": match_id})
             
             # Queue database write
             job = WriteJob(
@@ -918,7 +925,7 @@ class DataAccessService:
             return True
             
         except Exception as e:
-            print(f"[DataAccessService] Error updating match report: {e}")
+            logger.error("Error updating match report", exc_info=True)
             import traceback
             traceback.print_exc()
             return False
@@ -939,13 +946,13 @@ class DataAccessService:
             True if successful, False if player not found
         """
         if self._players_df is None:
-            print("[DataAccessService] WARNING: Players DataFrame not initialized")
+            logger.warning("Players DataFrame not initialized")
             return False
         
         # Check if player exists
         mask = pl.col("discord_uid") == discord_uid
         if len(self._players_df.filter(mask)) == 0:
-            print(f"[DataAccessService] WARNING: Player {discord_uid} not found for abort update")
+            logger.warning("Player not found for abort update", extra={"discord_uid": discord_uid})
             return False
         
         # Update in-memory DataFrame
@@ -1001,13 +1008,13 @@ class DataAccessService:
             True if successful, False if player not found
         """
         if self._players_df is None:
-            print("[DataAccessService] WARNING: Players DataFrame not initialized")
+            logger.warning("Players DataFrame not initialized")
             return False
         
         # Check if player exists
         mask = pl.col("discord_uid") == discord_uid
         if len(self._players_df.filter(mask)) == 0:
-            print(f"[DataAccessService] WARNING: Player {discord_uid} not found for update")
+            logger.warning("Player not found for update", extra={"discord_uid": discord_uid})
             return False
         
         # Build update expressions for each field
@@ -1084,12 +1091,12 @@ class DataAccessService:
             True if successful, False if player already exists
         """
         if self._players_df is None:
-            print("[DataAccessService] WARNING: Players DataFrame not initialized")
+            logger.warning("Players DataFrame not initialized")
             return False
         
         # Check if player already exists
         if self.player_exists(discord_uid):
-            print(f"[DataAccessService] WARNING: Player {discord_uid} already exists")
+            logger.warning("Player already exists", extra={"discord_uid": discord_uid})
             return False
         
         # Create new row
@@ -1123,7 +1130,7 @@ class DataAccessService:
         self._write_log.enqueue(job)
         self._total_writes_queued += 1
         
-        print(f"[DataAccessService] Created player {discord_uid} ({discord_username})")
+        logger.info("Created player", extra={"discord_uid": discord_uid, "discord_username": discord_username})
         return True
     
     # ========== Write Methods (MMRs Table) ==========
@@ -1156,13 +1163,13 @@ class DataAccessService:
             True if successful, False if record not found
         """
         if self._mmrs_df is None:
-            print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
+            logger.warning("MMRs DataFrame not initialized")
             return False
         
         # Check if record exists
         mask = (pl.col("discord_uid") == discord_uid) & (pl.col("race") == race)
         if len(self._mmrs_df.filter(mask)) == 0:
-            print(f"[DataAccessService] WARNING: MMR record not found for {discord_uid}/{race}")
+            logger.warning("MMR record not found", extra={"discord_uid": discord_uid, "race": race})
             return False
         
         # Build update expressions
@@ -1237,7 +1244,7 @@ class DataAccessService:
             True if successful
         """
         if self._mmrs_df is None:
-            print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
+            logger.warning("MMRs DataFrame not initialized")
             return False
         
         # Ensure MMR is an integer
@@ -1306,7 +1313,7 @@ class DataAccessService:
             Dictionary with preference data or None if not found
         """
         if self._preferences_df is None:
-            print("[DataAccessService] WARNING: Preferences DataFrame not initialized")
+            logger.warning("Preferences DataFrame not initialized")
             return None
         
         result = self._preferences_df.filter(pl.col("discord_uid") == discord_uid)
@@ -1365,7 +1372,7 @@ class DataAccessService:
             True if successful
         """
         if self._preferences_df is None:
-            print("[DataAccessService] WARNING: Preferences DataFrame not initialized")
+            logger.warning("Preferences DataFrame not initialized")
             return False
         
         if last_chosen_races is None and last_chosen_vetoes is None:
@@ -1513,7 +1520,7 @@ class DataAccessService:
                 try:
                     self._matches_df = pl.concat([new_row, self._matches_df], how="diagonal_relaxed")
                 except Exception as e:
-                    print(f"[DataAccessService] Error concatenating match: {e}")
+                    logger.error("Error concatenating match", exc_info=True)
                     # Fallback: recreate the match dataframe with the new row
                     self._matches_df = pl.concat([new_row, self._matches_df], how="diagonal")
                 # Keep only recent 1000 matches
@@ -1531,7 +1538,7 @@ class DataAccessService:
     ) -> bool:
         """Update replay information for a match with immediate in-memory update."""
         if self._matches_df is None:
-            print("[DataAccessService] WARNING: Matches DataFrame not initialized")
+            logger.warning("Matches DataFrame not initialized")
             return False
         
         # Update in-memory immediately
@@ -1539,7 +1546,7 @@ class DataAccessService:
             # Find the match and which player uploaded
             match_row = self._matches_df.filter(pl.col("id") == match_id)
             if len(match_row) == 0:
-                print(f"[DataAccessService] WARNING: Match {match_id} not found in memory")
+                logger.warning("Match not found in memory", extra={"match_id": match_id})
                 # Still queue the write for the database
             else:
                 match_data = match_row.to_dicts()[0]
@@ -1552,7 +1559,7 @@ class DataAccessService:
                     replay_col = 'player_2_replay_path'
                     time_col = 'player_2_replay_time'
                 else:
-                    print(f"[DataAccessService] WARNING: Player {player_discord_uid} not in match {match_id}")
+                    logger.warning("Player not in match", extra={"player_discord_uid": player_discord_uid, "match_id": match_id})
                     replay_col = None
                 
                 if replay_col:
@@ -1567,10 +1574,10 @@ class DataAccessService:
                           .otherwise(pl.col(time_col))
                           .alias(time_col)
                     ])
-                    print(f"[DataAccessService] Updated match {match_id} replay in memory ({replay_col})")
+                    logger.info("Updated match replay in memory", extra={"match_id": match_id, "replay_col": replay_col})
         
         except Exception as e:
-            print(f"[DataAccessService] Error updating match replay in memory: {e}")
+            logger.error("Error updating match replay in memory", exc_info=True)
             import traceback
             traceback.print_exc()
         
@@ -1694,13 +1701,13 @@ class DataAccessService:
             # Get match data from memory first - DataAccessService is source of truth
             match = self.get_match(match_id)
             if not match:
-                print(f"[DataAccessService] Match {match_id} not found in memory")
+                logger.warning("Match not found in memory", extra={"match_id": match_id})
                 return False
             
             # Check status first to prevent race conditions
             current_status = match.get('status', 'IN_PROGRESS')
             if current_status != 'IN_PROGRESS':
-                print(f"[DataAccessService] Match {match_id} has status {current_status}, cannot abort")
+                logger.warning("Match has status that prevents abort", extra={"match_id": match_id, "current_status": current_status})
                 # Return True if already aborted, False for other states
                 return current_status == 'ABORTED'
             
@@ -1709,13 +1716,13 @@ class DataAccessService:
             
             # Verify player is in this match
             if player_discord_uid not in [p1_discord_uid, p2_discord_uid]:
-                print(f"[DataAccessService] Player {player_discord_uid} not in match {match_id}")
+                logger.warning("Player not in match", extra={"player_discord_uid": player_discord_uid, "match_id": match_id})
                 return False
             
             # Check if match is already aborted (legacy check)
             match_result = match.get('match_result')
             if match_result == -1:
-                print(f"[DataAccessService] Match {match_id} already aborted, treating as success for player {player_discord_uid}")
+                logger.info("Match already aborted, treating as success", extra={"match_id": match_id, "player_discord_uid": player_discord_uid})
                 # Don't decrement aborts again, but return success so the UI updates correctly
                 return True
             
@@ -1723,7 +1730,7 @@ class DataAccessService:
             current_aborts = self.get_remaining_aborts(player_discord_uid)
             if current_aborts > 0:
                 await self.update_remaining_aborts(player_discord_uid, current_aborts - 1)
-                print(f"[DataAccessService] Decremented aborts for player {player_discord_uid}: {current_aborts} -> {current_aborts - 1}")
+                logger.info("Decremented aborts for player", extra={"player_discord_uid": player_discord_uid, "old_count": current_aborts, "new_count": current_aborts - 1})
             
             # Update match state in memory immediately
             # - Set aborting player's report to -3 (to identify them)
@@ -1747,7 +1754,7 @@ class DataAccessService:
                       .otherwise(pl.col("match_result"))
                       .alias("match_result")
                 ])
-                print(f"[DataAccessService] Updated match {match_id} state to aborted in memory (aborting player: {player_discord_uid})")
+                logger.info("Updated match state to aborted in memory", extra={"match_id": match_id, "aborting_player": player_discord_uid})
             
             # Queue the actual abort operation to database (async)
             job = WriteJob(
@@ -1766,7 +1773,7 @@ class DataAccessService:
             return True
             
         except Exception as e:
-            print(f"[DataAccessService] Error aborting match {match_id}: {e}")
+            logger.error("Error aborting match", extra={"match_id": match_id}, exc_info=True)
             import traceback
             traceback.print_exc()
             return False
@@ -1783,7 +1790,7 @@ class DataAccessService:
             True if updated successfully
         """
         if self._matches_df is None:
-            print("[DataAccessService] WARNING: Matches DataFrame not initialized")
+            logger.warning("Matches DataFrame not initialized")
             return False
         
         try:
@@ -1798,7 +1805,7 @@ class DataAccessService:
                             .otherwise(pl.col(key))
                             .alias(key)
                         )
-                        print(f"[DataAccessService] Updated match {match_id} {key} to {value} in memory")
+                        logger.debug("Updated match field in memory", extra={"match_id": match_id, "field": key, "value": value})
             
             # Queue database write
             job = WriteJob(
@@ -1815,7 +1822,7 @@ class DataAccessService:
             return True
             
         except Exception as e:
-            print(f"[DataAccessService] Error updating match {match_id}: {e}")
+            logger.error("Error updating match", extra={"match_id": match_id}, exc_info=True)
             import traceback
             traceback.print_exc()
             return False
@@ -1835,13 +1842,13 @@ class DataAccessService:
             True if updated successfully
         """
         if self._matches_df is None:
-            print("[DataAccessService] WARNING: Matches DataFrame not initialized")
+            logger.warning("Matches DataFrame not initialized")
             return False
         
         try:
             # Check if match exists
             if len(self._matches_df.filter(pl.col("id") == match_id)) == 0:
-                print(f"[DataAccessService] WARNING: Match {match_id} not found in memory")
+                logger.warning("Match not found in memory", extra={"match_id": match_id})
                 return False
             
             # Update status in-memory immediately (atomic operation)
@@ -1852,11 +1859,11 @@ class DataAccessService:
                 .alias("status")
             )
             
-            print(f"[DataAccessService] Updated match {match_id} status to {new_status} in memory")
+            logger.info("Updated match status in memory", extra={"match_id": match_id, "new_status": new_status})
             return True
             
         except Exception as e:
-            print(f"[DataAccessService] Error updating match {match_id} status: {e}")
+            logger.error("Error updating match status", extra={"match_id": match_id}, exc_info=True)
             import traceback
             traceback.print_exc()
             return False
@@ -1889,7 +1896,7 @@ class DataAccessService:
             return True
             
         except Exception as e:
-            print(f"[DataAccessService] Error queuing match MMR change update: {e}")
+            logger.error("Error queuing match MMR change update", exc_info=True)
             import traceback
             traceback.print_exc()
             return False
