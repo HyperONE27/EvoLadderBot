@@ -373,6 +373,13 @@ class JoinQueueButton(discord.ui.Button):
         # Store the interaction so we can update the message when match is found
         searching_view.set_interaction(interaction)
         
+        # Capture channel and message ID for persistent tracking
+        flow.checkpoint("capture_message_context")
+        searching_view.channel = interaction.channel
+        original_message = await interaction.original_response()
+        searching_view.message_id = original_message.id
+        flow.checkpoint("capture_message_context_complete")
+        
         flow.complete("success")
 
 
@@ -558,7 +565,8 @@ class QueueSearchingView(discord.ui.View):
         self.status_task: Optional[asyncio.Task] = None
         self.match_task: Optional[asyncio.Task] = None
         self.status_lock = asyncio.Lock()
-        self.last_interaction = None
+        self.channel: Optional[discord.TextChannel] = None
+        self.message_id: Optional[int] = None
         
         # Add cancel button
         self.add_item(CancelQueueButton(original_view, player))
@@ -644,19 +652,16 @@ class QueueSearchingView(discord.ui.View):
             embed = await loop.run_in_executor(None, match_view.get_embed)
             flow.checkpoint("generate_match_embed_complete")
             
+            # Propagate channel and message ID to the match view for persistent tracking
+            match_view.channel = self.channel
+            match_view.original_message_id = self.message_id
+            
             # Edit the existing searching message to show the match view
             flow.checkpoint("edit_to_match_view")
             await self.last_interaction.edit_original_response(
                 embed=embed,
                 view=match_view
             )
-            
-            # Store channel and message ID for future edits using bot token
-            match_view.channel = self.last_interaction.channel
-            
-            # Get the message ID by fetching the original response
-            original_message = await self.last_interaction.original_response()
-            match_view.original_message_id = original_message.id
             
             # Register for replay detection
             await match_view.register_for_replay_detection(self.last_interaction.channel_id)
@@ -1218,16 +1223,10 @@ class MatchFoundView(discord.ui.View):
             self.disable_all_components()
 
             flow.checkpoint("update_abort_embed_start")
-            # Update the embed with the abort information
+            # Update the embed with the abort information using bot token (persistent)
             async with self.edit_lock:
-                if self.last_interaction:
-                    try:
-                        await self.last_interaction.edit_original_response(
-                            embed=self.get_embed(),
-                            view=self
-                        )
-                    except discord.HTTPException:
-                        pass  # Non-critical if this fails, the main state is updated
+                embed = self.get_embed()
+                await self._edit_original_message(embed, self)
             flow.checkpoint("update_abort_embed_complete")
 
             flow.checkpoint("send_abort_embed_start")
@@ -1250,11 +1249,8 @@ class MatchFoundView(discord.ui.View):
             
             flow.checkpoint("update_conflict_embed_start")
             async with self.edit_lock:
-                if self.last_interaction:
-                    await self.last_interaction.edit_original_response(
-                        embed=self.get_embed(),
-                        view=self
-                    )
+                embed = self.get_embed()
+                await self._edit_original_message(embed, self)
             flow.checkpoint("update_conflict_embed_complete")
 
             flow.checkpoint("send_conflict_embed_start")
@@ -1269,7 +1265,7 @@ class MatchFoundView(discord.ui.View):
         
     async def _send_final_notification_embed(self, final_results: dict):
         """Creates and sends the final gold embed notification."""
-        if not self.last_interaction:
+        if not self.channel:
             return
 
         p1_info = final_results['p1_info']
@@ -1319,13 +1315,13 @@ class MatchFoundView(discord.ui.View):
         )
         
         try:
-            await self.last_interaction.followup.send(embed=notification_embed, ephemeral=False)
+            await self.channel.send(embed=notification_embed)
         except discord.HTTPException as e:
             print(f"Error sending final notification for match {self.match_result.match_id}: {e}")
 
     async def _send_conflict_notification_embed(self):
         """Sends a new follow-up message indicating a match conflict."""
-        if not self.last_interaction:
+        if not self.channel:
             return
             
         conflict_embed = discord.Embed(
@@ -1334,13 +1330,13 @@ class MatchFoundView(discord.ui.View):
             color=discord.Color.red()
         )
         try:
-            await self.last_interaction.followup.send(embed=conflict_embed, ephemeral=False)
+            await self.channel.send(embed=conflict_embed)
         except discord.HTTPException as e:
             print(f"Error sending conflict notification for match {self.match_result.match_id}: {e}")
 
     async def _send_abort_notification_embed(self):
         """Sends a follow-up message indicating the match was aborted."""
-        if not self.last_interaction:
+        if not self.channel:
             return
 
         # Get match data from DataAccessService (in-memory, instant)
@@ -1400,7 +1396,7 @@ class MatchFoundView(discord.ui.View):
         )
 
         try:
-            await self.last_interaction.followup.send(embed=abort_embed, ephemeral=False)
+            await self.channel.send(embed=abort_embed)
         except discord.HTTPException as e:
             print(f"Error sending abort notification for match {self.match_result.match_id}: {e}")
 

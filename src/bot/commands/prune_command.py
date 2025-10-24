@@ -225,10 +225,36 @@ async def prune_command(interaction: discord.Interaction):
         await send_ephemeral_response(interaction, embed=error_embed)
         return
     
-    # Defer the response since this might take a while
-    flow.checkpoint("response_start")
-    # Removed defer() - system is now fast enough that Discord's loading indicator provides better UX
-    flow.checkpoint("response_complete")
+    # Defer immediately to acknowledge within 3 seconds
+    flow.checkpoint("defer_start")
+    await interaction.response.defer(ephemeral=False)
+    flow.checkpoint("defer_complete")
+    
+    # Now send the analyzing message (this can take time but we're already deferred)
+    flow.checkpoint("send_analyzing_start")
+    analyzing_embed = discord.Embed(
+        title="🗑️ Analyzing Messages...",
+        description="Scanning your message history for old bot messages that can be safely deleted.",
+        color=discord.Color.blue()
+    )
+    
+    # Create a view with disabled buttons as a placeholder
+    placeholder_view = discord.ui.View(timeout=GLOBAL_TIMEOUT)
+    confirm_button_placeholder = discord.ui.Button(
+        label="Confirm Deletion",
+        style=discord.ButtonStyle.danger,
+        disabled=True
+    )
+    cancel_button_placeholder = discord.ui.Button(
+        label="Cancel",
+        style=discord.ButtonStyle.secondary,
+        disabled=True
+    )
+    placeholder_view.add_item(confirm_button_placeholder)
+    placeholder_view.add_item(cancel_button_placeholder)
+    
+    initial_message = await interaction.followup.send(embed=analyzing_embed, view=placeholder_view, ephemeral=False, wait=True)
+    flow.checkpoint("send_analyzing_complete")
     
     # Get the channel (DM-only enforced by centralized system)
     channel = interaction.channel
@@ -244,27 +270,26 @@ async def prune_command(interaction: discord.Interaction):
     messages_to_delete: List[discord.Message] = []
     bot_user_id = interaction.client.user.id
     
+    # Track message counts by type
+    message_counts = {
+        "total": 0,
+        "bot_messages": 0,
+        "protected_legacy": 0,
+        "protected_prune": 0,
+        "protected_recent": 0,
+        "protected_queue": 0,
+        "to_delete": 0
+    }
+    
+    # Track message IDs by type for detailed logging
+    protected_legacy_ids = []
+    protected_prune_ids = []
+    protected_recent_ids = []
+    protected_queue_ids = []
+    delete_ids = []
+    
     try:
         # Fetch up to 100 messages (Discord limit)
-        total_messages = 0
-        # Track message counts by type
-        message_counts = {
-            "total": 0,
-            "bot_messages": 0,
-            "protected_legacy": 0,
-            "protected_prune": 0,
-            "protected_recent": 0,
-            "protected_queue": 0,
-            "to_delete": 0
-        }
-        
-        # Track message IDs by type for detailed logging
-        protected_legacy_ids = []
-        protected_prune_ids = []
-        protected_recent_ids = []
-        protected_queue_ids = []
-        delete_ids = []
-        
         async for message in channel.history(limit=100):
             message_counts["total"] += 1
             
@@ -327,7 +352,7 @@ async def prune_command(interaction: discord.Interaction):
             description="I don't have permission to read message history in this channel.",
             color=discord.Color.red()
         )
-        await interaction.followup.send(embed=error_embed, ephemeral=False)
+        await initial_message.edit(embed=error_embed, view=None)
         flow.complete("permission_error")
         return
     except discord.HTTPException as e:
@@ -336,7 +361,7 @@ async def prune_command(interaction: discord.Interaction):
             description=f"Failed to fetch messages: {str(e)}",
             color=discord.Color.red()
         )
-        await interaction.followup.send(embed=error_embed, ephemeral=False)
+        await initial_message.edit(embed=error_embed, view=None)
         flow.complete("fetch_error")
         return
     
@@ -349,7 +374,7 @@ async def prune_command(interaction: discord.Interaction):
             description="No bot messages found that can be safely deleted.\n\nQueue-related messages less than a week old are automatically protected.",
             color=discord.Color.blue()
         )
-        await interaction.followup.send(embed=info_embed, ephemeral=False)
+        await initial_message.edit(embed=info_embed, view=None)
         flow.complete("no_messages")
         return
     
@@ -393,7 +418,8 @@ async def prune_command(interaction: discord.Interaction):
     
     # Define the confirm callback
     async def confirm_deletion(confirm_interaction: discord.Interaction):
-        # Removed defer() - system is now fast enough that Discord's loading indicator provides better UX
+        # Acknowledge the button click
+        await confirm_interaction.response.defer()
         
         # Show progress embed immediately
         progress_embed = discord.Embed(
@@ -507,7 +533,7 @@ async def prune_command(interaction: discord.Interaction):
     for button in buttons:
         confirm_view.add_item(button)
     
-    # Send confirmation prompt
-    await interaction.followup.send(embed=confirm_embed, view=confirm_view, ephemeral=False)
+    # Update the message with the actual confirmation prompt and enabled buttons
+    await initial_message.edit(embed=confirm_embed, view=confirm_view)
     flow.complete("awaiting_confirmation")
 

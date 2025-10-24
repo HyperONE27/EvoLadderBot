@@ -32,8 +32,12 @@ def mock_interaction():
     interaction.response.defer = AsyncMock()
     interaction.response.send_message = AsyncMock()
     
+    # Create a mock for the message returned by followup.send
+    mock_initial_message = AsyncMock(spec=discord.WebhookMessage)
+    mock_initial_message.edit = AsyncMock()
+    
     interaction.followup = AsyncMock()
-    interaction.followup.send = AsyncMock()
+    interaction.followup.send = AsyncMock(return_value=mock_initial_message)
     
     interaction.edit_original_response = AsyncMock()
     
@@ -114,7 +118,7 @@ async def test_prune_sends_immediate_followup(mock_interaction, mock_bot_message
 async def test_prune_handles_no_messages(mock_interaction):
     """
     Verifies the flow when no messages are found to be pruned.
-    Should send a clean "No messages to prune" message.
+    Should send initial "Analyzing..." message, then edit to "No messages to prune" message.
     """
     async def mock_history(*args, **kwargs):
         return
@@ -129,18 +133,27 @@ async def test_prune_handles_no_messages(mock_interaction):
         
         await prune_command(mock_interaction)
     
+    # Verify initial "Analyzing..." message was sent
     mock_interaction.followup.send.assert_called_once()
-    call_args = mock_interaction.followup.send.call_args
-    embed = call_args.kwargs.get("embed")
+    initial_call_args = mock_interaction.followup.send.call_args
+    initial_embed = initial_call_args.kwargs.get("embed")
+    assert initial_embed is not None
+    assert "Analyzing Messages" in initial_embed.title
     
-    assert embed is not None
-    assert "No Messages to Prune" in embed.title or "No bot messages" in embed.description
+    # Verify final message was edited to "No Messages to Prune"
+    mock_initial_message = mock_interaction.followup.send.return_value
+    mock_initial_message.edit.assert_called_once()
+    final_call_args = mock_initial_message.edit.call_args
+    final_embed = final_call_args.kwargs.get("embed")
+    assert final_embed is not None
+    assert "No Messages to Prune" in final_embed.title
 
 
 @pytest.mark.asyncio
 async def test_prune_protects_queue_messages(mock_interaction, mock_bot_message):
     """
     Verifies that queue-related messages are protected from pruning.
+    Should send initial "Analyzing..." message, then edit to confirmation with 1 message.
     """
     old_queue_message = mock_bot_message(
         message_id=100002,
@@ -166,14 +179,19 @@ async def test_prune_protects_queue_messages(mock_interaction, mock_bot_message)
         
         await prune_command(mock_interaction)
     
-    # Verify confirmation embed sent (because there's at least 1 message to delete)
+    # Verify initial "Analyzing..." message was sent
     mock_interaction.followup.send.assert_called_once()
-    call_args = mock_interaction.followup.send.call_args
-    embed = call_args.kwargs.get("embed")
+    
+    # Verify final message was edited to confirmation
+    mock_initial_message = mock_interaction.followup.send.return_value
+    mock_initial_message.edit.assert_called_once()
+    final_call_args = mock_initial_message.edit.call_args
+    final_embed = final_call_args.kwargs.get("embed")
     
     # Should only offer to delete 1 message (the normal one)
     # The actual text uses markdown bold: **1 message(s)**
-    assert "1 message(s)" in embed.description and "will be deleted" in embed.description
+    assert final_embed is not None
+    assert "1 message(s)" in final_embed.description and "will be deleted" in final_embed.description
 
 
 @pytest.mark.asyncio
@@ -200,10 +218,14 @@ async def test_prune_confirmation_flow(mock_interaction, mock_bot_message):
         
         await prune_command(mock_interaction)
     
-    # Verify confirmation embed sent with view
+    # Verify initial "Analyzing..." message was sent
     mock_interaction.followup.send.assert_called_once()
-    call_args = mock_interaction.followup.send.call_args
-    view = call_args.kwargs.get("view")
+    
+    # Verify final message was edited to confirmation with view
+    mock_initial_message = mock_interaction.followup.send.return_value
+    mock_initial_message.edit.assert_called_once()
+    final_call_args = mock_initial_message.edit.call_args
+    view = final_call_args.kwargs.get("view")
     
     assert view is not None
     assert len(view.children) > 0
@@ -219,6 +241,8 @@ async def test_prune_confirmation_flow(mock_interaction, mock_bot_message):
     
     # Create a mock interaction for the button click
     confirm_interaction = AsyncMock(spec=discord.Interaction)
+    confirm_interaction.response = AsyncMock()
+    confirm_interaction.response.defer = AsyncMock()
     confirm_interaction.edit_original_response = AsyncMock()
     
     # Invoke the confirm callback
@@ -264,13 +288,18 @@ async def test_prune_protects_active_queue_message(mock_interaction, mock_bot_me
         
         await prune_command(mock_interaction)
     
-    # Verify confirmation embed sent
+    # Verify initial "Analyzing..." message was sent
     mock_interaction.followup.send.assert_called_once()
-    call_args = mock_interaction.followup.send.call_args
-    embed = call_args.kwargs.get("embed")
+    
+    # Verify final message was edited to confirmation
+    mock_initial_message = mock_interaction.followup.send.return_value
+    mock_initial_message.edit.assert_called_once()
+    final_call_args = mock_initial_message.edit.call_args
+    final_embed = final_call_args.kwargs.get("embed")
     
     # Should only offer to delete 1 message (the normal one, not the active queue message)
-    assert "1 message(s)" in embed.description and "will be deleted" in embed.description
+    assert final_embed is not None
+    assert "1 message(s)" in final_embed.description and "will be deleted" in final_embed.description
 
 
 @pytest.mark.asyncio
@@ -306,10 +335,15 @@ async def test_prune_protects_very_old_queue_message(mock_interaction, mock_bot_
         
         await prune_command(mock_interaction)
     
-    # Verify confirmation embed sent
+    # Verify initial "Analyzing..." message was sent
     mock_interaction.followup.send.assert_called_once()
-    call_args = mock_interaction.followup.send.call_args
-    embed = call_args.kwargs.get("embed")
+    
+    # Verify final message was edited to confirmation
+    mock_initial_message = mock_interaction.followup.send.return_value
+    mock_initial_message.edit.assert_called_once()
+    final_call_args = mock_initial_message.edit.call_args
+    final_embed = final_call_args.kwargs.get("embed")
     
     # Should offer to delete 2 messages (both the old queue message and normal message)
-    assert "2 message(s)" in embed.description and "will be deleted" in embed.description
+    assert final_embed is not None
+    assert "2 message(s)" in final_embed.description and "will be deleted" in final_embed.description
