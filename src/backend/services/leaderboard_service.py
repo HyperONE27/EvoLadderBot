@@ -24,6 +24,7 @@ from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import pickle
+import asyncio
 
 import polars as pl
 
@@ -149,6 +150,32 @@ class LeaderboardService:
             Dictionary containing players, pagination info, and totals
         """
         perf_start = time.time()
+        
+        # Perform on-demand cache refresh if cache was invalidated
+        if not self.data_service.is_leaderboard_cache_valid():
+            cache_refresh_start = time.time()
+            print("[LeaderboardService] Cache invalid - performing on-demand refresh")
+            
+            # Reload MMR data from database synchronously (one-time cost paid by this user)
+            # This ensures the next leaderboard request gets fresh data
+            loop = asyncio.get_running_loop()
+            mmrs_data = await loop.run_in_executor(
+                None,
+                self.data_service._db_reader.get_leaderboard_1v1,
+                None,  # race filter
+                None,  # country filter
+                10000,  # limit
+                0  # offset
+            )
+            
+            if mmrs_data:
+                self.data_service._mmrs_df = pl.DataFrame(mmrs_data, infer_schema_length=None)
+                print(f"[LeaderboardService] Reloaded {len(self.data_service._mmrs_df)} MMR records from database")
+            
+            # Mark cache as valid for subsequent requests
+            self.data_service.mark_leaderboard_cache_valid()
+            cache_refresh_time = (time.time() - cache_refresh_start) * 1000
+            print(f"[LeaderboardService] On-demand cache refresh completed in {cache_refresh_time:.2f}ms")
         
         # Get cached DataFrame (already has ranks computed)
         # DataAccessService provides data directly from memory

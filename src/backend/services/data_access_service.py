@@ -116,6 +116,9 @@ class DataAccessService:
         self._total_writes_queued = 0
         self._total_writes_completed = 0
         
+        # Leaderboard cache invalidation (event-driven)
+        self._leaderboard_cache_is_valid = False
+        
         self._init_done = True  # Mark that __init__ has completed
         print("[DataAccessService] Singleton initialized (DataFrames not loaded yet)")
     
@@ -846,6 +849,29 @@ class DataAccessService:
         print(f"[DataAccessService]   Total writes completed: {self._total_writes_completed}")
         print(f"[DataAccessService]   Peak queue size: {self._write_queue_size_peak}")
     
+    # ========== Leaderboard Cache Invalidation (Event-Driven) ==========
+    
+    def invalidate_leaderboard_cache(self) -> None:
+        """
+        Invalidate the leaderboard cache.
+        
+        This is called whenever MMR-adjusting operations occur (match completion, abort, etc).
+        The next call to get_leaderboard_data will refresh the cache on-demand.
+        
+        This design eliminates the need for a 60-second background refresh loop,
+        dramatically reducing idle CPU usage while maintaining data freshness.
+        """
+        self._leaderboard_cache_is_valid = False
+        print("[DataAccessService] Leaderboard cache invalidated (event-driven)")
+    
+    def is_leaderboard_cache_valid(self) -> bool:
+        """Check if the leaderboard cache is currently valid."""
+        return self._leaderboard_cache_is_valid
+    
+    def mark_leaderboard_cache_valid(self) -> None:
+        """Mark the leaderboard cache as valid after a refresh."""
+        self._leaderboard_cache_is_valid = True
+    
     # ========== Read Methods (Players Table) ==========
     
     def get_player_info(self, discord_uid: int) -> Optional[Dict[str, Any]]:
@@ -1377,6 +1403,9 @@ class DataAccessService:
         
         await self._queue_write(job)
         
+        # Invalidate leaderboard cache - MMR has changed
+        self.invalidate_leaderboard_cache()
+        
         return True
     
     async def create_or_update_mmr(
@@ -1461,6 +1490,9 @@ class DataAccessService:
         )
         
         await self._queue_write(job)
+        
+        # Invalidate leaderboard cache - MMR has changed
+        self.invalidate_leaderboard_cache()
         
         return True
     
@@ -1955,6 +1987,11 @@ class DataAccessService:
             
             await self._write_queue.put(job)
             self._total_writes_queued += 1
+            
+            # Invalidate leaderboard cache - abort may affect standings if replay uploads affect records
+            # Abort itself doesn't change MMR, but we invalidate to be safe for any side effects
+            self.invalidate_leaderboard_cache()
+            
             return True
             
         except Exception as e:
@@ -2037,6 +2074,10 @@ class DataAccessService:
             
             await self._write_queue.put(job)
             self._total_writes_queued += 1
+            
+            # Invalidate leaderboard cache - MMR change indicates match completion
+            self.invalidate_leaderboard_cache()
+            
             return True
             
         except Exception as e:

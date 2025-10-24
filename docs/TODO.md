@@ -100,12 +100,16 @@
 - ✅ Send a message to the user with this information when they upload a replay
 - ❌ Update the MatchFoundViewEmbed with this information
   - ✅ Send a new embed message with this information
+- ⏰ Check that uploaded replays comply with the match parameters
+  - ⏰ Throw a warning if the map link do not match exactly
+  - ⏰ Reject the replay outright if the wrong races are present
 
 ### System Hardening & Optimization
 - ✅ No 60-second leaderboard refresh loop, invalidate cache specifically only when services modify MMR
 - ✅ Remove synchronous leaderboard path (async path should not fall back to it)
 - ⏰ Implement a smarter prune protection algorithm than using string matching
-- ⏰ Implement frontend mock testing
+- ❓ Implement frontend mock testing
+  - ✅ Characterization/regression tests including simulation of frontend flows but not true UI mocking
 
 ### User Interface & Commands
 - ✅ Command guard: Fully decoupled command guarding errors from frontend
