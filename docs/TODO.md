@@ -115,6 +115,9 @@
 - ❌ Implement action deferral? And add loading bars + disable UI while waiting
   - ✅ Removed all action deferral, since the bot is now so fast that deferral hurts UX
 
+### MORE RANDOM BUGS???
+- ⏰ Accepting ToS does not properly record having accepted
+
 ## PRE-BETA
 
 - Command timeouts:

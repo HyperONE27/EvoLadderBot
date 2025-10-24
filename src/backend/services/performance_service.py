@@ -11,7 +11,7 @@ import sys
 from contextlib import contextmanager
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class FlowTracker:
         checkpoint = PerformanceCheckpoint(
             name=name,
             elapsed_ms=elapsed_ms,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             metadata=metadata or {}
         )
         self.checkpoints.append(checkpoint)

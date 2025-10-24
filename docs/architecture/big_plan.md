@@ -60,7 +60,8 @@ The current singleton pattern in `src/backend/services/data_access_service.py` i
         self._initialized = True
     ```
 4.  **Refactor Call Sites:** Systematically replace all calls from `DataAccessService()` to `await DataAccessService.get_instance()`.
-5.  **Measurement:** Create a test that spawns multiple coroutines (`asyncio.gather`) which all attempt to get the instance concurrently. Add logging inside the `_initialize` method and assert that the initialization log message appears exactly once.
+5.  **Mandate Eager Initialization:** The `await DataAccessService.get_instance()` method **must** be called once during the bot's main startup sequence (e.g., in `initialize_backend_services`). This ensures the service is fully loaded before any user commands are processed, preventing a "first request penalty" where a user's command hangs while the database is loaded. Do not use lazy-loading patterns where the service is initialized on its first use within a command.
+6.  **Measurement:** Create a test that spawns multiple coroutines (`asyncio.gather`) which all attempt to get the instance concurrently. Add logging inside the `_initialize` method and assert that the initialization log message appears exactly once.
 
 ---
 
@@ -202,32 +203,30 @@ Discord interactions (slash commands, button clicks) provide a temporary token t
 
 #### Measurable Remediation Plan
 
-1.  **Store Message Identifiers:** In the `MatchFoundView`, ensure both the `channel.id` and the `message.id` of the view are stored persistently. The `original_message_id` is already stored; we need to ensure the channel object or ID is reliably stored as well.
-2.  **Create a Robust Update Method:** Implement a helper method that abstracts the logic of updating the message. This method will try the fast, interaction-based method first and fall back to a slower, token-independent method.
+1.  **Store Message Identifiers:** In the `MatchFoundView`, when it is first created, the `channel.id` and the `message.id` of the view **must** be captured and stored as instance attributes.
+2.  **Create a Robust Update Method:** Implement a helper method that abstracts the logic of updating the message using the bot's global token, completely independent of the original interaction.
     ```python
     # Inside MatchFoundView or a similar class
-    async def _update_message(self, **kwargs):
-        """Update the message, handling interaction token expiry."""
-        try:
-            # Fast path: Use the interaction token if it's still valid.
-            if self.last_interaction:
-                await self.last_interaction.edit_original_response(**kwargs)
-                return
-        except discord.NotFound:
-            # Token is likely expired, fall back to using the bot's main token.
-            print("Interaction token expired, falling back to bot token.")
-            pass
+    async def _edit_original_message(self, **kwargs):
+        """Update the message using the stored channel and message IDs."""
+        if not self.channel_id or not self.message_id:
+            print("ERROR: channel_id or message_id not set, cannot update view.")
+            return
 
-        # Slow path: Fetch the channel and message directly.
-        if self.channel and self.original_message_id:
-            try:
-                message = await self.channel.fetch_message(self.original_message_id)
-                await message.edit(**kwargs)
-            except (discord.NotFound, discord.Forbidden) as e:
-                print(f"Failed to update message via bot token: {e}")
+        try:
+            # Fetch the channel and message directly using the bot's credentials.
+            channel = self.bot.get_channel(self.channel_id)
+            if not channel:
+                # Handle cases where channel is not cached (e.g., after restart)
+                channel = await self.bot.fetch_channel(self.channel_id)
+            
+            message = await channel.fetch_message(self.message_id)
+            await message.edit(**kwargs)
+        except (discord.NotFound, discord.Forbidden) as e:
+            print(f"Failed to update message via bot token: {e}")
     ```
-3.  **Refactor Call Sites:** Replace all calls to `edit_original_response` that could happen after a long delay (e.g., in `on_message`, match completion handlers) with calls to the new `_update_message` helper.
-4.  **Measurement:** Create a unit test where `interaction.edit_original_response` is a `MagicMock` that raises `discord.NotFound`. Assert that the mock for `channel.fetch_message` and `message.edit` are subsequently called, proving the fallback logic is triggered.
+3.  **Refactor Call Sites:** Replace all calls to `edit_original_response` that could happen after a long delay (e.g., in `on_message`, match completion handlers) with calls to the new `_edit_original_message` helper.
+4.  **Measurement:** Create a unit test where you construct a `MatchFoundView`, manually set its `channel_id` and `message_id`, and then call a handler that uses `_edit_original_message`. Mock `bot.fetch_channel` and `channel.fetch_message` and assert that they are called with the correct IDs.
 
 ---
 
@@ -247,19 +246,54 @@ The current architecture uses an in-memory `asyncio.Queue` for pending database 
 4.  Before the background worker task can process these jobs from the queue, the bot's process is terminated. This could be due to a crash, a manual restart, or a redeployment by the hosting provider (like Railway).
 5.  **Result:** When the bot restarts, it reloads all its data from the persistent Supabase database. The three write jobs that were in the in-memory queue are gone forever. The database still contains the old MMR values and has no record of the match. The players' MMR has been silently rolled back, creating a permanent inconsistency between what the users saw and the official state of the ladder.
 
-#### Measurable Remediation Plan
+#### Measurable Remediation Plan (High-Performance, Non-Blocking)
 
-1.  **Implement a Persistent Queue:** Use a lightweight, file-based database like SQLite to serve as a persistent Write-Ahead Log (WAL).
-2.  **Create a `write_log` Table:** In a new `write_log.sqlite` database, create a table: `(job_id TEXT PRIMARY KEY, job_type TEXT, data TEXT, status TEXT, created_at TEXT)`.
-3.  **Modify Enqueue Logic:** When a write operation is requested, serialize the job data (e.g., to JSON) and `INSERT` it into the `write_log` table with a status of `'PENDING'`.
-4.  **Modify Worker Logic:** The `_db_writer_worker` task will no longer get items from an `asyncio.Queue`. Instead, it will periodically query the SQLite table for jobs where `status = 'PENDING'`.
-5.  **Update Job Status:** After successfully processing a job, the worker will `UPDATE` its status in the SQLite table to `'COMPLETED'`. If a write fails after several retries, it can be marked as `'FAILED'` for manual inspection.
-6.  **Startup Recovery:** During the `DataAccessService` initialization, it must first check the `write_log` for any `'PENDING'` jobs from a previous run and process them before accepting new operations.
-7.  **Measurement:** The existence and contents of the `write_log.sqlite` file are the measure of success. A test can be written to:
-    -   Enqueue a job.
-    -   Assert a `'PENDING'` record exists in the SQLite file.
-    -   Run the worker.
-    -   Assert the record's status is now `'COMPLETED'`.
+This plan achieves durability without blocking the main `asyncio` event loop, avoiding the performance regressions seen in previous attempts.
+
+1.  **Use an Async-Compatible SQLite Library:** The `sqlite3` standard library is synchronous and will block the event loop. Use `aiosqlite` to perform database operations asynchronously.
+2.  **Implement a Persistent `WriteLog` Class:** Create a class to manage the SQLite-backed write-ahead log.
+    ```python
+    # In a new file, e.g., src/backend/core/write_log.py
+    import aiosqlite
+    
+    class WriteLog:
+        def __init__(self, db_path):
+            self._db_path = db_path
+            self._write_signal = asyncio.Event() # For push notifications
+    
+        async def initialize(self):
+            # Connect and create table
+            ...
+    
+        async def enqueue(self, job):
+            # Use `to_thread` to ensure even file system metadata updates don't block
+            await asyncio.to_thread(self._write_to_db, job)
+            self._write_signal.set() # Signal the worker
+    
+        def _write_to_db(self, job):
+            # Synchronous code to write to SQLite
+            # This will run in a separate thread
+            ...
+    ```
+3.  **Modify Enqueue Logic:** When a write operation is requested in `DataAccessService`, it will call `await self._write_log.enqueue(job)`. This is a non-blocking operation.
+4.  **Implement Push-Based Worker Logic:** The `_db_writer_worker` will be event-driven, not polling-based. This is far more efficient.
+    ```python
+    # In DataAccessService._db_writer_worker
+    async def _db_writer_worker(self):
+        while not self._shutdown_event.is_set():
+            await self._write_log._write_signal.wait() # Wait for a signal
+            self._write_log._write_signal.clear()      # Reset the signal
+            
+            # Process all pending jobs
+            pending_jobs = await self._write_log.get_pending_jobs()
+            for job in pending_jobs:
+                # ... process job, mark complete/failed in SQLite ...
+    ```
+5.  **Startup Recovery:** During `DataAccessService` initialization, it must check the `WriteLog` for any pending jobs from a previous run and process them *before* setting the write signal for the main worker loop. This ensures old jobs are cleared before new ones are accepted.
+6.  **Measurement:**
+    -   Create a test that enqueues several jobs.
+    -   Use `psutil` or a similar library to verify that no new threads are being created for each write (verifying that `to_thread` is using a managed thread pool).
+    -   In another test, enqueue a job, then immediately "crash" and restart the `DataAccessService` instance. Assert that the `_recover_pending_writes` method finds and processes the job from the first run.
 
 ---
 
@@ -283,11 +317,14 @@ The service monitors active matches and uses a lock to check their state. Howeve
 
 #### Measurable Remediation Plan
 
-1.  **Introduce an Atomic State Field:** Add a `status` field to the in-memory match DataFrame (e.g., `'IN_PROGRESS'`, `'PROCESSING_COMPLETION'`, `'COMPLETE'`, `'ABORTED'`).
-2.  **Expand Lock Scope:** The lock must be held for the entire duration of the state transition.
-3.  **Refactor State Transition Logic:**
+1.  **Introduce an Atomic State Field:** Add a `status` field to the in-memory match DataFrame (e.g., `'IN_PROGRESS'`, `'PROCESSING_COMPLETION'`, `'COMPLETE'`, `'ABORTED'`, `'CONFLICT'`). This is the single source of truth for a match's state.
+2.  **Enforce Lock Acquisition for All State Transitions:** The `asyncio.Lock` for a given `match_id` must be acquired in **all** functions that can cause a terminal state transition. This includes:
+    -   `check_match_completion()`
+    -   `abort_match()` in `DataAccessService` (or the service that calls it)
+    -   `record_match_result()` if it can trigger a completion/conflict directly.
+3.  **Refactor State Transition Logic (Check-Then-Act Atomically):**
     ```python
-    # In _monitor_match_completion
+    # In match_completion_service.check_match_completion
     lock = self._get_lock(match_id)
     async with lock:
         # Re-fetch data inside the lock to get the absolute latest state
@@ -298,22 +335,20 @@ The service monitors active matches and uses a lock to check their state. Howeve
             # Another process (like an abort) already handled it. Do nothing.
             return 
 
-        # Check 2: Are reports in?
-        p1_report = match_data.get('player_1_report')
-        p2_report = match_data.get('player_2_report')
-
-        if reports_indicate_completion(p1_report, p2_report):
+        # Check 2: Do reports indicate completion?
+        if reports_indicate_completion(match_data):
             # Set status to prevent other processes from interfering
+            # This is the "Check-Then-Act" pattern
             data_service.update_match_status(match_id, 'PROCESSING_COMPLETION')
             
             # Now, perform the action. Since the status is updated, no other
             # process will try to act on this match.
             await self._handle_match_completion(match_id, match_data)
+            data_service.update_match_status(match_id, 'COMPLETE')
 
         # ... other conditions for abort, conflict ...
     ```
-    The `abort_match` method must also acquire the same lock and check the status before proceeding.
-4.  **Measurement:** Create an integration test that uses `asyncio.gather` to concurrently run a `check_match_completion` coroutine and an `abort_match` coroutine for the same match ID. Add logging to track which operation "wins" the lock and updates the state first. Assert that the final state of the match is unambiguous (either `'COMPLETE'` or `'ABORTED'`, but never both).
+4.  **Measurement:** Create an integration test that uses `asyncio.gather` to concurrently run a `check_match_completion` coroutine and an `abort_match` coroutine for the same match ID. Add logging to track which operation "wins" the lock and updates the state first. Assert that the final state of the match is unambiguous (either `'COMPLETE'` or `'ABORTED'`, but never both) and that the `update_match_status` method was called only once for the winning operation.
 
 ---
 
