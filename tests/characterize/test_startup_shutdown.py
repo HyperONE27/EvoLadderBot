@@ -26,9 +26,11 @@ def mock_bot():
 async def test_startup_initializes_das(mock_bot):
     """
     Verifies that DataAccessService is initialized during bot startup.
+    This test characterizes Phase 1 of big_plan.md: Eager Singleton Initialization.
     """
     with patch("src.bot.main.matchmaker") as mock_matchmaker, \
-         patch("src.bot.main.bot") as mock_bot_instance:
+         patch("src.bot.main.bot") as mock_bot_instance, \
+         patch("src.bot.main.data_access_service") as mock_das:
         mock_matchmaker.run = AsyncMock()
         mock_bot_instance.user = mock_bot.user
         # Mock the tree as an attribute of bot
@@ -36,9 +38,15 @@ async def test_startup_initializes_das(mock_bot):
         mock_tree.sync = AsyncMock(return_value=[])
         mock_bot_instance.tree = mock_tree
         
+        # Mock DataAccessService initialization
+        mock_das.initialize_async = AsyncMock()
+        
         # Simulate the on_ready event
         from src.bot.main import on_ready
         await on_ready()
+        
+        # Verify DataAccessService was initialized BEFORE commands were synced
+        mock_das.initialize_async.assert_called_once()
         
         # Verify matchmaker was started
         mock_matchmaker.run.assert_called_once()
