@@ -123,6 +123,8 @@ queue_service = initialize_queue_service()
 # =============================================================================
 
 __all__ = [
+    # Data access layer
+    "data_access_service",
     # Static data services
     "countries_service",
     "regions_service",

@@ -1,11 +1,13 @@
 import asyncio
 import logging
 import sys
+import time
 
 import discord
 from discord.ext import commands
 
 from src.backend.services.matchmaking_service import matchmaker
+from src.backend.services.app_context import data_access_service
 from src.bot.bot_setup import EvoLadderBot, shutdown_bot_resources
 from src.bot.commands.activate_command import register_activate_command  # DISABLED: Obsolete command
 from src.bot.commands.help_command import register_help_command
@@ -39,10 +41,34 @@ intents.message_content = True
 bot = EvoLadderBot(command_prefix="!", intents=intents)
 
 
+async def initialize_backend_services():
+    """
+    Initialize all backend services eagerly during startup.
+    
+    This ensures that:
+    1. DataAccessService loads all data before the first command is processed
+    2. No "first request penalty" or race conditions during lazy initialization
+    3. The write queue worker is started and ready to handle async writes
+    
+    This function should be called from on_ready() after the event loop is running.
+    """
+    print("[Startup] Initializing backend services...")
+    start_time = time.time()
+    
+    # Initialize DataAccessService - loads all hot tables and starts write worker
+    await data_access_service.initialize_async()
+    
+    elapsed = (time.time() - start_time) * 1000
+    print(f"[Startup] Backend services initialized in {elapsed:.2f}ms")
+
+
 @bot.event
 async def on_ready():
     print(f"Bot online as {bot.user}")
     try:
+        # Initialize all backend services BEFORE registering commands
+        await initialize_backend_services()
+        
         register_commands(bot)
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} command(s)")

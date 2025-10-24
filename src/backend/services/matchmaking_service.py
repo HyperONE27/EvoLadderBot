@@ -737,21 +737,37 @@ class Matchmaker:
 		"""
 		Record a player's report for a match. This is the single entry point for any report.
 		Uses DataAccessService for fast, non-blocking writes.
+		
+		Respects the atomic status field to prevent recording results for already-completed matches.
 		"""
 		# Use DataAccessService for fast in-memory updates
 		from src.backend.services.data_access_service import DataAccessService
+		from src.backend.services.match_completion_service import match_completion_service
 		data_service = DataAccessService()
 		
-		# Update in-memory match data immediately
-		success = data_service.update_match_report(match_id, player_discord_uid, report_value)
-		if not success:
-			print(f"[Matchmaker] Failed to update player report for match {match_id} in memory.")
-			return False
+		# Acquire lock to prevent race conditions with abort/complete operations
+		lock = match_completion_service._get_lock(match_id)
+		async with lock:
+			# Check current match status - if already terminal, reject the report
+			match_data = data_service.get_match(match_id)
+			if not match_data:
+				print(f"[Matchmaker] Cannot record result for match {match_id}: match not found in memory")
+				return False
+			
+			current_status = match_data.get('status', 'IN_PROGRESS')
+			if current_status in ('COMPLETE', 'ABORTED', 'CONFLICT', 'PROCESSING_COMPLETION'):
+				print(f"[Matchmaker] Cannot record result for match {match_id}: already in terminal/processing state {current_status}")
+				return False
+			
+			# Update in-memory match data immediately
+			success = data_service.update_match_report(match_id, player_discord_uid, report_value)
+			if not success:
+				print(f"[Matchmaker] Failed to update player report for match {match_id} in memory.")
+				return False
 		
-		# After any report, trigger an immediate check.
+		# After any report, trigger an immediate check (outside the lock to avoid deadlock).
 		# This will pick up aborts, conflicts, or completions instantly.
 		import asyncio
-		from src.backend.services.match_completion_service import match_completion_service
 		print(f"[Matchmaker] Triggering immediate completion check for match {match_id} after a report.")
 		asyncio.create_task(match_completion_service.check_match_completion(match_id))
 		
@@ -761,7 +777,8 @@ class Matchmaker:
 		"""
 		Abort a match and decrement the player's abort count.
 		
-		This operation is atomic and prevents race conditions.
+		This operation is atomic and prevents race conditions by acquiring
+		the same lock used by check_match_completion.
 		
 		Args:
 			match_id: The ID of the match to abort.
@@ -775,17 +792,35 @@ class Matchmaker:
 		from src.backend.services.match_completion_service import match_completion_service
 		data_service = DataAccessService()
 		
-		# Abort the match in memory and queue DB write
-		success = await data_service.abort_match(match_id, player_discord_uid)
-		
-		if success:
-			# Trigger immediate completion check to notify all players
-			# This ensures both players receive the abort notification
-			print(f"[Matchmaker] Triggering immediate completion check for match {match_id} after abort.")
-			import asyncio
-			asyncio.create_task(match_completion_service.check_match_completion(match_id))
-		
-		return success
+		# Acquire the same lock used by check_match_completion to prevent race conditions
+		lock = match_completion_service._get_lock(match_id)
+		async with lock:
+			# Check current match status - if already terminal, reject the abort
+			match_data = data_service.get_match(match_id)
+			if not match_data:
+				print(f"[Matchmaker] Cannot abort match {match_id}: match not found in memory")
+				return False
+			
+			current_status = match_data.get('status', 'IN_PROGRESS')
+			if current_status in ('COMPLETE', 'ABORTED', 'CONFLICT'):
+				print(f"[Matchmaker] Cannot abort match {match_id}: already in terminal state {current_status}")
+				return False
+			
+			# Abort the match in memory and queue DB write
+			success = await data_service.abort_match(match_id, player_discord_uid)
+			
+			if success:
+				# Atomically transition to ABORTED state
+				data_service.update_match_status(match_id, 'ABORTED')
+				print(f"[Matchmaker] Match {match_id} aborted by player {player_discord_uid}, status updated to ABORTED")
+				
+				# Trigger immediate completion check to notify all players
+				# This ensures both players receive the abort notification
+				print(f"[Matchmaker] Triggering immediate completion check for match {match_id} after abort.")
+				import asyncio
+				asyncio.create_task(match_completion_service.check_match_completion(match_id))
+			
+			return success
 	
 	async def _calculate_and_write_mmr(self, match_id: int, match_data: dict) -> bool:
 		"""Helper to calculate and write MMR changes using DataAccessService."""
