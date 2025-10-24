@@ -310,16 +310,12 @@ class TestCacheInvalidationNoFalsePositives:
     """Test that cache invalidation doesn't occur for non-MMR operations."""
     
     @pytest.mark.asyncio
-    async def test_cache_stays_valid_on_player_info_update(self):
+    async def test_cache_invalidated_on_player_info_update(self):
         """
-        Verify that updating player info (name, country, etc.) doesn't invalidate cache.
+        Verify that updating player info (name, country, etc.) DOES invalidate cache.
         
-        Only MMR-related changes should invalidate the leaderboard cache.
-        Player name/country changes don't affect MMR and shouldn't trigger refresh.
-        
-        Note: This is an ASPIRATIONAL test. Currently, we MAY invalidate on
-        any player update for safety. Future optimization: only invalidate on
-        MMR changes, not on profile updates.
+        Although this doesn't change MMR, it changes the data displayed on the leaderboard,
+        so the cache must be invalidated to reflect the new name/country.
         """
         data_service = DataAccessService()
         
@@ -331,6 +327,8 @@ class TestCacheInvalidationNoFalsePositives:
                 "player_name": ["OldName"],
                 "country": ["US"],
                 "remaining_aborts": [3],
+                "alt_player_name_1": [None],
+                "alt_player_name_2": [None],
             })
         
         # Mark cache as valid
@@ -342,10 +340,8 @@ class TestCacheInvalidationNoFalsePositives:
             player_name="NewName"
         )
         
-        # Cache should STAY valid (profile change doesn't affect leaderboard standings)
-        # Note: Current implementation may invalidate anyway for simplicity
-        # This test documents the desired behavior for future optimization
-        assert data_service.is_leaderboard_cache_valid() is True
+        # Cache should now be INVALID
+        assert data_service.is_leaderboard_cache_valid() is False
 
 
 class TestCacheRefreshOnDemand:

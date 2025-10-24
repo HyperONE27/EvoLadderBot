@@ -1255,6 +1255,9 @@ class DataAccessService:
             
             await self._write_queue.put(job)
             self._total_writes_queued += 1
+            
+            # Invalidate leaderboard cache - player info (name, country) is displayed
+            self.invalidate_leaderboard_cache()
         
         return True
     
