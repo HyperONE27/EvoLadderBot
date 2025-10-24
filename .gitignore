@@ -194,3 +194,9 @@ markdown_cursor/
 # Test Assets
 tests/test_data/test_replay_files/**
 data/replays/**
+
+# Write-Ahead Log (WAL) for DataAccessService
+# This directory contains the ephemeral SQLite write queue
+# that provides crash-resistant durability for pending database writes
+data/wal/
+data/wal/**
