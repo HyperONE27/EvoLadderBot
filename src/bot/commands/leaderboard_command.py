@@ -50,15 +50,13 @@ async def leaderboard_command(interaction: discord.Interaction):
     
     # Get initial data to set proper button states
     flow.checkpoint("fetch_leaderboard_data_start")
-    # Pass bot's process pool for offloading heavy computation
-    process_pool = getattr(interaction.client, 'process_pool', None)
+    # Leaderboard generation is now fully synchronous via asyncio.to_thread()
     data = await leaderboard_service.get_leaderboard_data(
         country_filter=view.country_filter,
         race_filter=view.race_filter,
         best_race_only=view.best_race_only,
         current_page=view.current_page,
-        page_size=40,
-        process_pool=process_pool
+        page_size=40
     )
     flow.checkpoint("fetch_leaderboard_data_complete")
     
@@ -285,16 +283,14 @@ class LeaderboardView(discord.ui.View):
         filter_start = time.perf_counter()
         
         # Get leaderboard data from backend service with VIEW's state
-        # Pass bot's process pool for offloading heavy computation
-        process_pool = getattr(interaction.client, 'process_pool', None)
+        # Leaderboard generation is now fully synchronous via asyncio.to_thread()
         data = await self.leaderboard_service.get_leaderboard_data(
             country_filter=self.country_filter,
             race_filter=self.race_filter,
             best_race_only=self.best_race_only,
             rank_filter=self.rank_filter,
             current_page=self.current_page,
-            page_size=40,
-            process_pool=process_pool
+            page_size=40
         )
         
         data_fetch_time = time.perf_counter()

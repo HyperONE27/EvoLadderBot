@@ -1928,32 +1928,43 @@ async def on_message(message: discord.Message, bot=None):
         # Get the current asyncio event loop
         loop = asyncio.get_running_loop()
         
-        # Offload the blocking parsing function to the process pool
-        # The 'await' here does NOT block the bot. It pauses this
-        # function and lets the event loop run other tasks.
+        # Offload the blocking parsing function to the process pool with timeout
+        # Uses 2.5-second timeout (2s work + 0.5s IPC overhead)
+        # Falls back to synchronous parsing if worker is unresponsive
         try:
             if bot and hasattr(bot, 'process_pool'):
                 # Event-driven process pool health check
                 # Only check when we actually need to use the pool
                 try:
                     from src.backend.services.process_pool_health import ensure_process_pool_healthy
+                    from src.backend.services.replay_parsing_timeout import parse_replay_with_timeout
+                    from src.backend.services.memory_monitor import log_memory
+                    
                     is_healthy = await ensure_process_pool_healthy()
                     if not is_healthy:
                         print("[WARN] Process pool health check failed, falling back to synchronous parsing")
                         replay_info = parse_replay_data_blocking(replay_bytes)
+                        was_timeout = False
                     else:
                         # Track work start
                         if hasattr(bot, '_track_work_start'):
                             bot._track_work_start()
                         
                         # Log memory before replay parsing
-                        from src.backend.services.memory_monitor import log_memory
                         log_memory("Before replay parse")
                         
                         try:
-                            replay_info = await loop.run_in_executor(
-                                bot.process_pool, parse_replay_data_blocking, replay_bytes
+                            # Use timeout-aware parsing with 2.5s timeout
+                            replay_info, was_timeout = await parse_replay_with_timeout(
+                                bot.process_pool,
+                                parse_replay_data_blocking,
+                                replay_bytes,
+                                timeout=2.5
                             )
+                            
+                            if was_timeout:
+                                print("[WARN] Replay parsing timed out - worker may have crashed")
+                                # Don't attempt pool restart here; let health check handle it
                         finally:
                             # Track work end
                             if hasattr(bot, '_track_work_end'):
@@ -1963,28 +1974,19 @@ async def on_message(message: discord.Message, bot=None):
                             log_memory("After replay parse")
                 except Exception as e:
                     print(f"[WARN] Process pool health check failed with error: {e}")
-                    # Continue with process pool usage - let the executor handle the error
-                    # Track work start
-                    if hasattr(bot, '_track_work_start'):
-                        bot._track_work_start()
-                    
-                    try:
-                        replay_info = await loop.run_in_executor(
-                            bot.process_pool, parse_replay_data_blocking, replay_bytes
-                        )
-                    finally:
-                        # Track work end
-                        if hasattr(bot, '_track_work_end'):
-                            bot._track_work_end()
+                    # Fallback to synchronous parsing
+                    replay_info = parse_replay_data_blocking(replay_bytes)
+                    was_timeout = False
             else:
                 # Fallback to synchronous parsing if process pool is not available
                 # This shouldn't happen in production, but provides a safety net
                 print("[WARN] Process pool not available, falling back to synchronous parsing")
                 replay_info = parse_replay_data_blocking(replay_bytes)
+                was_timeout = False
                 
         except Exception as e:
-            # This will catch any exception from the worker process
-            print(f"[FATAL] Replay parsing in worker process failed: {type(e).__name__}: {e}")
+            # This will catch any exception from the worker process or parsing
+            print(f"[FATAL] Replay parsing failed: {type(e).__name__}: {e}")
             flow.complete("parse_failed")
             error_embed = ReplayDetailsEmbed.get_error_embed(
                 "A critical error occurred while parsing the replay. "
