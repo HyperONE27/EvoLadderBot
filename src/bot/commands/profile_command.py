@@ -6,9 +6,10 @@ from src.backend.services.app_context import (
     user_info_service,
     countries_service,
     regions_service,
-    races_service
+    races_service,
+    ranking_service
 )
-from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote, get_flag_emote, get_game_emote
+from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote, get_flag_emote, get_game_emote, get_rank_emote
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.backend.services.performance_service import FlowTracker
 
@@ -157,13 +158,17 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
                 race_name = races_service.get_race_name(race_code)
                 race_emote = get_race_emote(race_code)
                 
+                # Get rank for this player-race combination
+                rank = ranking_service.get_rank(user.id, race_code)
+                rank_emote = get_rank_emote(rank)
+                
                 mmr_value = int(mmr_entry['mmr'])
                 games_played = mmr_entry.get('games_played', 0)
                 games_won = mmr_entry.get('games_won', 0)
                 games_lost = mmr_entry.get('games_lost', 0)
                 games_drawn = mmr_entry.get('games_drawn', 0)
                 
-                bw_text += f"- {race_emote} **{race_name}:** {mmr_value} MMR"
+                bw_text += f"- {rank_emote} {race_emote} **{race_name}:** {mmr_value} MMR"
                 
                 # Win/Loss record
                 if games_played > 0:
@@ -186,13 +191,17 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
                 race_name = races_service.get_race_name(race_code)
                 race_emote = get_race_emote(race_code)
                 
+                # Get rank for this player-race combination
+                rank = ranking_service.get_rank(user.id, race_code)
+                rank_emote = get_rank_emote(rank)
+                
                 mmr_value = int(mmr_entry['mmr'])
                 games_played = mmr_entry.get('games_played', 0)
                 games_won = mmr_entry.get('games_won', 0)
                 games_lost = mmr_entry.get('games_lost', 0)
                 games_drawn = mmr_entry.get('games_drawn', 0)
                 
-                sc2_text += f"- {race_emote} **{race_name}:** {mmr_value} MMR"
+                sc2_text += f"- {rank_emote} {race_emote} **{race_name}:** {mmr_value} MMR"
                 
                 # Win/Loss record
                 if games_played > 0:
