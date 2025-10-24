@@ -772,18 +772,20 @@ class Matchmaker:
 		"""
 		# Use DataAccessService for fast abort operations
 		from src.backend.services.data_access_service import DataAccessService
+		from src.backend.services.match_completion_service import match_completion_service
 		data_service = DataAccessService()
 		
-		# Run async abort in sync context
-		import asyncio
-		loop = asyncio.get_event_loop()
-		if loop.is_running():
-			# If called from async context, schedule it
-			asyncio.create_task(data_service.abort_match(match_id, player_discord_uid))
-			return True  # Assume success for now
-		else:
-			# If called from sync context, run it
-			return loop.run_until_complete(data_service.abort_match(match_id, player_discord_uid))
+		# Abort the match in memory and queue DB write
+		success = await data_service.abort_match(match_id, player_discord_uid)
+		
+		if success:
+			# Trigger immediate completion check to notify all players
+			# This ensures both players receive the abort notification
+			print(f"[Matchmaker] Triggering immediate completion check for match {match_id} after abort.")
+			import asyncio
+			asyncio.create_task(match_completion_service.check_match_completion(match_id))
+		
+		return success
 	
 	async def _calculate_and_write_mmr(self, match_id: int, match_data: dict) -> bool:
 		"""Helper to calculate and write MMR changes using DataAccessService."""
