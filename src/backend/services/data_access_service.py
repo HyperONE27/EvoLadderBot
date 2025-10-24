@@ -31,6 +31,7 @@ from enum import Enum
 import aiosqlite
 import polars as pl
 
+from src.backend.core.config import WAL_PATH
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
 
 
@@ -106,7 +107,8 @@ class DataAccessService:
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None  # Store a reference to the main loop
 
         # Write-Ahead Log (WAL) for durable write queue
-        self._wal_path = Path("data/wal/write_log.db")
+        # Path is configured via environment variable (PERSISTENT_VOLUME_PATH)
+        self._wal_path = WAL_PATH
         self._wal_db: Optional[aiosqlite.Connection] = None
 
         # Performance stats

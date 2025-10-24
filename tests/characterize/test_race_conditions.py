@@ -172,3 +172,115 @@ async def test_player_queues_during_match_is_rejected():
             embed = call_args.kwargs.get("embed")
             
             assert "already in a match" in embed.description.lower() or "active match" in embed.description.lower()
+
+
+# ========== Phase 3: Atomic Match State Transitions ==========
+# These tests were added after implementing Phase 3 of big_plan.md.
+# They verify that the atomic status field prevents race conditions between
+# completion, abort, and result-recording operations.
+
+
+@pytest.mark.asyncio
+async def test_abort_after_completion_is_rejected():
+    """
+    Test that aborting a match that has already completed is rejected.
+    
+    This is a critical business rule: players cannot abort a match that has
+    already been finalized and had MMR changes applied.
+    """
+    from src.backend.services.matchmaking_service import Matchmaker
+    from src.backend.services.data_access_service import DataAccessService
+    
+    matchmaker = Matchmaker()
+    data_service = DataAccessService()
+    
+    # Create a mock match that is already COMPLETE
+    mock_match = {
+        'id': 999,
+        'status': 'COMPLETE',
+        'player_1_discord_uid': 111,
+        'player_2_discord_uid': 222,
+        'player_1_report': 1,
+        'player_2_report': 0,
+        'match_result': 1,
+    }
+    
+    with patch.object(data_service, 'get_match', return_value=mock_match):
+        with patch.object(data_service, 'abort_match', new=AsyncMock()) as mock_abort:
+            # Try to abort a completed match
+            result = await matchmaker.abort_match(999, 111)
+            
+            # The abort should be rejected (return False)
+            assert result is False
+            # The data_service.abort_match should not have been called
+            mock_abort.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_complete_after_abort_is_rejected():
+    """
+    Test that completing a match that has already been aborted is rejected.
+    
+    This ensures that aborted matches never affect player MMR, preventing
+    "zombie" matches from being processed after they've been cancelled.
+    """
+    from src.backend.services.data_access_service import DataAccessService
+    
+    data_service = DataAccessService()
+    
+    # Create a mock match that is already ABORTED
+    mock_match = {
+        'id': 998,
+        'status': 'ABORTED',
+        'player_1_discord_uid': 111,
+        'player_2_discord_uid': 222,
+        'player_1_report': -3,
+        'player_2_report': -1,
+        'match_result': -1,
+    }
+    
+    with patch.object(data_service, 'get_match', return_value=mock_match):
+        with patch.object(match_completion_service, '_handle_match_completion', new=AsyncMock()) as mock_handle:
+            # Try to check completion for an aborted match
+            result = await match_completion_service.check_match_completion(998)
+            
+            # The check should return True (already processed)
+            assert result is True
+            # The _handle_match_completion should not have been called
+            mock_handle.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_record_result_after_completion_is_rejected():
+    """
+    Test that recording a result for a completed match is rejected.
+    
+    This enforces result finality: once a match is complete, players cannot
+    change their reported outcome.
+    """
+    from src.backend.services.matchmaking_service import Matchmaker
+    from src.backend.services.data_access_service import DataAccessService
+    
+    matchmaker = Matchmaker()
+    data_service = DataAccessService()
+    
+    # Create a mock match that is already COMPLETE
+    mock_match = {
+        'id': 997,
+        'status': 'COMPLETE',
+        'player_1_discord_uid': 111,
+        'player_2_discord_uid': 222,
+        'player_1_report': 1,
+        'player_2_report': 0,
+        'match_result': 1,
+    }
+    
+    with patch.object(data_service, 'get_match', return_value=mock_match):
+        with patch.object(data_service, 'update_match_report', return_value=True) as mock_update:
+            # Try to record a result for a completed match
+            result = await matchmaker.record_match_result(997, 111, 0)
+            
+            # The recording should be rejected (return False)
+            assert result is False
+            # The data_service.update_match_report should not have been called
+            mock_update.assert_not_called()
