@@ -228,6 +228,20 @@ class DataAccessService:
         )
         if matches_data:
             self._matches_df = pl.DataFrame(matches_data, infer_schema_length=None)
+            # Add status column if not present (for backward compatibility with existing data)
+            if "status" not in self._matches_df.columns:
+                # Infer status from existing data:
+                # - If match_result is not None/0 and both reports are present, mark as COMPLETE
+                # - If match_result == -1, mark as ABORTED
+                # - Otherwise, mark as IN_PROGRESS
+                self._matches_df = self._matches_df.with_columns([
+                    pl.when(pl.col("match_result") == -1)
+                      .then(pl.lit("ABORTED"))
+                      .when((pl.col("match_result").is_not_null()) & (pl.col("match_result") != 0))
+                      .then(pl.lit("COMPLETE"))
+                      .otherwise(pl.lit("IN_PROGRESS"))
+                      .alias("status")
+                ])
         else:
             # Create empty DataFrame with complete schema matching matches_1v1 table
             self._matches_df = pl.DataFrame({
@@ -249,6 +263,7 @@ class DataAccessService:
                 "player_2_replay_path": pl.Series([], dtype=pl.Utf8),
                 "player_1_replay_time": pl.Series([], dtype=pl.Utf8),
                 "player_2_replay_time": pl.Series([], dtype=pl.Utf8),
+                "status": pl.Series([], dtype=pl.Utf8),  # New field: IN_PROGRESS, PROCESSING_COMPLETION, COMPLETE, ABORTED, CONFLICT
             })
         print(f"[DataAccessService]   Matches loaded: {len(self._matches_df)} rows")
         
@@ -275,24 +290,18 @@ class DataAccessService:
     
     async def _initialize_wal(self) -> None:
         """
-        Initialize the Write-Ahead Log (WAL) for durable write queue.
+        Initialize the Write-Ahead Log (WAL) and replay any pending writes.
         
-        The WAL is a small SQLite database that stores pending write jobs.
-        This ensures that if the bot crashes, pending writes can be recovered and replayed.
+        This opens a single, persistent connection to the WAL SQLite database.
+        It then replays any jobs left over from a previous crash and clears the WAL table.
         """
         # Ensure WAL directory exists
         self._wal_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Check if WAL file exists from a previous session
-        if self._wal_path.exists():
-            print(f"[DataAccessService] Found existing WAL file: {self._wal_path}")
-            # Replay any pending writes from previous session
-            await self._replay_wal()
-        
-        # Open WAL database connection
+        # Open a persistent connection to the WAL database for the bot's lifecycle
         self._wal_db = await aiosqlite.connect(str(self._wal_path))
         
-        # Create write_jobs table
+        # Ensure the write_jobs table exists
         await self._wal_db.execute("""
             CREATE TABLE IF NOT EXISTS write_jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -304,24 +313,25 @@ class DataAccessService:
         """)
         await self._wal_db.commit()
         
+        # Replay any jobs from a previous session and clear the WAL
+        await self._replay_wal()
+        
         print(f"[DataAccessService] WAL initialized: {self._wal_path}")
     
     async def _replay_wal(self) -> None:
         """
-        Replay any pending writes from a previous session's WAL.
+        Replay pending writes from the WAL and clear it.
         
-        This is called during startup if a WAL file exists, indicating
-        the bot crashed before flushing all pending writes.
+        This uses the existing DB connection to read pending jobs, re-queue them,
+        and then clears the WAL table. This avoids file-locking issues on startup.
         """
-        print(f"[DataAccessService] Replaying WAL from previous session...")
-        
+        if self._wal_db is None:
+            return
+
+        print(f"[DataAccessService] Checking for pending writes from previous session...")
         try:
-            # Open the existing WAL database
-            temp_conn = await aiosqlite.connect(str(self._wal_path))
-            
-            # Read all pending write jobs
-            cursor = await temp_conn.execute(
-                "SELECT job_type, job_data, timestamp FROM write_jobs ORDER BY id ASC"
+            cursor = await self._wal_db.execute(
+                "SELECT id, job_type, job_data, timestamp FROM write_jobs ORDER BY id ASC"
             )
             rows = await cursor.fetchall()
             
@@ -329,7 +339,7 @@ class DataAccessService:
                 print(f"[DataAccessService] Found {len(rows)} pending writes from previous session")
                 
                 # Re-queue all pending writes
-                for job_type_str, job_data_json, timestamp in rows:
+                for wal_id, job_type_str, job_data_json, timestamp in rows:
                     job_type = WriteJobType(job_type_str)
                     job_data = json.loads(job_data_json)
                     
@@ -341,29 +351,23 @@ class DataAccessService:
                     
                     await self._write_queue.put(job)
                 
-                # Notify write worker of pending jobs
-                if rows:
-                    self._write_event.set()
-                
+                # Notify the worker that jobs are available
+                self._write_event.set()
                 print(f"[DataAccessService] Successfully re-queued {len(rows)} writes")
+
+                # Now that they are safely re-queued, clear the WAL table.
+                await self._wal_db.execute("DELETE FROM write_jobs")
+                await self._wal_db.commit()
+                print("[DataAccessService] Cleared WAL table after re-queuing.")
+
             else:
                 print(f"[DataAccessService] No pending writes found in WAL")
-            
-            await temp_conn.close()
-            
-            # Delete the old WAL file - it will be recreated
-            self._wal_path.unlink()
-            print(f"[DataAccessService] Cleared old WAL file")
             
         except Exception as e:
             print(f"[DataAccessService] ERROR replaying WAL: {e}")
             import traceback
             traceback.print_exc()
-            # If replay fails, delete the corrupted WAL and start fresh
-            if self._wal_path.exists():
-                self._wal_path.unlink()
-                print(f"[DataAccessService] Deleted corrupted WAL file")
-    
+
     async def _wal_write_job(self, job: WriteJob) -> None:
         """
         Write a job to the WAL for durability.
@@ -438,7 +442,8 @@ class DataAccessService:
         Args:
             job: The write job to queue
         """
-        await self._queue_write(job)
+        await self._write_queue.put(job)
+        self._total_writes_queued += 1
         # Notify the write worker that a job is available
         self._write_event.set()
     
@@ -1590,6 +1595,38 @@ class DataAccessService:
         result = self._matches_df.filter(pl.col("id") == match_id)
         return result.to_dicts()[0] if len(result) > 0 else None
     
+    def update_match_status(self, match_id: int, new_status: str) -> bool:
+        """
+        Update the status of a match in memory.
+        
+        This is an atomic operation used by match_completion_service to manage
+        state transitions and prevent race conditions.
+        
+        Args:
+            match_id: Match ID to update
+            new_status: New status (IN_PROGRESS, PROCESSING_COMPLETION, COMPLETE, ABORTED, CONFLICT)
+            
+        Returns:
+            True if updated successfully, False if match not found
+        """
+        if self._matches_df is None:
+            return False
+        
+        # Check if match exists
+        if len(self._matches_df.filter(pl.col("id") == match_id)) == 0:
+            return False
+        
+        # Update status
+        self._matches_df = self._matches_df.with_columns([
+            pl.when(pl.col("id") == match_id)
+              .then(pl.lit(new_status))
+              .otherwise(pl.col("status"))
+              .alias("status")
+        ])
+        
+        print(f"[DataAccessService] Updated match {match_id} status to {new_status}")
+        return True
+    
     def get_match_mmrs(self, match_id: int) -> tuple[int, int]:
         """
         Get player MMRs for a match (optimized for match embed).
@@ -1666,6 +1703,9 @@ class DataAccessService:
         if match_id:
             match = await loop.run_in_executor(None, self._db_reader.get_match_1v1, match_id)
             if match:
+                # Add status field to new match (initialized to IN_PROGRESS)
+                match['status'] = 'IN_PROGRESS'
+                
                 # Create new row with explicit schema alignment
                 new_row = pl.DataFrame([match], infer_schema_length=None)
                 # Use diagonal concat to handle any missing columns gracefully
@@ -1678,6 +1718,8 @@ class DataAccessService:
                 # Keep only recent 1000 matches
                 if len(self._matches_df) > 1000:
                     self._matches_df = self._matches_df.head(1000)
+                
+                print(f"[DataAccessService] Created match {match_id} with status IN_PROGRESS")
         
         return match_id
     

@@ -113,18 +113,19 @@ class MatchCompletionService:
             return None
 
     async def check_match_completion(self, match_id: int):
-        """Manually check if a match is complete and handle it."""
+        """
+        Manually check if a match is complete and handle it.
+        
+        This method uses atomic status transitions to prevent race conditions
+        between completion and abort operations. The lock is held for the
+        entire check-then-act sequence.
+        """
         import time
         start_time = time.perf_counter()
         
         lock = self._get_lock(match_id)
         async with lock:
             try:
-                # Prevent duplicate processing
-                if match_id in self.processed_matches:
-                    print(f"🔍 CHECK: Match {match_id} already processed, skipping")
-                    return True
-                    
                 print(f"🔍 CHECK: Manual completion check for match {match_id}")
                 # Get match data from DataAccessService (in-memory, instant)
                 from src.backend.services.data_access_service import DataAccessService
@@ -133,16 +134,24 @@ class MatchCompletionService:
                 if not match_data:
                     raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
                 
+                # Check current status - if already processed, skip
+                current_status = match_data.get('status', 'IN_PROGRESS')
+                if current_status in ('COMPLETE', 'ABORTED', 'CONFLICT', 'PROCESSING_COMPLETION'):
+                    print(f"🔍 CHECK: Match {match_id} already in terminal/processing state: {current_status}, skipping")
+                    return True
+                
                 # Check if both players have reported
                 p1_report = match_data.get('player_1_report')
                 p2_report = match_data.get('player_2_report')
                 match_result = match_data.get('match_result')
                 
-                print(f"🔍 CHECK: Match {match_id} reports: p1={p1_report}, p2={p2_report}, result={match_result}")
+                print(f"🔍 CHECK: Match {match_id} status={current_status}, reports: p1={p1_report}, p2={p2_report}, result={match_result}")
                 
                 # Abort if any report is -3 (initiator) or both are -1/-3 with match_result=-1
                 if (p1_report == -3 or p2_report == -3) or (match_result == -1 and (p1_report in (-3, -1) and p2_report in (-3, -1))):
                     print(f"🚫 Match {match_id} was aborted")
+                    # Atomically transition to ABORTED state
+                    data_service.update_match_status(match_id, 'ABORTED')
                     self.processed_matches.add(match_id)  # Mark as processed
                     await self._handle_match_abort(match_id, match_data)
                     
@@ -157,12 +166,22 @@ class MatchCompletionService:
                     if match_result == -2:
                         # Conflicting reports - manual resolution needed
                         print(f"⚠️ Conflicting reports for match {match_id}, manual resolution required")
+                        # Atomically transition to CONFLICT state
+                        data_service.update_match_status(match_id, 'CONFLICT')
                         await self._handle_match_conflict(match_id)
                     elif match_result is not None:
-                        # Match is complete and processed
-                        print(f"✅ CHECK: Match {match_id} completed successfully")
+                        # Match is complete - atomically transition to PROCESSING_COMPLETION
+                        # to prevent concurrent abort/complete operations
+                        print(f"✅ CHECK: Match {match_id} ready for completion, transitioning to PROCESSING_COMPLETION")
+                        data_service.update_match_status(match_id, 'PROCESSING_COMPLETION')
                         self.processed_matches.add(match_id)  # Mark as processed
+                        
+                        # Perform completion actions while lock is held
                         await self._handle_match_completion(match_id, match_data)
+                        
+                        # Atomically transition to COMPLETE state
+                        data_service.update_match_status(match_id, 'COMPLETE')
+                        print(f"✅ CHECK: Match {match_id} completed successfully")
                         
                         # Invalidate leaderboard cache since MMR values changed
                         LeaderboardService.invalidate_cache()
