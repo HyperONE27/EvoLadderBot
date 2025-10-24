@@ -794,12 +794,15 @@ class DataAccessService:
         """
         Graceful shutdown - flush write queue and stop worker.
         
-        This should be called during bot shutdown.
+        This should be called during bot shutdown. This method ensures all
+        pending writes are processed and the background worker is cleanly
+        stopped before any resources are closed.
         """
         print("[DataAccessService] Shutting down...")
         
-        # Signal shutdown
+        # Signal shutdown to the worker task
         self._shutdown_event.set()
+        print("[DataAccessService] Shutdown signal sent to writer task")
         
         # Wait for write queue to drain (with timeout)
         queue_size = self._write_queue.qsize()
@@ -810,38 +813,32 @@ class DataAccessService:
             while self._write_queue.qsize() > 0 and (time.time() - start) < timeout:
                 await asyncio.sleep(0.1)
         
-        # Cancel worker task
+        # Wait for writer task to finish gracefully
         if self._writer_task and not self._writer_task.done():
-            # Ensure cancellation happens on the correct loop
-            if self._main_loop and self._main_loop.is_running():
-                self._main_loop.call_soon_threadsafe(self._writer_task.cancel)
-                try:
-                    # Wait for the task to acknowledge cancellation
-                    await asyncio.wait_for(self._writer_task, timeout=5.0)
-                except asyncio.CancelledError:
-                    print("[DataAccessService] Writer task cancelled successfully.")
-                except asyncio.TimeoutError:
-                    print("[DataAccessService] WARN: Timeout waiting for writer task to cancel.")
-                except Exception as e:
-                    print(f"[DataAccessService] ERROR during writer task shutdown: {e}")
-            else:
-                # Fallback if loop is not running or not set
+            print("[DataAccessService] Waiting for writer task to finish...")
+            try:
+                # Give the task a reasonable time to exit cleanly after receiving shutdown signal
+                await asyncio.wait_for(self._writer_task, timeout=10.0)
+            except asyncio.TimeoutError:
+                print("[DataAccessService] WARN: Writer task did not exit cleanly within timeout, cancelling...")
                 self._writer_task.cancel()
                 try:
-                    await self._writer_task
-                except asyncio.CancelledError:
-                    pass  # Expected
+                    await asyncio.wait_for(self._writer_task, timeout=5.0)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    print("[DataAccessService] Writer task forcefully stopped")
+            except asyncio.CancelledError:
+                print("[DataAccessService] Writer task was cancelled")
+            except Exception as e:
+                print(f"[DataAccessService] ERROR waiting for writer task: {e}")
         
-        # Clear WAL and close database connection
+        print("[DataAccessService] Writer task confirmed stopped")
+        
+        # Now that the writer task is fully stopped, safely close resources
         if self._wal_db:
             await self._wal_clear_all()
             await self._wal_db.close()
             print("[DataAccessService] WAL database closed")
-            
-            # Delete WAL file on clean shutdown
-            if self._wal_path.exists():
-                self._wal_path.unlink()
-                print(f"[DataAccessService] Deleted WAL file: {self._wal_path}")
+            print(f"[DataAccessService] WAL file persisted at: {self._wal_path} (will be replayed on next startup if needed)")
         
         # Print stats
         print(f"[DataAccessService] Shutdown complete")

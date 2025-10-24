@@ -95,8 +95,8 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
             title="Country Updated",
             description=(
                 f"Your country has been successfully updated.\n\n"
-                f":map: **Selected Country**\n"
-                f"{flag_emoji} {country['name']} `({country_code})`"
+                f"{flag_emoji} **Selected Country**\n"
+                f"`{country['name']} ({country_code})`"
             ),
             fields=[],
             mode="post_confirmation"
@@ -130,8 +130,8 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
         color=discord.Color.blue()
     )
     embed.add_field(
-        name=":map: **Country of Citizenship/Nationality**",
-        value=f"{flag_emoji} {country['name']} `({country_code})`",
+        name=f"{flag_emoji} **Country of Citizenship/Nationality**",
+        value=f"`{country['name']} ({country_code})`",
         inline=False
     )
     

@@ -259,6 +259,25 @@ def get_game_emote(game: str) -> str:
         return "🎮"
 
 
+def get_globe_emote(region_code: str) -> str:
+    """
+    Get the unicode globe emoji for a region code.
+    
+    Args:
+        region_code: One of "AM" (Americas), "AF" (Africa), or "AS" (Asia)
+    
+    Returns:
+        The appropriate unicode globe emoji
+    """
+    globe_emotes = {
+        "AM": "🌎",
+        "AF": "🌍",
+        "AS": "🌏"
+    }
+    
+    return globe_emotes.get(region_code, "🌐")
+
+
 def get_current_unix_timestamp() -> int:
     """Get the current Unix epoch timestamp as an integer."""
     return int(time.time())

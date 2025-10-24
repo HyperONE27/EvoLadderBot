@@ -8,7 +8,7 @@ from discord.ext import commands
 
 from src.backend.services.matchmaking_service import matchmaker
 from src.backend.services.app_context import data_access_service
-from src.bot.bot_setup import EvoLadderBot, shutdown_bot_resources
+from src.bot.bot_setup import EvoLadderBot
 from src.bot.commands.activate_command import register_activate_command  # DISABLED: Obsolete command
 from src.bot.commands.help_command import register_help_command
 from src.bot.commands.leaderboard_command import register_leaderboard_command
@@ -41,33 +41,11 @@ intents.message_content = True
 bot = EvoLadderBot(command_prefix="!", intents=intents)
 
 
-async def initialize_backend_services():
-    """
-    Initialize all backend services eagerly during startup.
-    
-    This ensures that:
-    1. DataAccessService loads all data before the first command is processed
-    2. No "first request penalty" or race conditions during lazy initialization
-    3. The write queue worker is started and ready to handle async writes
-    
-    This function should be called from on_ready() after the event loop is running.
-    """
-    print("[Startup] Initializing backend services...")
-    start_time = time.time()
-    
-    # Initialize DataAccessService - loads all hot tables and starts write worker
-    await data_access_service.initialize_async()
-    
-    elapsed = (time.time() - start_time) * 1000
-    print(f"[Startup] Backend services initialized in {elapsed:.2f}ms")
-
-
 @bot.event
 async def on_ready():
     print(f"Bot online as {bot.user}")
     try:
-        # Initialize all backend services BEFORE registering commands
-        await initialize_backend_services()
+        # Backend services are now initialized in setup_hook
         
         register_commands(bot)
         synced = await bot.tree.sync()
@@ -97,27 +75,10 @@ def register_commands(bot: commands.Bot):
     register_setup_command(bot.tree)
     register_termsofservice_command(bot.tree)
 
-def setup_signal_handlers(bot: discord.Client):
-    """Sets up signal handlers to ensure graceful shutdown."""
-    import signal
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-
-    def signal_handler(signum, frame):
-        print(f"Received signal {signum}. Shutting down gracefully.")
-        if loop.is_running():
-            loop.create_task(bot.close())
-        else:
-            loop.run_until_complete(bot.close())
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
 def main():
-    # Set up signal handling for graceful shutdown
-    setup_signal_handlers(bot)
+    # discord.py's bot.run() has built-in signal handling that will
+    # call our custom EvoLadderBot.close() method on shutdown.
+    # No custom signal handlers needed.
 
     try:
         # The bot's run method is blocking, so we run it here.
@@ -128,21 +89,6 @@ def main():
         sys.exit(1)
     except Exception as e:
         logger.fatal(f"An unexpected error occurred: {e}")
-    finally:
-        # On exit, ensure resources are cleaned up
-        # We need a new loop to run the async shutdown function
-        try:
-            loop = asyncio.get_running_loop()
-            if loop.is_running():
-                # If there's a running loop, create a task to do shutdown
-                loop.create_task(shutdown_bot_resources(bot))
-            else:
-                # If not, run it to completion
-                asyncio.run(shutdown_bot_resources(bot))
-        except RuntimeError: # No running loop
-            asyncio.run(shutdown_bot_resources(bot))
-        except Exception as e:
-            print(f"[Shutdown] An error occurred during final shutdown: {e}")
 
 
 if __name__ == "__main__":

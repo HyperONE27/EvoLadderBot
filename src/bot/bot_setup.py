@@ -301,6 +301,55 @@ class EvoLadderBot(commands.Bot):
             print("[Background Tasks] Memory monitor task stopped")
         
         # Background refresh tasks removed - DataAccessService handles this now
+    
+    async def close(self) -> None:
+        """
+        Gracefully shut down all application resources.
+        
+        This method is called by discord.py when the bot is being closed.
+        It ensures all resources are cleaned up in the correct order before
+        the bot's event loop is shut down.
+        
+        Critical shutdown order:
+        1. Stop background tasks (memory monitoring, etc.)
+        2. Shutdown process pool (wait for replay parsing jobs to finish)
+        3. Shutdown DataAccessService (flush writes and close WAL)
+        4. Close database connection pool
+        
+        This order is essential because replay parsing jobs write to the WAL,
+        so the process pool must shut down before the WAL is closed.
+        """
+        print("[Shutdown] Closing application resources...")
+        
+        # 1. Stop Background Tasks
+        self.stop_background_tasks()
+        
+        # 2. Shutdown Process Pool - MUST happen before DataAccessService
+        # This ensures all replay parsing jobs finish and write their results
+        # to the WAL before we close the database connections
+        if self.process_pool:
+            print("[Shutdown] Shutting down process pool...")
+            print("[Shutdown] Waiting for any active replay parsing jobs to complete...")
+            self.process_pool.shutdown(wait=True)
+            print("[Shutdown] Process pool shutdown complete.")
+        
+        # 3. Shutdown DataAccessService - Now safe to close WAL
+        # All external processes that might write to the WAL have finished
+        try:
+            data_access_service = DataAccessService()
+            if data_access_service._initialized:
+                await data_access_service.shutdown()
+                print("[Shutdown] DataAccessService shutdown complete.")
+        except Exception as e:
+            print(f"[Shutdown] Error shutting down DataAccessService: {e}")
+        
+        # 4. Close Database Connection Pool
+        close_pool()
+        
+        print("[Shutdown] All resources closed.")
+        
+        # 5. Call the parent class close() to handle discord.py cleanup
+        await super().close()
 
 
 async def initialize_backend_services(bot: EvoLadderBot) -> None:
@@ -391,37 +440,4 @@ async def initialize_backend_services(bot: EvoLadderBot) -> None:
     
     # 9. Performance monitoring is active
     print("[INFO] Performance monitoring ACTIVE")
-
-
-async def shutdown_bot_resources(bot: EvoLadderBot) -> None:
-    """
-    Gracefully shut down all application resources.
-    
-    Args:
-        bot: The EvoLadderBot instance to clean up
-    """
-    print("[Shutdown] Closing application resources...")
-    
-    # 1. Stop Background Tasks
-    bot.stop_background_tasks()
-    
-    # 2. Shutdown DataAccessService
-    try:
-        data_access_service = DataAccessService()
-        if data_access_service._initialized:
-            await data_access_service.shutdown()
-            print("[Shutdown] DataAccessService shutdown complete.")
-    except Exception as e:
-        print(f"[Shutdown] Error shutting down DataAccessService: {e}")
-    
-    # 3. Close Database Connection Pool
-    close_pool()
-    
-    # 4. Shutdown Process Pool
-    if bot.process_pool:
-        print("[Shutdown] Shutting down process pool...")
-        bot.process_pool.shutdown(wait=True)
-        print("[Shutdown] Process pool shutdown complete.")
-    
-    print("[Shutdown] All resources closed.")
 

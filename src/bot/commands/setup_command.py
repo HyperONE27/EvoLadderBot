@@ -11,7 +11,7 @@ from src.backend.services.app_context import (
     validation_service,
     command_guard_service as guard_service
 )
-from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote
+from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote, get_globe_emote
 from src.bot.components.confirm_embed import ConfirmEmbedView
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
@@ -384,6 +384,7 @@ class RegionSelect(discord.ui.Select):
             discord.SelectOption(
                 label=region['name'], 
                 value=region['code'],
+                emoji=get_globe_emote(region['globe_emote']),
                 default=(region['code'] == selected_region)
             )
             for region in regions
@@ -570,8 +571,8 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
     fields = [
         (":id: **User ID**", user_id),
         (":hash: **BattleTag**", battle_tag),
-        (":map: **Country of Citizenship/Nationality**", country['name']),
-        (":map: **Region of Residency**", region['name'])
+        (f"{get_flag_emote(country['code'])} **Country of Citizenship/Nationality**", f"{country['name']} ({country['code']})"),
+        (f"{get_globe_emote(region['globe_emote'])} **Region of Residency**", region['name'])
     ]
     
     if alt_ids:
