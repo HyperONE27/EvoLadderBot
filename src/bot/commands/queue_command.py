@@ -1283,8 +1283,8 @@ class MatchFoundView(discord.ui.View):
         # Get rank emotes for both players
         from src.backend.services.app_context import ranking_service
         
-        p1_rank = ranking_service.get_rank(final_results['player_1_discord_uid'], p1_race)
-        p2_rank = ranking_service.get_rank(final_results['player_2_discord_uid'], p2_race)
+        p1_rank = ranking_service.get_letter_rank(final_results['player_1_discord_uid'], p1_race)
+        p2_rank = ranking_service.get_letter_rank(final_results['player_2_discord_uid'], p2_race)
         
         p1_rank_emote = get_rank_emote(p1_rank)
         p2_rank_emote = get_rank_emote(p2_rank)
@@ -1368,8 +1368,8 @@ class MatchFoundView(discord.ui.View):
         # Get rank emotes for both players
         from src.backend.services.app_context import ranking_service
         
-        p1_rank = ranking_service.get_rank(match_data['player_1_discord_uid'], p1_race)
-        p2_rank = ranking_service.get_rank(match_data['player_2_discord_uid'], p2_race)
+        p1_rank = ranking_service.get_letter_rank(match_data['player_1_discord_uid'], p1_race)
+        p2_rank = ranking_service.get_letter_rank(match_data['player_2_discord_uid'], p2_race)
         
         p1_rank_emote = get_rank_emote(p1_rank)
         p2_rank_emote = get_rank_emote(p2_rank)

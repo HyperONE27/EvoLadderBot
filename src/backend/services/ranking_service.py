@@ -33,7 +33,7 @@ Intended usage:
 
 import asyncio
 from threading import Lock
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from src.backend.services.data_access_service import DataAccessService
 
 
@@ -62,7 +62,7 @@ class RankingService:
             data_service: Optional DataAccessService instance for dependency injection.
         """
         self.data_service = data_service or DataAccessService()
-        self._rankings: Dict[Tuple[int, str], str] = {}
+        self._rankings: Dict[Tuple[int, str], Dict[str, Any]] = {}
         self._total_entries: int = 0
         self._refresh_lock = Lock()
         # _background_task removed - DataAccessService handles this now
@@ -119,7 +119,10 @@ class RankingService:
                             race = entry.get("race")
                             
                             if discord_uid is not None and race is not None:
-                                new_rankings[(discord_uid, race)] = rank_name
+                                new_rankings[(discord_uid, race)] = {
+                                    "letter_rank": rank_name,
+                                    "global_rank": current_position + 1 # 1-based global rank
+                                }
                                 rank_counts[rank_name] = rank_counts.get(rank_name, 0) + 1
                             
                             current_position += 1
@@ -129,7 +132,10 @@ class RankingService:
                 discord_uid = entry.get("discord_uid")
                 race = entry.get("race")
                 if discord_uid is not None and race is not None:
-                    new_rankings[(discord_uid, race)] = "u_rank"
+                    new_rankings[(discord_uid, race)] = {
+                        "letter_rank": "u_rank",
+                        "global_rank": -1 # Indicate unranked
+                    }
             
             # Atomically update the instance variables
             self._rankings = new_rankings
@@ -149,7 +155,7 @@ class RankingService:
 
     # start_background_refresh() and stop_background_refresh() removed - DataAccessService handles this now
 
-    def get_rank(self, discord_uid: int, race: str) -> str:
+    def get_rank(self, discord_uid: int, race: str) -> Dict[str, Any]:
         """
         Get the rank for a specific player-race combination.
         
@@ -158,9 +164,39 @@ class RankingService:
             race: Race code (e.g., 'sc2_terran', 'bw_zerg').
         
         Returns:
-            Rank code (e.g., 's_rank', 'a_rank', 'u_rank' for unranked).
+            Dictionary containing 'letter_rank' and 'global_rank'.
         """
-        return self._rankings.get((discord_uid, race), "u_rank")
+        return self._rankings.get((discord_uid, race), {"letter_rank": "u_rank", "global_rank": -1})
+    
+    def get_letter_rank(self, discord_uid: int, race: str) -> str:
+        """
+        Get just the letter rank for a specific player-race combination.
+        
+        This is a convenience method for backward compatibility with code that only needs the letter rank.
+        
+        Args:
+            discord_uid: Discord user ID of the player.
+            race: Race code (e.g., 'sc2_terran', 'bw_zerg').
+        
+        Returns:
+            Letter rank code (e.g., 's_rank', 'a_rank', 'u_rank' for unranked).
+        """
+        ranking_info = self.get_rank(discord_uid, race)
+        return ranking_info.get("letter_rank", "u_rank")
+    
+    def get_global_rank(self, discord_uid: int, race: str) -> int:
+        """
+        Get the global rank number for a specific player-race combination.
+        
+        Args:
+            discord_uid: Discord user ID of the player.
+            race: Race code (e.g., 'sc2_terran', 'bw_zerg').
+        
+        Returns:
+            Global rank number (1-based), or -1 if unranked (0 games played).
+        """
+        ranking_info = self.get_rank(discord_uid, race)
+        return ranking_info.get("global_rank", -1)
 
     def _load_all_mmr_data(self) -> List[Dict]:
         """

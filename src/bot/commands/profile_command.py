@@ -186,7 +186,7 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
                 race_emote = get_race_emote(race_code)
                 
                 # Get rank for this player-race combination
-                rank = ranking_service.get_rank(user.id, race_code)
+                rank = ranking_service.get_letter_rank(user.id, race_code)
                 rank_emote = get_rank_emote(rank)
                 
                 mmr_value = int(mmr_entry['mmr'])
@@ -222,7 +222,7 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
                 race_emote = get_race_emote(race_code)
                 
                 # Get rank for this player-race combination
-                rank = ranking_service.get_rank(user.id, race_code)
+                rank = ranking_service.get_letter_rank(user.id, race_code)
                 rank_emote = get_rank_emote(rank)
                 
                 mmr_value = int(mmr_entry['mmr'])

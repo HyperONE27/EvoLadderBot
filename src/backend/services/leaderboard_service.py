@@ -228,17 +228,24 @@ class LeaderboardService:
         # Add rank column using RankingService
         # Use a more efficient approach: create rank list and add as column
         ranks = []
+        global_ranks = []
         for row in df.iter_rows(named=True):
             discord_uid = row.get('discord_uid')
             race = row.get('race')
             if discord_uid and race:
-                rank = self.ranking_service.get_rank(discord_uid, race)
-                ranks.append(rank if rank else "unranked")
+                letter_rank = self.ranking_service.get_letter_rank(discord_uid, race)
+                global_rank = self.ranking_service.get_global_rank(discord_uid, race)
+                ranks.append(letter_rank if letter_rank else "unranked")
+                global_ranks.append(global_rank)
             else:
                 ranks.append("unranked")
+                global_ranks.append(-1)
         
-        # Add rank column to existing DataFrame
-        df = df.with_columns(pl.Series("rank", ranks, dtype=pl.Utf8))
+        # Add both rank columns to existing DataFrame
+        df = df.with_columns([
+            pl.Series("rank", ranks, dtype=pl.Utf8),
+            pl.Series("global_rank", global_ranks, dtype=pl.Int64)
+        ])
         
         return df
     
@@ -404,13 +411,14 @@ class LeaderboardService:
             return []
         
         formatted_players = []
-        for i, player in enumerate(players, 1):
-            rank = (current_page - 1) * page_size + i
+        for player in players:
+            # Use the pre-calculated global_rank instead of calculating temporary rank
+            global_rank = player.get('global_rank', -1)
             mmr_value = player.get('mmr', 0)
             mmr_display = int(round(mmr_value)) if isinstance(mmr_value, (int, float)) else 0
             
             formatted_players.append({
-                "rank": rank,
+                "rank": global_rank,  # Now uses the pre-calculated global rank
                 "player_name": player['player_name'],
                 "mmr": mmr_display,
                 "race": self.race_service.format_race_name(player['race']),

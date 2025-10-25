@@ -598,8 +598,8 @@ class Matchmaker:
 			
 			# Get cached ranks for performance (avoid dynamic calculation in embed)
 			from src.backend.services.app_context import ranking_service
-			p1_rank = ranking_service.get_rank(p1.discord_user_id, p1_race)
-			p2_rank = ranking_service.get_rank(p2.discord_user_id, p2_race)
+			p1_rank = ranking_service.get_letter_rank(p1.discord_user_id, p1_race)
+			p2_rank = ranking_service.get_letter_rank(p2.discord_user_id, p2_race)
 			
 			match_result = MatchResult(
 				match_id=match_id,
