@@ -120,11 +120,16 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
     if player_data.get('region'):
         region_name = regions_service.get_region_name(player_data['region'])
         if region_name:
+            # Get the full region data to access the globe_emote field
+            region_data = regions_service.get_region_by_code(player_data['region'])
+            if region_data and region_data.get('globe_emote'):
+                # Use the globe_emote from regions data if available
+                region_globe_emote = get_globe_emote(region_data.get('globe_emote'))
             location_parts.append(f"- **Region of Residence:** {region_name}")
     
     if location_parts:
         location_info = "\n".join(location_parts)
-        embed.add_field(name=f"{get_globe_emote(player_data['region'])} Location", value=location_info, inline=False)
+        embed.add_field(name=f"{region_globe_emote} Location", value=location_info, inline=False)
         # Add spacing between sections
         embed.add_field(name="\n\n", value="\n\n", inline=False)
     
