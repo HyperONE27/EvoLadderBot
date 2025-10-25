@@ -963,7 +963,7 @@ class DataAccessService:
             discord_uid: Discord user ID
             
         Returns:
-            Dict mapping race code to MMR value
+            Dict mapping race code to complete record dict with MMR, games_played, games_won, games_lost, games_drawn
         """
         if self._mmrs_df is None:
             print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
@@ -974,13 +974,18 @@ class DataAccessService:
         if len(result) == 0:
             return {}
         
-        # Build dict of race -> MMR
+        # Build dict of race -> complete record dict
         mmrs = {}
         for row in result.iter_rows(named=True):
             race = row["race"]
-            mmr = row["mmr"]
-            if race and mmr is not None:
-                mmrs[race] = float(mmr)
+            if race:
+                mmrs[race] = {
+                    "mmr": float(row["mmr"]) if row["mmr"] is not None else 0,
+                    "games_played": int(row["games_played"]) if row["games_played"] is not None else 0,
+                    "games_won": int(row["games_won"]) if row["games_won"] is not None else 0,
+                    "games_lost": int(row["games_lost"]) if row["games_lost"] is not None else 0,
+                    "games_drawn": int(row["games_drawn"]) if row["games_drawn"] is not None else 0,
+                }
         
         return mmrs
     

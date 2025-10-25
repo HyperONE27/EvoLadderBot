@@ -120,6 +120,10 @@ def _get_filtered_leaderboard_dataframe(
         # Filter by specific rank (e.g., "s_rank", "a_rank")
         filter_conditions.append(pl.col("rank") == rank_filter)
     
+    # Always exclude unranked players (u_rank) from leaderboard display
+    # Unranked players are stored but only shown in /profile and /queue
+    filter_conditions.append(pl.col("rank") != "u_rank")
+    
     # Apply all filters at once using Polars' optimized all_horizontal combinator
     # This is fully vectorized and more efficient than manually combining with &
     if filter_conditions:

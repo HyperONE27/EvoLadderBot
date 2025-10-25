@@ -133,8 +133,8 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
         # Get the canonical race order
         race_order = races_service.get_race_order()
         
-        # Convert dict to list of dicts for processing
-        mmr_list = [{"race": race, "mmr": mmr} for race, mmr in mmr_data.items()]
+        # Convert dict to list of dicts for processing (now with full records)
+        mmr_list = [{"race": race, **record} for race, record in mmr_data.items()]
         
         # Sort MMR data by race order
         def race_sort_key(mmr_entry):
@@ -149,6 +149,28 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
         # Separate BW and SC2 races (already in correct order)
         bw_mmrs = [m for m in sorted_mmr_data if m['race'].startswith('bw_')]
         sc2_mmrs = [m for m in sorted_mmr_data if m['race'].startswith('sc2_')]
+        
+        # Calculate overall statistics
+        total_games_played = 0
+        total_games_won = 0
+        total_games_lost = 0
+        total_games_drawn = 0
+        
+        for mmr_entry in sorted_mmr_data:
+            total_games_played += mmr_entry.get('games_played', 0)
+            total_games_won += mmr_entry.get('games_won', 0)
+            total_games_lost += mmr_entry.get('games_lost', 0)
+            total_games_drawn += mmr_entry.get('games_drawn', 0)
+        
+        # Add Overall Statistics section if player has played games
+        if total_games_played > 0:
+            overall_win_rate = (total_games_won / total_games_played * 100) if total_games_played > 0 else 0
+            overall_stats = f"- **Total Games:** {total_games_played}\n"
+            overall_stats += f"- **Record:** {total_games_won}W-{total_games_lost}L-{total_games_drawn}D\n"
+            overall_stats += f"- **Win Rate:** {overall_win_rate:.1f}%"
+            embed.add_field(name="📈 Overall Statistics", value=overall_stats, inline=False)
+            # Add spacing between sections
+            embed.add_field(name="\n\n", value="\n\n", inline=False)
         
         # BW MMRs
         if bw_mmrs:
@@ -168,10 +190,13 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
                 games_lost = mmr_entry.get('games_lost', 0)
                 games_drawn = mmr_entry.get('games_drawn', 0)
                 
-                bw_text += f"- {rank_emote} {race_emote} **{race_name}:** {mmr_value} MMR"
-                
-                # Win/Loss record
-                if games_played > 0:
+                # Display "Unranked" for races with 0 games
+                if games_played == 0:
+                    bw_text += f"- {rank_emote} {race_emote} **{race_name}:** Unranked"
+                else:
+                    bw_text += f"- {rank_emote} {race_emote} **{race_name}:** {mmr_value} MMR"
+                    
+                    # Win/Loss record
                     win_rate = (games_won / games_played * 100) if games_played > 0 else 0
                     bw_text += f" • {games_won}W-{games_lost}L-{games_drawn}D ({win_rate:.1f}%)"
                 
@@ -201,10 +226,13 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
                 games_lost = mmr_entry.get('games_lost', 0)
                 games_drawn = mmr_entry.get('games_drawn', 0)
                 
-                sc2_text += f"- {rank_emote} {race_emote} **{race_name}:** {mmr_value} MMR"
-                
-                # Win/Loss record
-                if games_played > 0:
+                # Display "Unranked" for races with 0 games
+                if games_played == 0:
+                    sc2_text += f"- {rank_emote} {race_emote} **{race_name}:** Unranked"
+                else:
+                    sc2_text += f"- {rank_emote} {race_emote} **{race_name}:** {mmr_value} MMR"
+                    
+                    # Win/Loss record
                     win_rate = (games_won / games_played * 100) if games_played > 0 else 0
                     sc2_text += f" • {games_won}W-{games_lost}L-{games_drawn}D ({win_rate:.1f}%)"
                 

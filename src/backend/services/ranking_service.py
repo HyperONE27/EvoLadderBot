@@ -82,22 +82,39 @@ class RankingService:
             
             # Use a temporary dict to build new rankings
             new_rankings = {}
-            total_entries = len(all_mmr_data)
             
-            if total_entries == 0:
-                print("[Ranking Service] No MMR data found - all players will be unranked")
+            # Separate ranked and unranked entries based on games_played
+            ranked_entries = []
+            unranked_entries = []
+            
+            for entry in all_mmr_data:
+                games_played = entry.get("games_played", 0)
+                if games_played == 0:
+                    # Player-race with 0 games is unranked
+                    unranked_entries.append(entry)
+                else:
+                    # Player-race with at least 1 game is eligible for ranking
+                    ranked_entries.append(entry)
+            
+            total_ranked_entries = len(ranked_entries)
+            total_unranked_entries = len(unranked_entries)
+            
+            print(f"[Ranking Service] Ranked entries: {total_ranked_entries}, Unranked entries (0 games): {total_unranked_entries}")
+            
+            if total_ranked_entries == 0:
+                print("[Ranking Service] No ranked entries - all players will be unranked")
             else:
-                # Calculate fixed allocation for each rank
-                rank_allocations = self._calculate_fixed_allocations(total_entries)
+                # Calculate fixed allocation for each rank (only for ranked entries)
+                rank_allocations = self._calculate_fixed_allocations(total_ranked_entries)
                 
-                # Assign ranks based on position in sorted list
+                # Assign ranks based on position in sorted list (only ranked entries)
                 rank_counts = {}
                 current_position = 0
                 
                 for rank_name, allocation_size in rank_allocations.items():
                     for i in range(allocation_size):
-                        if current_position < len(all_mmr_data):
-                            entry = all_mmr_data[current_position]
+                        if current_position < len(ranked_entries):
+                            entry = ranked_entries[current_position]
                             discord_uid = entry.get("discord_uid")
                             race = entry.get("race")
                             
@@ -107,13 +124,20 @@ class RankingService:
                             
                             current_position += 1
             
+            # Mark all unranked entries with u_rank
+            for entry in unranked_entries:
+                discord_uid = entry.get("discord_uid")
+                race = entry.get("race")
+                if discord_uid is not None and race is not None:
+                    new_rankings[(discord_uid, race)] = "u_rank"
+            
             # Atomically update the instance variables
             self._rankings = new_rankings
-            self._total_entries = total_entries
+            self._total_entries = total_ranked_entries  # Only count ranked entries for statistics
             
-            print(f"[Ranking Service] Refreshed rankings for {len(self._rankings)} player-race combinations")
+            print(f"[Ranking Service] Refreshed rankings for {len(self._rankings)} player-race combinations ({total_ranked_entries} ranked, {total_unranked_entries} unranked)")
             if 'rank_counts' in locals():
-                print(f"[Ranking Service] Rank distribution: {rank_counts}")
+                print(f"[Ranking Service] Rank distribution (ranked only): {rank_counts}")
 
     async def trigger_refresh(self) -> None:
         """
