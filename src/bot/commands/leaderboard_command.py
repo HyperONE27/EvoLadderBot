@@ -531,11 +531,15 @@ class LeaderboardView(discord.ui.View):
         true_total_players = data.get("true_total_players", total_players)
         
         pagination_info = self.leaderboard_service.get_pagination_info(current_page, total_pages, total_players)
-        footer_text = f"Page {pagination_info['current_page']}/{pagination_info['total_pages']} • {pagination_info['total_players']} players"
         
-        # Add second line if true count exceeds displayed count
-        if true_total_players > total_players:
-            footer_text += f"\n{true_total_players} players exist with the given filters.\nDue to Discord UI limitations, we show only the top {total_players}."
+        # Always show the true total count in the footer
+        # Use true_total_players if it exceeds the displayed count
+        display_count = true_total_players if true_total_players > total_players else total_players
+        footer_text = f"Page {pagination_info['current_page']}/{pagination_info['total_pages']} • {display_count} players"
+        
+        # Add warning if true count exceeds 1000 (display limit due to Discord UI constraints)
+        if true_total_players > 1000:
+            footer_text += f"\n⚠️ Over 1000 players match these filters. Due to Discord UI limitations, only the top 1000 are displayed."
         
         embed.set_footer(text=footer_text)
         

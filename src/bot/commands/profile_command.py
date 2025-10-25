@@ -124,7 +124,7 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
     
     if location_parts:
         location_info = "\n".join(location_parts)
-        embed.add_field(name="🌍 Location", value=location_info, inline=False)
+        embed.add_field(name=f"{get_globe_emote(player_data['region'])} Location", value=location_info, inline=False)
         # Add spacing between sections
         embed.add_field(name="\n\n", value="\n\n", inline=False)
     

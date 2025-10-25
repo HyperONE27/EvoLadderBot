@@ -65,7 +65,7 @@ def _get_filtered_leaderboard_dataframe(
     best_race_only: bool = False,
     rank_filter: Optional[str] = None,
     page_size: int = 20
-) -> tuple[pl.DataFrame, int, int]:
+) -> tuple[pl.DataFrame, int, int, int]:
     """
     Synchronous function that performs Polars filtering and sorting.
     
@@ -81,11 +81,26 @@ def _get_filtered_leaderboard_dataframe(
         page_size: Number of items per page
     
     Returns:
-        Tuple of (filtered_df, total_players, total_pages)
+        Tuple of (filtered_df, total_players, total_pages, true_total_players)
     """
     perf_start = time.time()
     
-    # Apply filters (optimized for large filter lists)
+    # FIRST: Apply best_race_only filter if enabled
+    # This MUST happen BEFORE other filters to ensure correct rank distribution
+    # when the rank filter is subsequently applied
+    if best_race_only:
+        # Group by discord_uid and keep only the highest MMR entry (their best race)
+        # Sort first, then group and take first (highest MMR per player)
+        df = (df
+            .sort(["mmr", "last_played"], descending=[True, True])
+            .group_by("discord_uid", maintain_order=True)
+            .first()
+        )
+    
+    perf_best_race = time.time()
+    best_race_time = (perf_best_race - perf_start) * 1000 if best_race_only else 0
+    
+    # THEN: Apply other filters (country, race, rank)
     # Build filter conditions and apply them in one operation for better performance
     filter_conditions = []
     
@@ -130,20 +145,7 @@ def _get_filtered_leaderboard_dataframe(
         df = df.filter(pl.all_horizontal(filter_conditions))
     
     perf_filter = time.time()
-    filter_time = (perf_filter - perf_start) * 1000
-    
-    # Apply best race only filtering if enabled
-    if best_race_only:
-        # Group by discord_uid and keep only the highest MMR entry
-        # Sort first, then group and take first (highest MMR per player)
-        df = (df
-            .sort(["mmr", "last_played"], descending=[True, True])
-            .group_by("discord_uid", maintain_order=True)
-            .first()
-        )
-    
-    perf_best_race = time.time()
-    best_race_time = (perf_best_race - perf_filter) * 1000 if best_race_only else 0
+    filter_time = (perf_filter - perf_best_race) * 1000
     
     # Sort by MMR (descending), then by last_played (descending) for tie-breaking
     # Only sort if we didn't just do best_race_only (which already sorted)
@@ -152,7 +154,7 @@ def _get_filtered_leaderboard_dataframe(
     # Note: If best_race_only was enabled, data is already sorted from groupby operation
     
     perf_sort = time.time()
-    sort_time = (perf_sort - perf_best_race) * 1000
+    sort_time = (perf_sort - perf_filter) * 1000
     
     # Calculate pagination
     true_total_players = len(df)  # Store true count before limiting
@@ -172,11 +174,11 @@ def _get_filtered_leaderboard_dataframe(
     
     # Compact performance logging
     if best_race_only:
-        print(f"[LB-Filter] Filter:{filter_time:.1f}ms BestRace:{best_race_time:.1f}ms Sort:{sort_time:.1f}ms | Total:{total_filter_time:.1f}ms")
+        print(f"[LB-Filter] BestRace:{best_race_time:.1f}ms Filter:{filter_time:.1f}ms Sort:{sort_time:.1f}ms | Total:{total_filter_time:.1f}ms")
     else:
         print(f"[LB-Filter] Filter:{filter_time:.1f}ms Sort:{sort_time:.1f}ms | Total:{total_filter_time:.1f}ms")
     
-    return df, total_players, total_pages
+    return df, total_players, total_pages, true_total_players
 
 
 class LeaderboardService:
@@ -312,7 +314,7 @@ class LeaderboardService:
         # This allows the filtering to happen without blocking the event loop
         # while keeping the code simple and leveraging Polars' internal parallelism
         loop = asyncio.get_running_loop()
-        filtered_df, total_players, total_pages = await loop.run_in_executor(
+        filtered_df, total_players, total_pages, true_total_players = await loop.run_in_executor(
             None,  # Use default executor (ThreadPoolExecutor)
             _get_filtered_leaderboard_dataframe,
             df,
@@ -348,7 +350,7 @@ class LeaderboardService:
             "total_pages": total_pages,
             "current_page": current_page,
             "total_players": total_players,
-            "true_total_players": len(filtered_df)
+            "true_total_players": true_total_players
         }
     
     def get_button_states(self, current_page: int, total_pages: int) -> Dict[str, bool]:
