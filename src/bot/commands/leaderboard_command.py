@@ -13,6 +13,7 @@ from src.backend.services.performance_service import FlowTracker
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
 from src.bot.utils.discord_utils import get_flag_emote, get_race_emote, send_ephemeral_response
+from src.bot.utils.command_decorators import auto_apply_dm_guard
 
 
 # Register Command
@@ -23,7 +24,9 @@ def register_leaderboard_command(tree: app_commands.CommandTree):
         description="View the MMR leaderboard"
     )
     async def leaderboard(interaction: discord.Interaction):
-        await leaderboard_command(interaction)
+        # Apply the DM-only guard
+        dm_guarded_command = auto_apply_dm_guard("leaderboard", leaderboard_command)
+        await dm_guarded_command(interaction)
     
     return leaderboard
 

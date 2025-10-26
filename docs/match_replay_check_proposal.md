@@ -4,7 +4,7 @@
 
 Currently, the replay upload flow stores replay metadata in the `replays` table after parsing, but no in-bot feedback confirms whether the uploaded replay actually matches the queued match. While we cannot prevent users from, say, accidentally picking the wrong map, we can enforce competitive integrity by verifying that players are indeed setting up their matches correctly.
 
-We can do this by **surfacing validation results** directly in the `MatchFoundViewEmbed` shown to players after a replay upload. Data parsed from replays exists in the `replays` DataFrame in memory. We can match wit
+We can do this by **surfacing validation results** directly in the `MatchFoundViewEmbed` shown to players after a replay upload. Data parsed from replays exists in Polars dataframes in memory, specifically the `_replays_df` DataFrame. We can compare this with the details assigned to the match in `_matches_1v1_df` and cross-verify that the game was actually played with the correct parameters.
 
 ## Proposal
 
@@ -14,11 +14,23 @@ It might look a little something like this:
 
 ```
 **Replay Verification**
-- Races match: ✅ Confirmed
-- 
-- 
-- 
+- Races match: ✅ Races played correspond to races played queued with.
+- Map name matches: ✅ Map used corresponds to the map assigned.
+- Timestamp matches: ✅ Match was initiated within ~15 minutes of match assignment.
+- Winner detection: ✅ Match details verified, automatically reporting the winner.
 ```
+
+Or alternatively:
+
+```
+**Replay Verification**
+- Races match: ❌ Races played DO NOT correspond to races played queued with.
+- Map name matches: ❌ Map used DOES NOT correspond to the map assigned.
+- Timestamp matches: ❌ Match was NOT initiated within ~15 minutes of match assignment.
+- Winner detection: ❌ Match details NOT verified, please report the winner manually.
+```
+
+We should automatically detect and report the winner IF AND ONLY IF all of the first three criteria are verified.
 
 ## Specifications
 

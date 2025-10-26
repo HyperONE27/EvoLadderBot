@@ -13,8 +13,8 @@ def should_be_ephemeral(interaction: discord.Interaction) -> bool:
     Determine if a Discord interaction response should be ephemeral.
     
     Rules:
-    - All commands are non-ephemeral in DMs (private messages)
-    - All commands are non-ephemeral in guild channels (servers)
+    - Responses in guild channels (servers) should be ephemeral to avoid clutter.
+    - Responses in DMs (private messages) should be non-ephemeral.
     
     Args:
         interaction: The Discord interaction object
@@ -22,8 +22,8 @@ def should_be_ephemeral(interaction: discord.Interaction) -> bool:
     Returns:
         bool: True if the response should be ephemeral, False otherwise
     """
-    # All responses are non-ephemeral
-    return False
+    # interaction.guild is None when in a DM
+    return interaction.guild is not None
 
 
 def get_ephemeral_kwargs(interaction: discord.Interaction) -> dict:

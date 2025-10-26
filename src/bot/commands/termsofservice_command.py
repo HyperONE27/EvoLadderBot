@@ -116,10 +116,7 @@ async def termsofservice_command(interaction: discord.Interaction):
                 description="An error occurred while confirming your acceptance. Please try again.",
                 color=discord.Color.red()
             )
-            await interaction.response.send_message(
-                embed=error_embed,
-                ephemeral=True
-            )
+            await send_ephemeral_response(interaction, embed=error_embed)
             return
 
         # Log the confirmation
@@ -136,7 +133,7 @@ async def termsofservice_command(interaction: discord.Interaction):
             text="You may now use all EvoLadderBot features.",
             icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
         )
-        await interaction.response.send_message(embed=post_confirm_view.embed, view=post_confirm_view, ephemeral=True)
+        await send_ephemeral_response(interaction, embed=post_confirm_view.embed, view=post_confirm_view)
 
     # Create custom cancel callback for terms of service
     async def cancel_callback(interaction: discord.Interaction):
@@ -154,7 +151,7 @@ async def termsofservice_command(interaction: discord.Interaction):
             icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
         )
 
-        await interaction.response.send_message(embed=decline_embed, ephemeral=True)
+        await send_ephemeral_response(interaction, embed=decline_embed)
 
     # Create custom view with only confirm and cancel buttons (no restart)
     class TOSConfirmView(discord.ui.View):

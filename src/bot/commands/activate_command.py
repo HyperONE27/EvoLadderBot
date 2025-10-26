@@ -109,7 +109,7 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
                     reset_target=ActivateModal(),
                     restart_label="🔄 Activate Another"
                 )
-                await interaction.response.send_message(embed=post_confirm_view.embed, view=post_confirm_view, ephemeral=True)
+                await send_ephemeral_response(interaction, embed=post_confirm_view.embed, view=post_confirm_view)
 
             confirm_view = ConfirmEmbedView(
                 title="Preview Activation",

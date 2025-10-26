@@ -29,7 +29,7 @@ from src.bot.components.cancel_embed import create_cancel_embed
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.components.error_embed import ErrorEmbedException, create_error_view_from_exception
-from src.bot.utils.command_decorators import dm_only
+from src.bot.utils.command_decorators import dm_only, auto_apply_dm_guard
 from src.bot.utils.discord_utils import (
     format_discord_timestamp,
     get_current_unix_timestamp,
@@ -37,6 +37,8 @@ from src.bot.utils.discord_utils import (
     get_race_emote,
     send_ephemeral_response,
     get_rank_emote,
+    get_globe_emote,
+    followup_ephemeral_response
 )
 import time
 from contextlib import suppress
@@ -297,10 +299,10 @@ class JoinQueueButton(discord.ui.Button):
                 error_view.add_item(button)
             
             flow.complete("validation_failed_no_race")
-            await interaction.followup.send(
+            await followup_ephemeral_response(
+                interaction,
                 embed=error_view.embed,
                 view=error_view,
-                ephemeral=True
             )
             return
         
@@ -318,7 +320,7 @@ class JoinQueueButton(discord.ui.Button):
                 description="You cannot queue more than once, or while a match is active."
             )
             error_view = create_error_view_from_exception(error)
-            await interaction.followup.send(embed=error_view.embed, view=error_view, ephemeral=True)
+            await followup_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
             return
         
         flow.checkpoint("persist_preferences")

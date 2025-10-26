@@ -615,9 +615,9 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
                 description="An error occurred while saving your profile. Please try again.",
                 color=discord.Color.red()
             )
-            await interaction.response.send_message(
-                embed=error_embed,
-                ephemeral=True
+            await send_ephemeral_response(
+                interaction,
+                embed=error_embed
             )
             return
         
@@ -636,11 +636,11 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
         )
         
         
-        await interaction.response.send_message(
+        await send_ephemeral_response(
+            interaction,
             content="",
             embed=post_confirm_view.embed,
             view=post_confirm_view,
-            ephemeral=True
         )
     
     return ConfirmEmbedView(
