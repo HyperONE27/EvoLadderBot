@@ -34,8 +34,8 @@ async def test_quick():
         print("[2/5] Checking tables loaded...")
         if data_service._players_df is not None:
             print(f"      [PASS] Players: {len(data_service._players_df)} rows")
-        if data_service._mmrs_df is not None:
-            print(f"      [PASS] MMRs: {len(data_service._mmrs_df)} rows")
+        if data_service._mmrs_1v1_df is not None:
+            print(f"      [PASS] MMRs: {len(data_service._mmrs_1v1_df)} rows")
         
         # Test player lookup
         print("[3/5] Testing player lookup...")
@@ -52,9 +52,9 @@ async def test_quick():
         
         # Test MMR lookup
         print("[4/5] Testing MMR lookup...")
-        if len(data_service._mmrs_df) > 0:
-            test_uid = data_service._mmrs_df[0, "discord_uid"]
-            test_race = data_service._mmrs_df[0, "race"]
+        if len(data_service._mmrs_1v1_df) > 0:
+            test_uid = data_service._mmrs_1v1_df[0, "discord_uid"]
+            test_race = data_service._mmrs_1v1_df[0, "race"]
             mmr = data_service.get_player_mmr(test_uid, test_race)
             if mmr is not None:
                 print(f"      [PASS] Found MMR: {mmr}")
@@ -92,4 +92,5 @@ if __name__ == "__main__":
         print(f"[FATAL] {e}")
         close_pool()
         sys.exit(1)
+
 

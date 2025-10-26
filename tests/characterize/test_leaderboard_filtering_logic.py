@@ -62,7 +62,7 @@ async def leaderboard_service_with_mock_data():
     
     # Load MMR data from CSV
     mmrs_data = pl.read_csv(csv_path)
-    data_service._mmrs_df = mmrs_data
+    data_service._mmrs_1v1_df = mmrs_data
     
     print(f"\n[Fixture] Loaded {len(mmrs_data)} MMR records from snapshot")
     
@@ -85,10 +85,10 @@ async def leaderboard_service_with_mock_data():
     print(f"[Fixture] Created {len(players_data)} unique players")
     
     # Initialize empty DataFrames for other tables
-    data_service._matches_df = pl.DataFrame({
+    data_service._matches_1v1_df = pl.DataFrame({
         "id": pl.Series([], dtype=pl.Int64),
     })
-    data_service._preferences_df = pl.DataFrame({
+    data_service._preferences_1v1_df = pl.DataFrame({
         "discord_uid": pl.Series([], dtype=pl.Int64),
     })
     data_service._replays_df = pl.DataFrame({
@@ -362,4 +362,5 @@ async def test_unranked_players_excluded_from_leaderboard(leaderboard_service_wi
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
+
 

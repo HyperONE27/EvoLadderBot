@@ -28,12 +28,12 @@ async def test_match_embed_generation_speed():
         data_service = DataAccessService()
         await data_service.initialize_async()
         
-        if len(data_service._matches_df) == 0:
+        if len(data_service._matches_1v1_df) == 0:
             print("[SKIP] No matches to test")
             return True
         
         # Get a test match
-        test_match_id = data_service._matches_df[0, "id"]
+        test_match_id = data_service._matches_1v1_df[0, "id"]
         match = data_service.get_match(test_match_id)
         p1_id = match["player_1_discord_uid"]
         p2_id = match["player_2_discord_uid"]
@@ -313,5 +313,6 @@ if __name__ == "__main__":
         traceback.print_exc()
         close_pool()
         sys.exit(1)
+
 
 

@@ -190,7 +190,7 @@ def initialized_service():
     """Provide a fully initialized service with mock data."""
     service = DataAccessService()
     service._players_df = create_mock_players_df()
-    service._mmrs_df = create_mock_mmrs_df()
+    service._mmrs_1v1_df = create_mock_mmrs_1v1_df()
     # ... other DataFrames
     return service
 ```
@@ -205,7 +205,7 @@ def initialized_service():
 Mock DataFrames use explicit Polars dtypes to match production schemas:
 
 ```python
-def create_mock_mmrs_df():
+def create_mock_mmrs_1v1_df():
     return pl.DataFrame({
         "discord_uid": pl.Series([1, 2], dtype=pl.Int64),
         "mmr": pl.Series([1500, 1600], dtype=pl.Int64),
@@ -324,3 +324,4 @@ The testing strategy now provides:
    - Performance characteristics validated
 
 This comprehensive testing approach significantly increases confidence in the three-phase improvement plan's production readiness.
+

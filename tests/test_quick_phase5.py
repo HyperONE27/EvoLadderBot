@@ -23,8 +23,8 @@ async def main():
     
     # Test 1: Match MMR lookup
     print("[1/3] Match MMR lookup...")
-    if len(data_service._matches_df) > 0:
-        test_match_id = data_service._matches_df[0, "id"]
+    if len(data_service._matches_1v1_df) > 0:
+        test_match_id = data_service._matches_1v1_df[0, "id"]
         start = time.perf_counter()
         p1_mmr, p2_mmr = data_service.get_match_mmrs(test_match_id)
         elapsed = (time.perf_counter() - start) * 1000
@@ -73,5 +73,6 @@ if __name__ == "__main__":
         traceback.print_exc()
         close_pool()
         sys.exit(1)
+
 
 

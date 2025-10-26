@@ -44,7 +44,7 @@ def initialized_service():
         "region": ["NA", "KR"],
     })
     
-    service._mmrs_df = pl.DataFrame({
+    service._mmrs_1v1_df = pl.DataFrame({
         "discord_uid": pl.Series([1, 2], dtype=pl.Int64),
         "race": ["terran", "zerg"],
         "mmr": pl.Series([1500, 1600], dtype=pl.Int64),
@@ -55,13 +55,13 @@ def initialized_service():
         "games_drawn": pl.Series([0, 0], dtype=pl.Int64),
     })
     
-    service._preferences_df = pl.DataFrame({
+    service._preferences_1v1_df = pl.DataFrame({
         "discord_uid": [1, 2],
         "last_chosen_races": [None, None],
         "last_chosen_vetoes": [None, None],
     })
     
-    service._matches_df = pl.DataFrame({
+    service._matches_1v1_df = pl.DataFrame({
         "id": [123],
         "player_1_discord_uid": [1],
         "player_2_discord_uid": [2],
@@ -176,3 +176,4 @@ class TestNonLeaderboardActionsPreserveCache:
         assert result is True, "update_player_preferences should succeed"
         assert initialized_service.is_leaderboard_cache_valid() is True, \
             "Cache should remain VALID after preference change (not leaderboard-related)"
+

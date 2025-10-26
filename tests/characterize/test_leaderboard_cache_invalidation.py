@@ -52,9 +52,9 @@ class TestCacheInvalidationOnMMRUpdate:
         data_service = DataAccessService()
         
         # Ensure service is initialized with mock data
-        if data_service._mmrs_df is None or len(data_service._mmrs_df) == 0:
+        if data_service._mmrs_1v1_df is None or len(data_service._mmrs_1v1_df) == 0:
             # Create mock MMR data
-            data_service._mmrs_df = pl.DataFrame({
+            data_service._mmrs_1v1_df = pl.DataFrame({
                 "discord_uid": [123456789],
                 "race": ["sc2_terran"],
                 "mmr": [2000],
@@ -92,8 +92,8 @@ class TestCacheInvalidationOnMMRUpdate:
         data_service = DataAccessService()
         
         # Setup mock MMR data with ALL required columns
-        if data_service._mmrs_df is None or len(data_service._mmrs_df) == 0:
-            data_service._mmrs_df = pl.DataFrame({
+        if data_service._mmrs_1v1_df is None or len(data_service._mmrs_1v1_df) == 0:
+            data_service._mmrs_1v1_df = pl.DataFrame({
                 "discord_uid": pl.Series([111111111], dtype=pl.Int64),
                 "race": ["bw_terran"],
                 "mmr": pl.Series([1800], dtype=pl.Int64),
@@ -138,8 +138,8 @@ class TestCacheInvalidationOnMMRCreate:
         data_service = DataAccessService()
         
         # Ensure we have a base MMR dataframe
-        if data_service._mmrs_df is None:
-            data_service._mmrs_df = pl.DataFrame({
+        if data_service._mmrs_1v1_df is None:
+            data_service._mmrs_1v1_df = pl.DataFrame({
                 "discord_uid": pl.Series([], dtype=pl.Int64),
                 "race": pl.Series([], dtype=pl.Utf8),
                 "mmr": pl.Series([], dtype=pl.Int64),
@@ -182,8 +182,8 @@ class TestCacheInvalidationOnMMRCreate:
         data_service = DataAccessService()
         
         # Setup existing MMR data
-        if data_service._mmrs_df is None or len(data_service._mmrs_df) == 0:
-            data_service._mmrs_df = pl.DataFrame({
+        if data_service._mmrs_1v1_df is None or len(data_service._mmrs_1v1_df) == 0:
+            data_service._mmrs_1v1_df = pl.DataFrame({
                 "discord_uid": [555555555],
                 "race": ["sc2_protoss"],
                 "mmr": [1900],
@@ -241,8 +241,8 @@ class TestCacheInvalidationOnAbort:
                 "alt_player_name_2": [None, None],
             })
         
-        if data_service._matches_df is None:
-            data_service._matches_df = pl.DataFrame({
+        if data_service._matches_1v1_df is None:
+            data_service._matches_1v1_df = pl.DataFrame({
                 "id": [1],
                 "player_1_discord_uid": [777777777],
                 "player_2_discord_uid": [888888888],
@@ -364,8 +364,8 @@ class TestCacheRefreshOnDemand:
         leaderboard_service = LeaderboardService(data_service=data_service)
         
         # Setup initial data
-        if data_service._mmrs_df is None:
-            data_service._mmrs_df = pl.DataFrame({
+        if data_service._mmrs_1v1_df is None:
+            data_service._mmrs_1v1_df = pl.DataFrame({
                 "discord_uid": [123456789],
                 "race": ["sc2_terran"],
                 "mmr": [2000],
@@ -443,8 +443,8 @@ class TestCacheInvalidationConcurrency:
         data_service = DataAccessService()
         
         # Setup base MMR data for multiple players with explicit dtypes
-        if data_service._mmrs_df is None or len(data_service._mmrs_df) == 0:
-            data_service._mmrs_df = pl.DataFrame({
+        if data_service._mmrs_1v1_df is None or len(data_service._mmrs_1v1_df) == 0:
+            data_service._mmrs_1v1_df = pl.DataFrame({
                 "discord_uid": pl.Series([111111111, 222222222, 333333333], dtype=pl.Int64),
                 "race": ["sc2_terran", "sc2_zerg", "sc2_protoss"],
                 "mmr": pl.Series([2000, 1900, 2100], dtype=pl.Int64),
@@ -491,3 +491,4 @@ class TestCacheInvalidationConcurrency:
         # Should be safe to mark valid after multiple invalidations
         data_service.mark_leaderboard_cache_valid()
         assert data_service.is_leaderboard_cache_valid() is True
+

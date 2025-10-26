@@ -25,12 +25,12 @@ async def test_match_lookup_performance():
         data_service = DataAccessService()
         await data_service.initialize_async()
         
-        if len(data_service._matches_df) == 0:
+        if len(data_service._matches_1v1_df) == 0:
             print("[SKIP] No matches to test")
             return True
         
         # Get a test match ID
-        test_match_id = data_service._matches_df[0, "id"]
+        test_match_id = data_service._matches_1v1_df[0, "id"]
         
         # Test 1: get_match
         print(f"[1/3] Testing get_match({test_match_id})...")
@@ -209,4 +209,5 @@ if __name__ == "__main__":
         traceback.print_exc()
         close_pool()
         sys.exit(1)
+
 

@@ -33,7 +33,7 @@ def reset_data_access_service_singleton():
     DataAccessService._initialized = False
 
 
-def create_mock_mmrs_df():
+def create_mock_mmrs_1v1_df():
     """Create a properly-structured mock MMRs DataFrame."""
     return pl.DataFrame({
         "discord_uid": pl.Series([1, 2], dtype=pl.Int64),
@@ -62,7 +62,7 @@ def create_mock_players_df():
     })
 
 
-def create_mock_matches_df():
+def create_mock_matches_1v1_df():
     """Create a properly-structured mock matches DataFrame."""
     return pl.DataFrame({
         "id": pl.Series([123], dtype=pl.Int64),
@@ -93,9 +93,9 @@ def initialized_service():
     service = DataAccessService()
     
     service._players_df = create_mock_players_df()
-    service._mmrs_df = create_mock_mmrs_df()
-    service._matches_df = create_mock_matches_df()
-    service._preferences_df = pl.DataFrame({
+    service._mmrs_1v1_df = create_mock_mmrs_1v1_df()
+    service._matches_1v1_df = create_mock_matches_1v1_df()
+    service._preferences_1v1_df = pl.DataFrame({
         "discord_uid": [1, 2],
         "last_chosen_races": [None, None],
         "last_chosen_vetoes": [None, None],
@@ -135,7 +135,7 @@ class TestCompleteMatchFlow:
         
         # === PHASE 2: Match is created ===
         # In real flow: Queue command creates match via matchmaker
-        # For this test, match already exists in _matches_df
+        # For this test, match already exists in _matches_1v1_df
         # Cache should remain valid because no MMR has changed
         assert initialized_service.is_leaderboard_cache_valid() is True, \
             "Cache should remain VALID when match is just created"
@@ -276,3 +276,4 @@ class TestCacheInvalidationRobustness:
         
         # Assert
         assert initialized_service.is_leaderboard_cache_valid() is True
+

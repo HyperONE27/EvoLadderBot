@@ -93,9 +93,9 @@ class DataAccessService:
         
         # In-memory DataFrames for hot tables
         self._players_df: Optional[pl.DataFrame] = None
-        self._mmrs_df: Optional[pl.DataFrame] = None
-        self._preferences_df: Optional[pl.DataFrame] = None
-        self._matches_df: Optional[pl.DataFrame] = None
+        self._mmrs_1v1_df: Optional[pl.DataFrame] = None
+        self._preferences_1v1_df: Optional[pl.DataFrame] = None
+        self._matches_1v1_df: Optional[pl.DataFrame] = None
         self._replays_df: Optional[pl.DataFrame] = None
         
         # System state
@@ -149,9 +149,9 @@ class DataAccessService:
             elapsed = (time.time() - start_time) * 1000
             print(f"[DataAccessService] Async initialization complete in {elapsed:.2f}ms")
             print(f"[DataAccessService]    - Players: {len(self._players_df) if self._players_df is not None else 0} rows")
-            print(f"[DataAccessService]    - MMRs: {len(self._mmrs_df) if self._mmrs_df is not None else 0} rows")
-            print(f"[DataAccessService]    - Preferences: {len(self._preferences_df) if self._preferences_df is not None else 0} rows")
-            print(f"[DataAccessService]    - Matches: {len(self._matches_df) if self._matches_df is not None else 0} rows")
+            print(f"[DataAccessService]    - MMRs: {len(self._mmrs_1v1_df) if self._mmrs_1v1_df is not None else 0} rows")
+            print(f"[DataAccessService]    - Preferences: {len(self._preferences_1v1_df) if self._preferences_1v1_df is not None else 0} rows")
+            print(f"[DataAccessService]    - Matches: {len(self._matches_1v1_df) if self._matches_1v1_df is not None else 0} rows")
             print(f"[DataAccessService]    - Replays: {len(self._replays_df) if self._replays_df is not None else 0} rows")
             
             self._initialized = True
@@ -189,9 +189,9 @@ class DataAccessService:
             0  # offset
         )
         if mmrs_data:
-            self._mmrs_df = pl.DataFrame(mmrs_data, infer_schema_length=None)
+            self._mmrs_1v1_df = pl.DataFrame(mmrs_data, infer_schema_length=None)
         else:
-            self._mmrs_df = pl.DataFrame({
+            self._mmrs_1v1_df = pl.DataFrame({
                 "discord_uid": pl.Series([], dtype=pl.Int64),
                 "race": pl.Series([], dtype=pl.Utf8),
                 "mmr": pl.Series([], dtype=pl.Int64),
@@ -201,7 +201,7 @@ class DataAccessService:
                 "games_lost": pl.Series([], dtype=pl.Int64),
                 "games_drawn": pl.Series([], dtype=pl.Int64),
             })
-        print(f"[DataAccessService]   MMRs loaded: {len(self._mmrs_df)} rows")
+        print(f"[DataAccessService]   MMRs loaded: {len(self._mmrs_1v1_df)} rows")
         
         # Load preferences_1v1 table
         print("[DataAccessService]   Loading preferences_1v1...")
@@ -213,14 +213,14 @@ class DataAccessService:
             {}
         )
         if prefs_data:
-            self._preferences_df = pl.DataFrame(prefs_data, infer_schema_length=None)
+            self._preferences_1v1_df = pl.DataFrame(prefs_data, infer_schema_length=None)
         else:
-            self._preferences_df = pl.DataFrame({
+            self._preferences_1v1_df = pl.DataFrame({
                 "discord_uid": pl.Series([], dtype=pl.Int64),
                 "last_chosen_races": pl.Series([], dtype=pl.Utf8),
                 "last_chosen_vetoes": pl.Series([], dtype=pl.Utf8),
             })
-        print(f"[DataAccessService]   Preferences loaded: {len(self._preferences_df)} rows")
+        print(f"[DataAccessService]   Preferences loaded: {len(self._preferences_1v1_df)} rows")
         
         # Load matches_1v1 table
         print("[DataAccessService]   Loading matches_1v1...")
@@ -232,14 +232,14 @@ class DataAccessService:
             {}
         )
         if matches_data:
-            self._matches_df = pl.DataFrame(matches_data, infer_schema_length=None)
+            self._matches_1v1_df = pl.DataFrame(matches_data, infer_schema_length=None)
             # Add status column if not present (for backward compatibility with existing data)
-            if "status" not in self._matches_df.columns:
+            if "status" not in self._matches_1v1_df.columns:
                 # Infer status from existing data:
                 # - If match_result is not None/0 and both reports are present, mark as COMPLETE
                 # - If match_result == -1, mark as ABORTED
                 # - Otherwise, mark as IN_PROGRESS
-                self._matches_df = self._matches_df.with_columns([
+                self._matches_1v1_df = self._matches_1v1_df.with_columns([
                     pl.when(pl.col("match_result") == -1)
                       .then(pl.lit("ABORTED"))
                       .when((pl.col("match_result").is_not_null()) & (pl.col("match_result") != 0))
@@ -249,7 +249,7 @@ class DataAccessService:
                 ])
         else:
             # Create empty DataFrame with complete schema matching matches_1v1 table
-            self._matches_df = pl.DataFrame({
+            self._matches_1v1_df = pl.DataFrame({
                 "id": pl.Series([], dtype=pl.Int64),
                 "player_1_discord_uid": pl.Series([], dtype=pl.Int64),
                 "player_2_discord_uid": pl.Series([], dtype=pl.Int64),
@@ -270,7 +270,7 @@ class DataAccessService:
                 "player_2_replay_time": pl.Series([], dtype=pl.Utf8),
                 "status": pl.Series([], dtype=pl.Utf8),  # New field: IN_PROGRESS, PROCESSING_COMPLETION, COMPLETE, ABORTED, CONFLICT
             })
-        print(f"[DataAccessService]   Matches loaded: {len(self._matches_df)} rows")
+        print(f"[DataAccessService]   Matches loaded: {len(self._matches_1v1_df)} rows")
         
         # Load replays table
         print("[DataAccessService]   Loading replays...")
@@ -940,11 +940,11 @@ class DataAccessService:
         Returns:
             MMR value or None if not found
         """
-        if self._mmrs_df is None:
+        if self._mmrs_1v1_df is None:
             print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
             return None
         
-        result = self._mmrs_df.filter(
+        result = self._mmrs_1v1_df.filter(
             (pl.col("discord_uid") == discord_uid) &
             (pl.col("race") == race)
         )
@@ -965,11 +965,11 @@ class DataAccessService:
         Returns:
             Dict mapping race code to complete record dict with MMR, games_played, games_won, games_lost, games_drawn
         """
-        if self._mmrs_df is None:
+        if self._mmrs_1v1_df is None:
             print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
             return {}
         
-        result = self._mmrs_df.filter(pl.col("discord_uid") == discord_uid)
+        result = self._mmrs_1v1_df.filter(pl.col("discord_uid") == discord_uid)
         
         if len(result) == 0:
             return {}
@@ -998,12 +998,12 @@ class DataAccessService:
         Returns:
             Polars DataFrame with complete leaderboard data, or None if not initialized
         """
-        if self._mmrs_df is None or self._players_df is None:
+        if self._mmrs_1v1_df is None or self._players_df is None:
             print("[DataAccessService] WARNING: DataFrames not initialized")
             return None
         
         # Join MMRs with Players data to get complete leaderboard information
-        leaderboard_df = self._mmrs_df.join(
+        leaderboard_df = self._mmrs_1v1_df.join(
             self._players_df.select([
                 "discord_uid", 
                 "player_name",
@@ -1016,14 +1016,14 @@ class DataAccessService:
         )
         
         # Add last_played from matches (most recent match for each player/race)
-        if self._matches_df is not None and len(self._matches_df) > 0:
+        if self._matches_1v1_df is not None and len(self._matches_1v1_df) > 0:
             # Get the most recent match date for each player/race combination
-            last_played = self._matches_df.group_by(["player_1_discord_uid", "player_1_race"]).agg([
+            last_played = self._matches_1v1_df.group_by(["player_1_discord_uid", "player_1_race"]).agg([
                 pl.col("played_at").max().alias("last_played_p1")
             ]).rename({"player_1_discord_uid": "discord_uid", "player_1_race": "race"})
             
             # Also get player 2 matches
-            last_played_p2 = self._matches_df.group_by(["player_2_discord_uid", "player_2_race"]).agg([
+            last_played_p2 = self._matches_1v1_df.group_by(["player_2_discord_uid", "player_2_race"]).agg([
                 pl.col("played_at").max().alias("last_played_p2")
             ]).rename({"player_2_discord_uid": "discord_uid", "player_2_race": "race"})
             
@@ -1067,7 +1067,7 @@ class DataAccessService:
             True if successful
         """
         try:
-            if self._matches_df is None:
+            if self._matches_1v1_df is None:
                 print(f"[DataAccessService] Matches DataFrame not initialized")
                 return False
             
@@ -1090,7 +1090,7 @@ class DataAccessService:
                 return False
             
             # Update the report in memory
-            self._matches_df = self._matches_df.with_columns([
+            self._matches_1v1_df = self._matches_1v1_df.with_columns([
                 pl.when(pl.col("id") == match_id)
                   .then(pl.lit(report_value))
                   .otherwise(pl.col(report_column))
@@ -1359,13 +1359,13 @@ class DataAccessService:
         Returns:
             True if successful, False if record not found
         """
-        if self._mmrs_df is None:
+        if self._mmrs_1v1_df is None:
             print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
             return False
         
         # Check if record exists
         mask = (pl.col("discord_uid") == discord_uid) & (pl.col("race") == race)
-        if len(self._mmrs_df.filter(mask)) == 0:
+        if len(self._mmrs_1v1_df.filter(mask)) == 0:
             print(f"[DataAccessService] WARNING: MMR record not found for {discord_uid}/{race}")
             return False
         
@@ -1397,7 +1397,7 @@ class DataAccessService:
             write_data['games_drawn'] = games_drawn
         
         # Apply updates to DataFrame
-        self._mmrs_df = self._mmrs_df.with_columns(**updates)
+        self._mmrs_1v1_df = self._mmrs_1v1_df.with_columns(**updates)
         
         # Queue database write
         job = WriteJob(
@@ -1442,7 +1442,7 @@ class DataAccessService:
         Returns:
             True if successful
         """
-        if self._mmrs_df is None:
+        if self._mmrs_1v1_df is None:
             print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
             return False
         
@@ -1451,7 +1451,7 @@ class DataAccessService:
         
         # Check if record exists
         mask = (pl.col("discord_uid") == discord_uid) & (pl.col("race") == race)
-        existing = self._mmrs_df.filter(mask)
+        existing = self._mmrs_1v1_df.filter(mask)
         
         if len(existing) > 0:
             # Update existing record
@@ -1463,7 +1463,7 @@ class DataAccessService:
                 "games_lost": pl.when(mask).then(pl.lit(games_lost)).otherwise(pl.col("games_lost")),
                 "games_drawn": pl.when(mask).then(pl.lit(games_drawn)).otherwise(pl.col("games_drawn"))
             }
-            self._mmrs_df = self._mmrs_df.with_columns(**updates)
+            self._mmrs_1v1_df = self._mmrs_1v1_df.with_columns(**updates)
         else:
             # Create new record with explicit integer type
             new_row = pl.DataFrame({
@@ -1476,7 +1476,7 @@ class DataAccessService:
                 "games_lost": [games_lost],
                 "games_drawn": [games_drawn]
             })
-            self._mmrs_df = pl.concat([self._mmrs_df, new_row], how="diagonal")
+            self._mmrs_1v1_df = pl.concat([self._mmrs_1v1_df, new_row], how="diagonal")
         
         # Queue database write
         job = WriteJob(
@@ -1513,11 +1513,11 @@ class DataAccessService:
         Returns:
             Dictionary with preference data or None if not found
         """
-        if self._preferences_df is None:
+        if self._preferences_1v1_df is None:
             print("[DataAccessService] WARNING: Preferences DataFrame not initialized")
             return None
         
-        result = self._preferences_df.filter(pl.col("discord_uid") == discord_uid)
+        result = self._preferences_1v1_df.filter(pl.col("discord_uid") == discord_uid)
         
         if len(result) == 0:
             return None
@@ -1572,7 +1572,7 @@ class DataAccessService:
         Returns:
             True if successful
         """
-        if self._preferences_df is None:
+        if self._preferences_1v1_df is None:
             print("[DataAccessService] WARNING: Preferences DataFrame not initialized")
             return False
         
@@ -1581,7 +1581,7 @@ class DataAccessService:
         
         # Check if record exists
         mask = pl.col("discord_uid") == discord_uid
-        existing = self._preferences_df.filter(mask)
+        existing = self._preferences_1v1_df.filter(mask)
         
         if len(existing) > 0:
             # Update existing record
@@ -1591,7 +1591,7 @@ class DataAccessService:
             if last_chosen_vetoes is not None:
                 updates["last_chosen_vetoes"] = pl.when(mask).then(pl.lit(last_chosen_vetoes)).otherwise(pl.col("last_chosen_vetoes"))
             
-            self._preferences_df = self._preferences_df.with_columns(**updates)
+            self._preferences_1v1_df = self._preferences_1v1_df.with_columns(**updates)
         else:
             # Create new record
             new_row = pl.DataFrame({
@@ -1599,7 +1599,7 @@ class DataAccessService:
                 "last_chosen_races": [last_chosen_races],
                 "last_chosen_vetoes": [last_chosen_vetoes],
             })
-            self._preferences_df = pl.concat([self._preferences_df, new_row], how="diagonal")
+            self._preferences_1v1_df = pl.concat([self._preferences_1v1_df, new_row], how="diagonal")
         
         # Queue database write
         job = WriteJob(
@@ -1628,10 +1628,10 @@ class DataAccessService:
         Returns:
             Match data dictionary or None if not found
         """
-        if self._matches_df is None:
+        if self._matches_1v1_df is None:
             return None
         
-        result = self._matches_df.filter(pl.col("id") == match_id)
+        result = self._matches_1v1_df.filter(pl.col("id") == match_id)
         return result.to_dicts()[0] if len(result) > 0 else None
     
     def update_match_status(self, match_id: int, new_status: str) -> bool:
@@ -1648,15 +1648,15 @@ class DataAccessService:
         Returns:
             True if updated successfully, False if match not found
         """
-        if self._matches_df is None:
+        if self._matches_1v1_df is None:
             return False
         
         # Check if match exists
-        if len(self._matches_df.filter(pl.col("id") == match_id)) == 0:
+        if len(self._matches_1v1_df.filter(pl.col("id") == match_id)) == 0:
             return False
         
         # Update status
-        self._matches_df = self._matches_df.with_columns([
+        self._matches_1v1_df = self._matches_1v1_df.with_columns([
             pl.when(pl.col("id") == match_id)
               .then(pl.lit(new_status))
               .otherwise(pl.col("status"))
@@ -1679,7 +1679,7 @@ class DataAccessService:
         Raises:
             ValueError: If match not found in memory (DataAccessService is source of truth)
         """
-        if self._matches_df is None:
+        if self._matches_1v1_df is None:
             raise ValueError(f"[DataAccessService] Matches DataFrame not initialized. Cannot get MMRs for match {match_id}")
         
         match = self.get_match(match_id)
@@ -1692,10 +1692,10 @@ class DataAccessService:
     
     def get_player_recent_matches(self, discord_uid: int, limit: int = 50) -> List[Dict[str, Any]]:
         """Get recent matches for a player."""
-        if self._matches_df is None:
+        if self._matches_1v1_df is None:
             return []
         
-        result = self._matches_df.filter(
+        result = self._matches_1v1_df.filter(
             (pl.col("player_1_discord_uid") == discord_uid) | 
             (pl.col("player_2_discord_uid") == discord_uid)
         ).head(limit)
@@ -1749,14 +1749,14 @@ class DataAccessService:
                 new_row = pl.DataFrame([match], infer_schema_length=None)
                 # Use diagonal concat to handle any missing columns gracefully
                 try:
-                    self._matches_df = pl.concat([new_row, self._matches_df], how="diagonal_relaxed")
+                    self._matches_1v1_df = pl.concat([new_row, self._matches_1v1_df], how="diagonal_relaxed")
                 except Exception as e:
                     print(f"[DataAccessService] Error concatenating match: {e}")
                     # Fallback: recreate the match dataframe with the new row
-                    self._matches_df = pl.concat([new_row, self._matches_df], how="diagonal")
+                    self._matches_1v1_df = pl.concat([new_row, self._matches_1v1_df], how="diagonal")
                 # Keep only recent 1000 matches
-                if len(self._matches_df) > 1000:
-                    self._matches_df = self._matches_df.head(1000)
+                if len(self._matches_1v1_df) > 1000:
+                    self._matches_1v1_df = self._matches_1v1_df.head(1000)
                 
                 print(f"[DataAccessService] Created match {match_id} with status IN_PROGRESS")
         
@@ -1770,14 +1770,14 @@ class DataAccessService:
         replay_time: str
     ) -> bool:
         """Update replay information for a match with immediate in-memory update."""
-        if self._matches_df is None:
+        if self._matches_1v1_df is None:
             print("[DataAccessService] WARNING: Matches DataFrame not initialized")
             return False
         
         # Update in-memory immediately
         try:
             # Find the match and which player uploaded
-            match_row = self._matches_df.filter(pl.col("id") == match_id)
+            match_row = self._matches_1v1_df.filter(pl.col("id") == match_id)
             if len(match_row) == 0:
                 print(f"[DataAccessService] WARNING: Match {match_id} not found in memory")
                 # Still queue the write for the database
@@ -1797,7 +1797,7 @@ class DataAccessService:
                 
                 if replay_col:
                     # Update the DataFrame
-                    self._matches_df = self._matches_df.with_columns([
+                    self._matches_1v1_df = self._matches_1v1_df.with_columns([
                         pl.when(pl.col("id") == match_id)
                           .then(pl.lit(replay_path))
                           .otherwise(pl.col(replay_col))
@@ -1958,11 +1958,11 @@ class DataAccessService:
             # - Set aborting player's report to -3 (to identify them)
             # - Set other player's report to -1 (aborted, no fault)
             # - Set match_result to -1 (aborted)
-            if self._matches_df is not None:
+            if self._matches_1v1_df is not None:
                 # Determine which player aborted
                 is_player1_aborting = player_discord_uid == p1_discord_uid
                 
-                self._matches_df = self._matches_df.with_columns([
+                self._matches_1v1_df = self._matches_1v1_df.with_columns([
                     pl.when(pl.col("id") == match_id)
                       .then(pl.lit(-3 if is_player1_aborting else -1))
                       .otherwise(pl.col("player_1_report"))
@@ -2016,17 +2016,17 @@ class DataAccessService:
         Returns:
             True if updated successfully
         """
-        if self._matches_df is None:
+        if self._matches_1v1_df is None:
             print("[DataAccessService] WARNING: Matches DataFrame not initialized")
             return False
         
         try:
             # Update in-memory immediately
-            if len(self._matches_df.filter(pl.col("id") == match_id)) > 0:
+            if len(self._matches_1v1_df.filter(pl.col("id") == match_id)) > 0:
                 # Update the match in memory
                 for key, value in kwargs.items():
-                    if key in self._matches_df.columns:
-                        self._matches_df = self._matches_df.with_columns(
+                    if key in self._matches_1v1_df.columns:
+                        self._matches_1v1_df = self._matches_1v1_df.with_columns(
                             pl.when(pl.col("id") == match_id)
                             .then(pl.lit(value))
                             .otherwise(pl.col(key))

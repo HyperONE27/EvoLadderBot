@@ -47,8 +47,8 @@ async def test_fail_loud_behavior():
             return False
         
         # Test 3: MMR lookup for existing match should work fast
-        if len(data_service._matches_df) > 0:
-            existing_match_id = data_service._matches_df[0, "id"]
+        if len(data_service._matches_1v1_df) > 0:
+            existing_match_id = data_service._matches_1v1_df[0, "id"]
             print(f"\n[3/3] Testing MMR lookup for existing match {existing_match_id}...")
             start = time.perf_counter()
             p1_mmr, p2_mmr = data_service.get_match_mmrs(existing_match_id)
@@ -181,4 +181,5 @@ if __name__ == "__main__":
         traceback.print_exc()
         close_pool()
         sys.exit(1)
+
 

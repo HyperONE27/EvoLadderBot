@@ -50,9 +50,9 @@ async def test_performance():
         print(f"      [PASS] {elapsed:.4f}ms avg")
         
         # Benchmark 3: MMR lookup
-        if len(data_service._mmrs_df) > 0:
-            test_uid = data_service._mmrs_df[0, "discord_uid"]
-            test_race = data_service._mmrs_df[0, "race"]
+        if len(data_service._mmrs_1v1_df) > 0:
+            test_uid = data_service._mmrs_1v1_df[0, "discord_uid"]
+            test_race = data_service._mmrs_1v1_df[0, "race"]
             
             print(f"[3/3] Benchmarking MMR lookup ({iterations} iterations)...")
             start = time.perf_counter()
@@ -84,4 +84,5 @@ if __name__ == "__main__":
         print(f"[FATAL] {e}")
         close_pool()
         sys.exit(1)
+
 

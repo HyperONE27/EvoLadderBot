@@ -101,7 +101,7 @@ if not self.data_service.is_leaderboard_cache_valid():
     )
     
     if mmrs_data:
-        self.data_service._mmrs_df = pl.DataFrame(mmrs_data, ...)
+        self.data_service._mmrs_1v1_df = pl.DataFrame(mmrs_data, ...)
         print(f"[LeaderboardService] Reloaded {len(...)} MMR records")
     
     # Mark cache valid for subsequent requests
@@ -219,3 +219,4 @@ pytest tests/characterize/test_leaderboard_cache_invalidation.py -vv -s
 ## Conclusion
 
 The event-driven cache system maintains data correctness while eliminating unnecessary background work. This is the foundation for a more efficient, cost-effective EvoLadderBot that scales gracefully while maintaining instant leaderboard performance for active users.
+

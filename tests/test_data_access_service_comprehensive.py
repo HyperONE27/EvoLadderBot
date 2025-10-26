@@ -86,8 +86,8 @@ async def test_initialization():
             print("[FAIL] Players table not loaded")
             return False
         
-        if data_service._mmrs_df is not None:
-            mmr_count = len(data_service._mmrs_df)
+        if data_service._mmrs_1v1_df is not None:
+            mmr_count = len(data_service._mmrs_1v1_df)
             print(f"[PASS] MMRs table loaded: {mmr_count} rows")
         else:
             print("[FAIL] MMRs table not loaded")
@@ -644,4 +644,5 @@ if __name__ == "__main__":
         traceback.print_exc()
         close_pool()
         sys.exit(1)
+
 

@@ -302,8 +302,8 @@ class LeaderboardService:
             )
             
             if mmrs_data:
-                self.data_service._mmrs_df = pl.DataFrame(mmrs_data, infer_schema_length=None)
-                print(f"[LeaderboardService] Reloaded {len(self.data_service._mmrs_df)} MMR records from database")
+                self.data_service._mmrs_1v1_df = pl.DataFrame(mmrs_data, infer_schema_length=None)
+                print(f"[LeaderboardService] Reloaded {len(self.data_service._mmrs_1v1_df)} MMR records from database")
             
             # Mark cache as valid for subsequent requests
             self.data_service.mark_leaderboard_cache_valid()

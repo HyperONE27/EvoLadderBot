@@ -30,7 +30,7 @@ def reset_data_access_service_singleton():
     DataAccessService._initialized = False
 
 
-def create_mock_mmrs_df():
+def create_mock_mmrs_1v1_df():
     """Create a properly-structured mock MMRs DataFrame with multiple players and races."""
     return pl.DataFrame({
         "discord_uid": pl.Series([1, 1, 2, 2], dtype=pl.Int64),
@@ -64,13 +64,13 @@ def initialized_service():
     """Provide an initialized DataAccessService with mock data."""
     service = DataAccessService()
     service._players_df = create_mock_players_df()
-    service._mmrs_df = create_mock_mmrs_df()
-    service._preferences_df = pl.DataFrame({
+    service._mmrs_1v1_df = create_mock_mmrs_1v1_df()
+    service._preferences_1v1_df = pl.DataFrame({
         "discord_uid": [1, 2],
         "last_chosen_races": [None, None],
         "last_chosen_vetoes": [None, None],
     })
-    service._matches_df = pl.DataFrame({
+    service._matches_1v1_df = pl.DataFrame({
         "id": pl.Series([123], dtype=pl.Int64),
         "player_1_discord_uid": pl.Series([1], dtype=pl.Int64),
         "player_2_discord_uid": pl.Series([2], dtype=pl.Int64),
@@ -147,3 +147,4 @@ class TestMatchOrchestrationFlow:
             "A successful match completion must invalidate the leaderboard cache"
         
         print("[Test] Cache successfully invalidated after match orchestration")
+

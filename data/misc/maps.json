@@ -2,76 +2,76 @@
     "maps": {
         "season_alpha": [
             {
-                "name": "Incorporeal LE",
-                "short_name": "Incorporeal",
-                "author": "Blizzard Entertainment",
-                "am_link": "battlenet:://starcraft/map/1/366697",
-                "eu_link": "battlenet:://starcraft/map/2/258344",
-                "as_link": "battlenet:://starcraft/map/3/183708"
+                "name": "[TLMC21] Celestial Enclave",
+                "short_name": "Celestial Enclave",
+                "author": "OfficialTLMC",
+                "am_link": "battlenet:://starcraft/map/1/368673",
+                "eu_link": "battlenet:://starcraft/map/2/259722",
+                "as_link": "battlenet:://starcraft/map/3/186202"
             },
             {
-                "name": "Last Fantasy LE",
-                "short_name": "Last Fantasy",
-                "author": "Blizzard Entertainment",
-                "am_link": "battlenet:://starcraft/map/1/366698",
-                "eu_link": "battlenet:://starcraft/map/2/258345",
-                "as_link": "battlenet:://starcraft/map/3/183709"
+                "name": "[SC:Evo] Death Valley (데스밸리)",
+                "short_name": "Death Valley",
+                "author": "SCEvoLadder",
+                "am_link": "battlenet:://starcraft/map/1/367495",
+                "eu_link": "battlenet:://starcraft/map/2/258890",
+                "as_link": "battlenet:://starcraft/map/3/184685"
             },
             {
-                "name": "Ley Lines",
-                "short_name": "Ley Lines",
-                "author": "Blizzard Entertainment",
-                "am_link": "battlenet:://starcraft/map/1/362987",
-                "eu_link": "battlenet:://starcraft/map/2/255691",
-                "as_link": "battlenet:://starcraft/map/3/177856"
+                "name": "[SC:Evo] Holy World (홀리울드)",
+                "short_name": "Holy World",
+                "author": "SCEvoLadder",
+                "am_link": "battlenet:://starcraft/map/1/367497",
+                "eu_link": "battlenet:://starcraft/map/2/258892",
+                "as_link": "battlenet:://starcraft/map/3/184687"
             },
             {
-                "name": "Magannatha LE",
-                "short_name": "Magannatha",
-                "author": "Blizzard Entertainment",
-                "am_link": "battlenet:://starcraft/map/1/366699",
-                "eu_link": "battlenet:://starcraft/map/2/258346",
-                "as_link": "battlenet:://starcraft/map/3/183710"
+                "name": "Keres Passage SEL",
+                "short_name": "Keres Passage",
+                "author": "HyperONE",
+                "am_link": "battlenet:://starcraft/map/1/367550",
+                "eu_link": "battlenet:://starcraft/map/2/258950",
+                "as_link": "battlenet:://starcraft/map/3/184790"
             },
             {
-                "name": "Persephone LE",
-                "short_name": "Persephone",
-                "author": "Blizzard Entertainment",
-                "am_link": "battlenet:://starcraft/map/1/366700",
-                "eu_link": "battlenet:://starcraft/map/2/258347",
-                "as_link": "battlenet:://starcraft/map/3/183711"
+                "name": "Khione SEL",
+                "short_name": "Khione",
+                "author": "HyperONE",
+                "am_link": "battlenet:://starcraft/map/1/367554",
+                "eu_link": "battlenet:://starcraft/map/2/258956",
+                "as_link": "battlenet:://starcraft/map/3/184800"
             },
             {
-                "name": "Pylon LE",
-                "short_name": "Pylon",
-                "author": "Blizzard Entertainment",
-                "am_link": "battlenet:://starcraft/map/1/366701",
-                "eu_link": "battlenet:://starcraft/map/2/258348",
-                "as_link": "battlenet:://starcraft/map/3/183712"
+                "name": "[TLMC21] Mothership",
+                "short_name": "Mothership",
+                "author": "OfficialTLMC",
+                "am_link": "battlenet:://starcraft/map/1/368676",
+                "eu_link": "battlenet:://starcraft/map/2/259724",
+                "as_link": "battlenet:://starcraft/map/3/186204"
             },
             {
-                "name": "Tokamak LE",
-                "short_name": "Tokamak",
-                "author": "Blizzard Entertainment",
-                "am_link": "battlenet:://starcraft/map/1/366702",
-                "eu_link": "battlenet:://starcraft/map/2/258349",
-                "as_link": "battlenet:://starcraft/map/3/183713"
+                "name": "[SC:Evo] Radeon (라데온)",
+                "short_name": "Radeon",
+                "author": "SCEvoLadder",
+                "am_link": "battlenet:://starcraft/map/1/367511",
+                "eu_link": "battlenet:://starcraft/map/2/258907",
+                "as_link": "battlenet:://starcraft/map/3/184703"
             },
             {
-                "name": "Torches LE",
-                "short_name": "Torches",
-                "author": "Blizzard Entertainment",
-                "am_link": "battlenet:://starcraft/map/1/366703",
-                "eu_link": "battlenet:://starcraft/map/2/258350",
-                "as_link": "battlenet:://starcraft/map/3/183714"
+                "name": "[SC:Evo] Sylphid (실피드)",
+                "short_name": "Sylphid",
+                "author": "SCEvoLadder",
+                "am_link": "battlenet:://starcraft/map/1/367510",
+                "eu_link": "battlenet:://starcraft/map/2/258906",
+                "as_link": "battlenet:://starcraft/map/3/184701"
             },
             {
-                "name": "Ultralove",
-                "short_name": "Ultralove",
-                "author": "Blizzard Entertainment",
-                "am_link": "battlenet:://starcraft/map/1/362995",
-                "eu_link": "battlenet:://starcraft/map/2/255699",
-                "as_link": "battlenet:://starcraft/map/3/177864"
+                "name": "[SC:Evo] Vermeer (버미어)",
+                "short_name": "Vermeer",
+                "author": "SCEvoLadder",
+                "am_link": "battlenet:://starcraft/map/1/367512",
+                "eu_link": "battlenet:://starcraft/map/2/258908",
+                "as_link": "battlenet:://starcraft/map/3/184704"
             }
         ],
         "season_beta": [

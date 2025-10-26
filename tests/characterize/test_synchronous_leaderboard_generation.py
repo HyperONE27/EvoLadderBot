@@ -428,7 +428,7 @@ class TestCacheIntegration:
             # Cache is initially invalid
             mock_instance.is_leaderboard_cache_valid.return_value = False
             mock_instance._db_reader = mock_db_reader
-            mock_instance._mmrs_df = create_mock_leaderboard_dataframe(100)
+            mock_instance._mmrs_1v1_df = create_mock_leaderboard_dataframe(100)
             mock_instance._get_cached_leaderboard_dataframe.return_value = create_mock_leaderboard_dataframe(100)
             
             service = LeaderboardService(
@@ -502,3 +502,4 @@ class TestPerformance:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+

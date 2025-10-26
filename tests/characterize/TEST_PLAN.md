@@ -158,7 +158,7 @@ def test_prune_with_mocked_das(mock_das_class):
 | Test Case | Mocking Strategy | Success Criteria |
 | :--- | :--- | :--- |
 | **`test_startup_initializes_das`** | - Mock `DataAccessService.initialize_async`.<br>- Run the bot's `main.on_ready` event handler. | 1. `DataAccessService.initialize_async` is called exactly once during startup. |
-| **`test_das_loads_all_tables_on_init`** | - Mock `DatabaseReader` methods (`get_all_players`, etc.) to return mock data.<br>- Call `DataAccessService.initialize_async`. | 1. All `get_all_*` methods on the `DatabaseReader` are called.<br>2. The internal DataFrames (`_players_df`, `_mmrs_df`, etc.) are populated with the mock data. |
+| **`test_das_loads_all_tables_on_init`** | - Mock `DatabaseReader` methods (`get_all_players`, etc.) to return mock data.<br>- Call `DataAccessService.initialize_async`. | 1. All `get_all_*` methods on the `DatabaseReader` are called.<br>2. The internal DataFrames (`_players_df`, `_mmrs_1v1_df`, etc.) are populated with the mock data. |
 | **`test_shutdown_flushes_write_queue`** | - Mock `DataAccessService._write_queue` to contain several mock jobs.<br>- Mock `_process_write_job`.<br>- Call `DataAccessService.shutdown()`. | 1. The `shutdown` method waits until the `_write_queue` is empty.<br>2. `_process_write_job` is called for every item that was in the queue. |
 
 ### `test_race_conditions.py`
@@ -182,3 +182,4 @@ def test_prune_with_mocked_das(mock_das_class):
 | **`test_leaderboard_empty_state`** | - Mock `DataAccessService.get_leaderboard_data` to return an empty list. | 1. The command sends a clean embed stating that the leaderboard is empty. |
 | **`test_stats_command`** | - Mock `DataAccessService.get_player_stats` to return sample stats for a user. | 1. The command correctly formats the stats (W-L, MMR, rank, etc.) into an embed. |
 | **`test_stats_for_new_player`** | - Mock `DataAccessService.get_player_stats` to return `None` or empty data. | 1. The command sends an embed indicating the player has no stats yet. |
+
