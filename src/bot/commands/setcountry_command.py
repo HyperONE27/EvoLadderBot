@@ -7,7 +7,7 @@ from src.backend.services.app_context import (
     user_info_service,
     command_guard_service as guard_service
 )
-from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote
+from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote, edit_ephemeral_response
 from src.bot.components.confirm_embed import ConfirmEmbedView
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
@@ -82,9 +82,10 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
                 description="An error occurred while updating your country. Please try again.",
                 color=discord.Color.red()
             )
-            await send_ephemeral_response(
+            await edit_ephemeral_response(
                 interaction,
-                embed=error_embed
+                embed=error_embed,
+                view=None
             )
             return
         
@@ -103,7 +104,7 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
             fields=[],
             mode="post_confirmation"
         )
-        await send_ephemeral_response(interaction, embed=post_confirm_view.embed, view=post_confirm_view)
+        await edit_ephemeral_response(interaction, embed=post_confirm_view.embed, view=post_confirm_view)
     
     # Create a simple view for the cancel target (just show the command again)
     class CountryCancelView(discord.ui.View):

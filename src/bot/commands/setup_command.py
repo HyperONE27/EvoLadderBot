@@ -11,7 +11,7 @@ from src.backend.services.app_context import (
     validation_service,
     command_guard_service as guard_service
 )
-from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote, get_globe_emote
+from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote, get_globe_emote, edit_ephemeral_response
 from src.bot.components.confirm_embed import ConfirmEmbedView
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
@@ -615,9 +615,10 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
                 description="An error occurred while saving your profile. Please try again.",
                 color=discord.Color.red()
             )
-            await send_ephemeral_response(
+            await edit_ephemeral_response(
                 interaction,
-                embed=error_embed
+                embed=error_embed,
+                view=None
             )
             return
         
@@ -636,7 +637,7 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
         )
         
         
-        await send_ephemeral_response(
+        await edit_ephemeral_response(
             interaction,
             content="",
             embed=post_confirm_view.embed,
