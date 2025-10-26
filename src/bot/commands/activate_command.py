@@ -13,6 +13,7 @@ from src.backend.services.app_context import (
 )
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.utils.command_decorators import dm_only
 from src.bot.config import GLOBAL_TIMEOUT
 from src.backend.services.performance_service import FlowTracker
 
@@ -68,6 +69,7 @@ def register_activate_command(tree: app_commands.CommandTree):
         name="activate",
         description="Enter your activation code for ladder access"
     )
+    @dm_only
     async def activate(interaction: discord.Interaction):
         print(f"[TERMINAL] /activate started by {interaction.user.id}")
         try:

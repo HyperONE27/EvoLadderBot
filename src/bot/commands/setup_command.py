@@ -15,11 +15,13 @@ from src.bot.utils.discord_utils import send_ephemeral_response, get_flag_emote,
 from src.bot.components.confirm_embed import ConfirmEmbedView
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.utils.command_decorators import dm_only
 from src.bot.config import GLOBAL_TIMEOUT
 from src.backend.services.performance_service import FlowTracker
 
 
 # API Call / Data Handling
+@dm_only
 async def setup_command(interaction: discord.Interaction):
     """Handle the /setup slash command"""
     flow = FlowTracker("setup_command", user_id=interaction.user.id)

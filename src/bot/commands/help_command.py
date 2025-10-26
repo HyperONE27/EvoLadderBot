@@ -8,6 +8,7 @@ import discord
 from discord import app_commands
 
 from src.bot.utils.discord_utils import send_ephemeral_response
+from src.bot.utils.command_decorators import dm_only
 
 
 def register_help_command(tree: app_commands.CommandTree):
@@ -22,6 +23,7 @@ def register_help_command(tree: app_commands.CommandTree):
     return help
 
 
+@dm_only
 async def help_command(interaction: discord.Interaction):
     """Display help information for all available commands."""
     

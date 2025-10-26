@@ -18,7 +18,14 @@ from src.bot.utils.discord_utils import send_ephemeral_response
 # Centralized list of DM-only commands
 DM_ONLY_COMMANDS: Set[str] = {
     "prune",  # Personal message cleanup
-    "queue"   # Matchmaking (security + ephemeral messages work in DMs)
+    "queue",  # Matchmaking (security + ephemeral messages work in DMs)
+    "help",  # Help command
+    "leaderboard",  # View leaderboard
+    "profile",  # View player profile
+    "setup",  # User setup
+    "setcountry",  # Set country
+    "termsofservice",  # Terms of service
+    "activate"  # Account activation
 }
 
 

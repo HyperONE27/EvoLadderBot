@@ -36,7 +36,7 @@ def create_command_guard_error_embed(error: CommandGuardError) -> discord.Embed:
     elif isinstance(error, DMOnlyError):
         return discord.Embed(
             title="❌ DM Only Command",
-            description="This command can only be used in DMs (private messages).\n\n"
+            description="This bot's commands can only be used in DMs (private messages).\n\n"
                         "Please send me a DM and try the command again.",
             color=discord.Color.red()
         )
