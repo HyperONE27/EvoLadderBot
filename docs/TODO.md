@@ -102,7 +102,7 @@
   - ✅ Send a new embed message with this information
 - ⏰ Check that uploaded replays comply with the match parameters
   - ⏰ Throw a warning if the map link do not match exactly
-  - ⏰ Reject the replay outright if the wrong races are present
+  - ❓ Reject the replay outright if the wrong races are present
 
 ### System Hardening & Optimization
 - ✅ No 60-second leaderboard refresh loop, invalidate cache specifically only when services modify MMR
@@ -133,6 +133,8 @@
 - Localization:
   - ⏰ Add support for koKR and other languages
   - ⏰ Replace 1 million hardcoded formatted strings...sobbing
+- Matchmaking:
+  - ⏰ More ping-aware algorithm to reduce bad matches at lower MMRs
 
 ## PRE-RELEASE
 
