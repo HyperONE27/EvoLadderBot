@@ -57,3 +57,9 @@ def get_wal_path() -> Path:
 # Expose the WAL path as a module-level constant for easy import
 WAL_PATH = get_wal_path()
 
+# ========== Replay Verification Configuration ==========
+
+# Maximum time window (in minutes) allowed between match assignment and replay start time.
+# Used to verify that replays are from the correct match window.
+REPLAY_TIMESTAMP_WINDOW_MINUTES = 20
+

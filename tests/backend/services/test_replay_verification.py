@@ -11,7 +11,7 @@ import pytest
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from src.backend.core.types import VerificationResult
 from src.backend.services.match_completion_service import MatchCompletionService
@@ -48,9 +48,9 @@ class TestReplayVerification:
             "map_played": "Tokamak LE",
             "server_used": "USE",
             "played_at": "2025-10-24 06:42:00+00",
-            "player_1_replay_path": "https://ibigtopmfsmarkujjfen.supabase.co/storage/v1/object/public/replays/14/3812a4e1c1ea9c34ddda_1761288313.SC2Replay",
+            "player_1_replay_path": "https://example.com/replay1.SC2Replay",
             "player_1_replay_time": "2025-10-24 06:45:14+00",
-            "player_2_replay_path": "https://ibigtopmfsmarkujjfen.supabase.co/storage/v1/object/public/replays/14/13fc2de194b91eabaee5_1761288312.SC2Replay",
+            "player_2_replay_path": "https://example.com/replay2.SC2Replay",
             "player_2_replay_time": "2025-10-24 06:45:13+00"
         }
     
@@ -78,7 +78,9 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_races(sample_match_data, replay_data)
-        assert result is True
+        assert result['success'] is True
+        assert result['expected_races'] == {"bw_zerg", "sc2_protoss"}
+        assert result['played_races'] == {"bw_zerg", "sc2_protoss"}
     
     def test_verify_races_mismatch(self, match_completion_service, sample_match_data):
         """Test race verification when races don't match."""
@@ -88,7 +90,9 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_races(sample_match_data, replay_data)
-        assert result is False
+        assert result['success'] is False
+        assert result['expected_races'] == {"bw_zerg", "sc2_protoss"}
+        assert result['played_races'] == {"sc2_terran", "sc2_zerg"}
     
     def test_verify_races_swapped(self, match_completion_service, sample_match_data):
         """Test race verification when races are swapped (should still pass)."""
@@ -98,7 +102,7 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_races(sample_match_data, replay_data)
-        assert result is True
+        assert result['success'] is True
     
     def test_verify_map_match(self, match_completion_service, sample_match_data):
         """Test map verification when maps match."""
@@ -107,7 +111,9 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_map(sample_match_data, replay_data)
-        assert result is True
+        assert result['success'] is True
+        assert result['expected_map'] == "Tokamak LE"
+        assert result['played_map'] == "Tokamak LE"
     
     def test_verify_map_mismatch(self, match_completion_service, sample_match_data):
         """Test map verification when maps don't match."""
@@ -116,7 +122,9 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_map(sample_match_data, replay_data)
-        assert result is False
+        assert result['success'] is False
+        assert result['expected_map'] == "Tokamak LE"
+        assert result['played_map'] == "Golden Wall LE"
     
     def test_verify_timestamp_within_window(self, match_completion_service, sample_match_data):
         """Test timestamp verification when replay is within 20 minutes."""
@@ -129,7 +137,8 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_timestamp(sample_match_data, replay_data)
-        assert result is True
+        assert result['success'] is True
+        assert result['time_difference_minutes'] < 20
     
     def test_verify_timestamp_outside_window(self, match_completion_service, sample_match_data):
         """Test timestamp verification when replay is outside 20 minutes."""
@@ -142,7 +151,8 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_timestamp(sample_match_data, replay_data)
-        assert result is False
+        assert result['success'] is False
+        assert result['time_difference_minutes'] > 20
     
     def test_verify_timestamp_with_game_duration(self, match_completion_service, sample_match_data):
         """Test timestamp verification accounting for game duration."""
@@ -156,7 +166,7 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_timestamp(sample_match_data, replay_data)
-        assert result is True
+        assert result['success'] is True
     
     def test_verify_observers_none(self, match_completion_service):
         """Test observer verification with no observers."""
@@ -165,7 +175,8 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_observers(replay_data)
-        assert result is True
+        assert result['success'] is True
+        assert result['observers_found'] == []
     
     def test_verify_observers_empty_list(self, match_completion_service):
         """Test observer verification with empty list."""
@@ -174,7 +185,8 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_observers(replay_data)
-        assert result is True
+        assert result['success'] is True
+        assert result['observers_found'] == []
     
     def test_verify_observers_empty_json_string(self, match_completion_service):
         """Test observer verification with empty JSON string."""
@@ -183,7 +195,8 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_observers(replay_data)
-        assert result is True
+        assert result['success'] is True
+        assert result['observers_found'] == []
     
     def test_verify_observers_present_list(self, match_completion_service):
         """Test observer verification with observers present (list)."""
@@ -192,7 +205,8 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_observers(replay_data)
-        assert result is False
+        assert result['success'] is False
+        assert result['observers_found'] == ["Observer1", "Observer2"]
     
     def test_verify_observers_present_json_string(self, match_completion_service):
         """Test observer verification with observers present (JSON string)."""
@@ -201,55 +215,8 @@ class TestReplayVerification:
         }
         
         result = match_completion_service._verify_observers(replay_data)
-        assert result is False
-    
-    @pytest.mark.asyncio
-    async def test_full_verification_all_pass(self, match_completion_service, sample_match_data):
-        """Test full verification when all checks pass."""
-        played_at = datetime.fromisoformat("2025-10-24T06:42:00+00:00")
-        replay_date = played_at + timedelta(minutes=5)
-        
-        replay_data = {
-            "player_1_race": "bw_zerg",
-            "player_2_race": "sc2_protoss",
-            "map_name": "Tokamak LE",
-            "replay_date": replay_date.isoformat(),
-            "duration": 300,
-            "observers": []
-        }
-        
-        results = {
-            "races": match_completion_service._verify_races(sample_match_data, replay_data),
-            "map": match_completion_service._verify_map(sample_match_data, replay_data),
-            "timestamp": match_completion_service._verify_timestamp(sample_match_data, replay_data),
-            "observers": match_completion_service._verify_observers(replay_data)
-        }
-        
-        assert all(results.values()), f"Some checks failed: {results}"
-    
-    @pytest.mark.asyncio
-    async def test_full_verification_some_fail(self, match_completion_service, sample_match_data):
-        """Test full verification when some checks fail."""
-        played_at = datetime.fromisoformat("2025-10-24T06:42:00+00:00")
-        replay_date = played_at + timedelta(minutes=30)
-        
-        replay_data = {
-            "player_1_race": "sc2_terran",
-            "player_2_race": "sc2_zerg",
-            "map_name": "Wrong Map",
-            "replay_date": replay_date.isoformat(),
-            "duration": 300,
-            "observers": ["Observer1"]
-        }
-        
-        results = {
-            "races": match_completion_service._verify_races(sample_match_data, replay_data),
-            "map": match_completion_service._verify_map(sample_match_data, replay_data),
-            "timestamp": match_completion_service._verify_timestamp(sample_match_data, replay_data),
-            "observers": match_completion_service._verify_observers(replay_data)
-        }
-        
-        assert not any(results.values()), f"Expected all checks to fail, but some passed: {results}"
+        assert result['success'] is False
+        assert result['observers_found'] == ["Observer1"]
     
     @pytest.mark.skipif(
         not (Path(__file__).parent.parent.parent / "test_data" / "test_replay_files" / "HyperONEgunnerTokamak.SC2Replay").exists(),
@@ -337,137 +304,104 @@ class TestAsyncReplayVerification:
         }
     
     @pytest.mark.asyncio
-    async def test_async_verification_success(
+    async def test_verify_replay_data_success(
         self, 
         match_completion_service, 
         sample_match_data, 
         valid_replay_data
     ):
-        """Test the full async verification flow when all checks pass."""
-        result_captured = None
-        event = asyncio.Event()
-        
-        async def callback(result: VerificationResult):
-            nonlocal result_captured
-            result_captured = result
-            event.set()
-        
+        """Test the awaitable verify_replay_data when all checks pass."""
         with patch('src.backend.services.data_access_service.DataAccessService') as mock_das:
             mock_das_instance = MagicMock()
             mock_das_instance.get_match.return_value = sample_match_data
             mock_das.return_value = mock_das_instance
             
-            await match_completion_service._verify_replay_task(
+            result = await match_completion_service.verify_replay_data(
                 match_id=14,
-                replay_data=valid_replay_data,
-                callback=callback
+                replay_data=valid_replay_data
             )
             
-            await asyncio.wait_for(event.wait(), timeout=1.0)
-        
-        assert result_captured is not None, "Callback was not called"
-        assert result_captured['races_match'] is True
-        assert result_captured['map_match'] is True
-        assert result_captured['timestamp_match'] is True
-        assert result_captured['observers_match'] is True
-        assert all(result_captured.values()), "Expected all checks to pass"
+        assert result['races']['success'] is True
+        assert result['map']['success'] is True
+        assert result['timestamp']['success'] is True
+        assert result['observers']['success'] is True
     
     @pytest.mark.asyncio
-    async def test_async_verification_failure(
+    async def test_verify_replay_data_failure(
         self, 
         match_completion_service, 
         sample_match_data, 
         invalid_replay_data
     ):
-        """Test the full async verification flow when checks fail."""
-        result_captured = None
-        event = asyncio.Event()
-        
-        async def callback(result: VerificationResult):
-            nonlocal result_captured
-            result_captured = result
-            event.set()
-        
+        """Test the awaitable verify_replay_data when checks fail."""
         with patch('src.backend.services.data_access_service.DataAccessService') as mock_das:
             mock_das_instance = MagicMock()
             mock_das_instance.get_match.return_value = sample_match_data
             mock_das.return_value = mock_das_instance
             
-            await match_completion_service._verify_replay_task(
+            result = await match_completion_service.verify_replay_data(
                 match_id=14,
-                replay_data=invalid_replay_data,
-                callback=callback
+                replay_data=invalid_replay_data
             )
             
-            await asyncio.wait_for(event.wait(), timeout=1.0)
-        
-        assert result_captured is not None, "Callback was not called"
-        assert result_captured['races_match'] is False, "Races should not match"
-        assert result_captured['map_match'] is False, "Map should not match"
-        assert result_captured['timestamp_match'] is False, "Timestamp should not match"
-        assert result_captured['observers_match'] is False, "Observers check should fail"
+        assert result['races']['success'] is False
+        assert result['map']['success'] is False
+        assert result['timestamp']['success'] is False
+        assert result['observers']['success'] is False
     
     @pytest.mark.asyncio
-    async def test_async_verification_match_not_found(
+    async def test_verify_replay_data_match_not_found(
         self, 
         match_completion_service, 
         valid_replay_data
     ):
-        """Test graceful handling when match data is not found."""
-        callback_called = False
-        
-        async def callback(result: VerificationResult):
-            nonlocal callback_called
-            callback_called = True
-        
+        """Test that ValueError is raised when match data is not found."""
         with patch('src.backend.services.data_access_service.DataAccessService') as mock_das:
             mock_das_instance = MagicMock()
             mock_das_instance.get_match.return_value = None
             mock_das.return_value = mock_das_instance
             
-            await match_completion_service._verify_replay_task(
-                match_id=999,
-                replay_data=valid_replay_data,
-                callback=callback
-            )
-            
-            await asyncio.sleep(0.1)
-        
-        assert callback_called is False, "Callback should not be called when match is not found"
+            with pytest.raises(ValueError, match="Match 999 not found"):
+                await match_completion_service.verify_replay_data(
+                    match_id=999,
+                    replay_data=valid_replay_data
+                )
     
     @pytest.mark.asyncio
-    async def test_start_replay_verification_creates_task(
+    async def test_verify_replay_data_returns_detailed_info(
         self, 
         match_completion_service, 
         sample_match_data, 
-        valid_replay_data
+        invalid_replay_data
     ):
-        """Test that start_replay_verification creates an async task."""
-        result_captured = None
-        event = asyncio.Event()
-        
-        async def callback(result: VerificationResult):
-            nonlocal result_captured
-            result_captured = result
-            event.set()
-        
+        """Test that detailed information is returned in the result."""
         with patch('src.backend.services.data_access_service.DataAccessService') as mock_das:
             mock_das_instance = MagicMock()
             mock_das_instance.get_match.return_value = sample_match_data
             mock_das.return_value = mock_das_instance
             
-            match_completion_service.start_replay_verification(
+            result = await match_completion_service.verify_replay_data(
                 match_id=14,
-                replay_data=valid_replay_data,
-                callback=callback
+                replay_data=invalid_replay_data
             )
             
-            await asyncio.wait_for(event.wait(), timeout=1.0)
+        # Check races detail
+        assert 'expected_races' in result['races']
+        assert 'played_races' in result['races']
+        assert result['races']['expected_races'] == {"bw_zerg", "sc2_protoss"}
+        assert result['races']['played_races'] == {"sc2_terran", "sc2_zerg"}
         
-        assert result_captured is not None, "Task should have executed and called callback"
-        assert all(result_captured.values()), "All checks should pass"
+        # Check map detail
+        assert result['map']['expected_map'] == "Tokamak LE"
+        assert result['map']['played_map'] == "Wrong Map LE"
+        
+        # Check timestamp detail
+        assert 'time_difference_minutes' in result['timestamp']
+        assert result['timestamp']['time_difference_minutes'] > 20
+        
+        # Check observers detail
+        assert result['observers']['observers_found'] == ["Observer1"]
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

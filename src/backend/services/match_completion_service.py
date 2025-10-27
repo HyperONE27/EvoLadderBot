@@ -9,10 +9,17 @@ import asyncio
 import json
 import logging
 from asyncio import Lock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List, Optional, Set
 
-from src.backend.core.types import VerificationResult
+from src.backend.core.types import (
+    VerificationResult,
+    RaceVerificationDetail,
+    MapVerificationDetail,
+    TimestampVerificationDetail,
+    ObserverVerificationDetail
+)
+from src.backend.core.config import REPLAY_TIMESTAMP_WINDOW_MINUTES
 from src.backend.services.leaderboard_service import LeaderboardService
 
 
@@ -543,6 +550,62 @@ class MatchCompletionService:
         """
         asyncio.create_task(self._verify_replay_task(match_id, replay_data, callback))
     
+    async def verify_replay_data(
+        self,
+        match_id: int,
+        replay_data: Dict[str, any]
+    ) -> VerificationResult:
+        """
+        Performs all replay verification checks and returns the complete result.
+        This is a blocking, awaitable method.
+        
+        Args:
+            match_id: The match ID to verify against
+            replay_data: The parsed replay data dictionary
+            
+        Returns:
+            VerificationResult with detailed information about all checks
+            
+        Raises:
+            ValueError: If match_id is not found in the database
+        """
+        from src.backend.services.data_access_service import DataAccessService
+        data_service = DataAccessService()
+        
+        match_details = data_service.get_match(match_id)
+        
+        if not match_details:
+            raise ValueError(f"Match {match_id} not found in database")
+        
+        self.logger.info(f"Starting verification for match {match_id}")
+        
+        races_detail = self._verify_races(match_details, replay_data)
+        map_detail = self._verify_map(match_details, replay_data)
+        timestamp_detail = self._verify_timestamp(match_details, replay_data)
+        observers_detail = self._verify_observers(replay_data)
+        
+        result = VerificationResult(
+            races=races_detail,
+            map=map_detail,
+            timestamp=timestamp_detail,
+            observers=observers_detail
+        )
+        
+        all_passed = all([
+            races_detail['success'],
+            map_detail['success'],
+            timestamp_detail['success'],
+            observers_detail['success']
+        ])
+        status_icon = "✅" if all_passed else "⚠️"
+        self.logger.info(
+            f"{status_icon} Verification for match {match_id}: "
+            f"races={races_detail['success']}, map={map_detail['success']}, "
+            f"timestamp={timestamp_detail['success']}, observers={observers_detail['success']}"
+        )
+        
+        return result
+    
     async def _verify_replay_task(
         self, 
         match_id: int, 
@@ -550,7 +613,8 @@ class MatchCompletionService:
         callback: Callable[[VerificationResult], None]
     ) -> None:
         """
-        Background worker that fetches match data and runs all verification checks.
+        DEPRECATED: Background worker with callback pattern.
+        Use verify_replay_data() instead for new code.
         
         Args:
             match_id: The match ID to verify against
@@ -558,42 +622,18 @@ class MatchCompletionService:
             callback: Async callback function to execute with the verification results
         """
         try:
-            from src.backend.services.data_access_service import DataAccessService
-            data_service = DataAccessService()
-            
-            match_details = data_service.get_match(match_id)
-            
-            if not match_details:
-                self.logger.error(f"Could not find match_id {match_id} for verification.")
-                return
-            
-            self.logger.info(f"Starting verification for match {match_id}")
-            
-            races_ok = self._verify_races(match_details, replay_data)
-            map_ok = self._verify_map(match_details, replay_data)
-            timestamp_ok = self._verify_timestamp(match_details, replay_data)
-            observers_ok = self._verify_observers(replay_data)
-            
-            result = VerificationResult(
-                races_match=races_ok,
-                map_match=map_ok,
-                timestamp_match=timestamp_ok,
-                observers_match=observers_ok,
-            )
-            
-            all_passed = all(result.values())
-            status_icon = "✅" if all_passed else "⚠️"
-            self.logger.info(
-                f"{status_icon} Verification for match {match_id}: races={races_ok}, "
-                f"map={map_ok}, timestamp={timestamp_ok}, observers={observers_ok}"
-            )
-            
+            result = await self.verify_replay_data(match_id, replay_data)
             await callback(result)
-            
+        except ValueError as e:
+            self.logger.error(str(e))
         except Exception as e:
             self.logger.exception(f"Error during replay verification for match_id {match_id}: {e}")
     
-    def _verify_races(self, match_details: Dict[str, any], replay_details: Dict[str, any]) -> bool:
+    def _verify_races(
+        self, 
+        match_details: Dict[str, any], 
+        replay_details: Dict[str, any]
+    ) -> RaceVerificationDetail:
         """
         Checks if races in the replay match the assigned races.
         
@@ -602,13 +642,22 @@ class MatchCompletionService:
             replay_details: Replay data from _replays_df
             
         Returns:
-            True if races match, False otherwise
+            RaceVerificationDetail with success status and race information
         """
         match_races = {match_details['player_1_race'], match_details['player_2_race']}
         replay_races = {replay_details['player_1_race'], replay_details['player_2_race']}
-        return match_races == replay_races
+        
+        return RaceVerificationDetail(
+            success=(match_races == replay_races),
+            expected_races=match_races,
+            played_races=replay_races
+        )
     
-    def _verify_map(self, match_details: Dict[str, any], replay_details: Dict[str, any]) -> bool:
+    def _verify_map(
+        self, 
+        match_details: Dict[str, any], 
+        replay_details: Dict[str, any]
+    ) -> MapVerificationDetail:
         """
         Checks if the map played matches the assigned map.
         
@@ -617,17 +666,22 @@ class MatchCompletionService:
             replay_details: Replay data from _replays_df
             
         Returns:
-            True if maps match, False otherwise
+            MapVerificationDetail with success status and map information
         """
         match_map = match_details.get('map_played', '')
         replay_map = replay_details.get('map_name', '')
-        return match_map == replay_map
-    
+        
+        return MapVerificationDetail(
+            success=(match_map == replay_map),
+            expected_map=match_map,
+            played_map=replay_map
+        )
+
     def _verify_timestamp(
         self, 
         match_details: Dict[str, any], 
         replay_details: Dict[str, any]
-    ) -> bool:
+    ) -> TimestampVerificationDetail:
         """
         Checks if the match was played within 20 minutes of assignment.
         
@@ -639,38 +693,62 @@ class MatchCompletionService:
             replay_details: Replay data from _replays_df
             
         Returns:
-            True if timestamp is within 20 minutes, False otherwise
+            TimestampVerificationDetail with success status and time difference
         """
         try:
-            played_at_str = match_details.get('played_at')
+            played_at_value = match_details.get('played_at')
             replay_date_str = replay_details.get('replay_date')
-            duration_seconds = replay_details.get('duration', 0)
+            duration_seconds = int(replay_details.get('duration') or 0)
             
-            if not played_at_str or not replay_date_str:
-                self.logger.warning(
-                    f"Missing timestamp data: played_at={played_at_str}, "
-                    f"replay_date={replay_date_str}"
+            if not played_at_value or not replay_date_str:
+                error_msg = f"Missing timestamp data: played_at={played_at_value}, replay_date={replay_date_str}"
+                self.logger.warning(error_msg)
+                return TimestampVerificationDetail(
+                    success=False,
+                    time_difference_minutes=None,
+                    error=error_msg
                 )
-                return False
-            
-            played_at = datetime.fromisoformat(played_at_str.replace('+00', '+00:00'))
+
+            # Handle played_at being either a string or a datetime object
+            if isinstance(played_at_value, datetime):
+                played_at = played_at_value
+            else:
+                played_at = datetime.fromisoformat(str(played_at_value).replace('+00', '+00:00'))
+
+            # If played_at is offset-naive, assume it's UTC and make it offset-aware.
+            if played_at.tzinfo is None:
+                played_at = played_at.replace(tzinfo=timezone.utc)
+
             replay_date = datetime.fromisoformat(replay_date_str.replace('+00', '+00:00'))
+            if replay_date.tzinfo is None:
+                replay_date = replay_date.replace(tzinfo=timezone.utc)
             
             replay_start_time = replay_date - timedelta(seconds=duration_seconds)
-            time_difference = abs(replay_start_time - played_at)
+            time_difference = replay_start_time - played_at
+            time_diff_minutes = time_difference.total_seconds() / 60.0
+            time_diff_abs = abs(time_diff_minutes)
             
-            is_valid = time_difference <= timedelta(minutes=20)
+            is_valid = time_diff_abs <= REPLAY_TIMESTAMP_WINDOW_MINUTES
             
             if not is_valid:
-                self.logger.warning(f"Timestamp mismatch: difference={time_difference}")
+                self.logger.warning(f"Timestamp mismatch: difference={time_diff_minutes:.1f} minutes")
             
-            return is_valid
+            return TimestampVerificationDetail(
+                success=is_valid,
+                time_difference_minutes=time_diff_minutes,
+                error=None
+            )
             
-        except Exception as e:
-            self.logger.error(f"Error parsing timestamps: {e}")
-            return False
+        except (ValueError, TypeError, AttributeError) as e:
+            error_msg = f"Error parsing timestamps: {e}"
+            self.logger.error(error_msg, exc_info=True)
+            return TimestampVerificationDetail(
+                success=False,
+                time_difference_minutes=None,
+                error=error_msg
+            )
     
-    def _verify_observers(self, replay_details: Dict[str, any]) -> bool:
+    def _verify_observers(self, replay_details: Dict[str, any]) -> ObserverVerificationDetail:
         """
         Checks for unauthorized observers.
         
@@ -678,24 +756,26 @@ class MatchCompletionService:
             replay_details: Replay data from _replays_df
             
         Returns:
-            True if no observers present, False otherwise
+            ObserverVerificationDetail with success status and observer list
         """
         observers_field = replay_details.get('observers')
+        observers_list = []
         
         if observers_field is None:
-            return True
-        
-        if isinstance(observers_field, str):
+            pass
+        elif isinstance(observers_field, str):
             try:
                 observers_list = json.loads(observers_field)
-                return len(observers_list) == 0
             except json.JSONDecodeError:
-                return observers_field == '' or observers_field == '[]'
+                if observers_field and observers_field != '[]':
+                    observers_list = [observers_field]
+        elif isinstance(observers_field, list):
+            observers_list = observers_field
         
-        if isinstance(observers_field, list):
-            return len(observers_field) == 0
-        
-        return True
+        return ObserverVerificationDetail(
+            success=(len(observers_list) == 0),
+            observers_found=observers_list
+        )
     
     # REMOVED FOR DECOUPLING
     # async def _send_conflict_notification(self, match_id: int): ...

@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
+from datetime import datetime, timezone
 
 import aiosqlite
 import polars as pl
@@ -1889,25 +1890,19 @@ class DataAccessService:
         self,
         discord_uid: int,
         player_name: str,
-        command: str
+        command_name: str
     ) -> None:
-        """
-        Log a command call to the command_calls table.
+        """Logs a command call with the current timestamp."""
+        job_data = {
+            "discord_uid": discord_uid,
+            "player_name": player_name,
+            "command": command_name,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
         
-        This is write-only (not stored in memory) and processes asynchronously.
-        
-        Args:
-            discord_uid: Discord user ID
-            player_name: Player's display name
-            command: Command that was called
-        """
         job = WriteJob(
             job_type=WriteJobType.INSERT_COMMAND_CALL,
-            data={
-                'discord_uid': discord_uid,
-                'player_name': player_name,
-                'command': command
-            },
+            data=job_data,
             timestamp=time.time()
         )
         

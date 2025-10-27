@@ -349,40 +349,38 @@ class TestMatchmaker:
         assert player.bw_mmr == 1500
     
     def test_get_available_maps(self):
-        """Test map veto logic."""
-        player1 = Player(
-            discord_user_id=1,
-            user_id="Player1",
-            preferences=QueuePreferences(
-                selected_races=["bw_terran"],
-                vetoed_maps=["Arkanoid", "Khione"],
-                discord_user_id=1,
-                user_id="Player1"
-            )
+        """Test that available maps are correctly filtered based on player vetoes."""
+        # Create players with vetoes
+        prefs1 = QueuePreferences(
+            selected_races=["bw_zerg"], 
+            vetoed_maps=["Death Valley", "Keres Passage SEL"], 
+            discord_user_id=1, 
+            user_id="Player1"
         )
+        player1 = Player(discord_user_id=1, user_id="Player1", preferences=prefs1)
         
-        player2 = Player(
-            discord_user_id=2,
-            user_id="Player2",
-            preferences=QueuePreferences(
-                selected_races=["sc2_zerg"],
-                vetoed_maps=["Pylon"],
-                discord_user_id=2,
-                user_id="Player2"
-            )
+        prefs2 = QueuePreferences(
+            selected_races=["sc2_protoss"], 
+            vetoed_maps=["Keres Passage SEL", "Khione SEL"], 
+            discord_user_id=2, 
+            user_id="Player2"
         )
+        player2 = Player(discord_user_id=2, user_id="Player2", preferences=prefs2)
         
-        available_maps = self.matchmaker.get_available_maps(player1, player2)
+        # Expected maps (all maps minus vetoed ones)
+        all_maps = self.matchmaker.maps_service.get_available_maps()
+        expected_maps = [
+            m for m in all_maps 
+            if m not in ["Death Valley", "Keres Passage SEL", "Khione SEL"]
+        ]
         
-        # Should exclude vetoed maps
-        assert "Arkanoid" not in available_maps
-        assert "Khione" not in available_maps
-        assert "Pylon" not in available_maps
+        # Get available maps
+        available_maps = self.matchmaker._get_available_maps(player1, player2)
         
-        # Should include non-vetoed maps
-        assert "Death Valley" in available_maps
-        assert "Keres Passage" in available_maps
-    
+        # Assert that the available maps are correct
+        assert set(available_maps) == set(expected_maps), \
+            f"Expected maps {set(expected_maps)}, but got {set(available_maps)}"
+
     def test_generate_in_game_channel(self):
         """Test in-game channel generation."""
         channel = self.matchmaker.generate_in_game_channel()
@@ -393,7 +391,7 @@ class TestMatchmaker:
         assert 100 <= int(channel[5:]) <= 999
     
     def test_get_random_server(self):
-        """Test server selection."""
+        """Test that a valid server is returned."""
         servers = ["US East", "US West", "Europe", "Asia"]
         
         # Test multiple calls to ensure randomness
