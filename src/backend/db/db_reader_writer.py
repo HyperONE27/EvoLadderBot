@@ -1026,6 +1026,56 @@ class DatabaseWriter:
             print(f"Error aborting match {match_id}: {e}")
             return False
 
+    def update_match_reports_and_result(
+        self,
+        match_id: int,
+        p1_report: Optional[int],
+        p2_report: Optional[int],
+        match_result: int
+    ) -> bool:
+        """
+        Atomically update match reports and result for system-initiated aborts.
+        
+        This method updates the match reports and result in a single transaction
+        without decrementing player abort counters. Used for unconfirmed match aborts.
+        
+        Args:
+            match_id: The ID of the match to update
+            p1_report: Player 1's report value (-4 if didn't confirm, None if confirmed)
+            p2_report: Player 2's report value (-4 if didn't confirm, None if confirmed)
+            match_result: The match result (-1 for aborted)
+            
+        Returns:
+            True if the update was successful, False otherwise
+        """
+        try:
+            update_query = """
+                UPDATE matches_1v1
+                SET 
+                    player_1_report = :p1_report,
+                    player_2_report = :p2_report,
+                    match_result = :match_result,
+                    updated_at = :updated_at
+                WHERE id = :match_id
+            """
+            
+            rowcount = self.adapter.execute_write(
+                update_query,
+                {
+                    "match_id": match_id,
+                    "p1_report": p1_report,
+                    "p2_report": p2_report,
+                    "match_result": match_result,
+                    "updated_at": get_timestamp()
+                }
+            )
+            
+            return rowcount > 0
+            
+        except Exception as e:
+            print(f"Error updating match {match_id} reports and result: {e}")
+            return False
+
     def update_match_result(self, match_id: int, match_result: int) -> bool:
         """
         Update the match result for a match.

@@ -87,13 +87,14 @@ CREATE TABLE matches_1v1 (
     player_2_race           TEXT NOT NULL,
     player_1_mmr            INTEGER NOT NULL,
     player_2_mmr            INTEGER NOT NULL,
-    player_1_report         INTEGER,
-    player_2_report         INTEGER,
-    match_result            INTEGER,
+    player_1_report         INTEGER,  -- -4 indicates the player did not confirm the match in time
+    player_2_report         INTEGER,  -- -4 indicates the player did not confirm the match in time
+    match_result            INTEGER,  -- -1 indicates match was aborted
     mmr_change              INTEGER,
     map_played              TEXT NOT NULL,
     server_used             TEXT NOT NULL,
     played_at               TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     player_1_replay_path    TEXT,
     player_1_replay_time    TIMESTAMPTZ,
     player_2_replay_path    TEXT,
@@ -139,4 +140,3 @@ CREATE INDEX idx_replays_date ON replays(replay_date);
 CREATE INDEX idx_command_calls_discord_uid ON command_calls(discord_uid);
 CREATE INDEX idx_command_calls_called_at ON command_calls(called_at);
 CREATE INDEX idx_command_calls_command ON command_calls(command);
-```

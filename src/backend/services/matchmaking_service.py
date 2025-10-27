@@ -94,10 +94,10 @@ class Matchmaker:
 	PRUNE_INTERVAL_SECONDS = 60
 
 	# Global matchmaking interval (matchwave) in seconds.
-	MATCH_INTERVAL_SECONDS = 45
+	MATCH_INTERVAL_SECONDS = 5
 
 	# Time window in seconds for players to abort a match after it's found.
-	ABORT_TIMER_SECONDS = 180
+	ABORT_TIMER_SECONDS = 10
 
 	# The number of matchmaking waves before the MMR window expands.
 	# With a 45-second wave interval, expansion occurs once per wave.

@@ -51,6 +51,7 @@ class WriteJobType(Enum):
     LOG_PLAYER_ACTION = "log_player_action"
     INSERT_COMMAND_CALL = "insert_command_call"
     ABORT_MATCH = "abort_match"
+    SYSTEM_ABORT_UNCONFIRMED = "system_abort_unconfirmed"
 
 
 @dataclass
@@ -257,6 +258,7 @@ class DataAccessService:
                 "player_2_mmr": pl.Series([], dtype=pl.Int64),
                 "mmr_change": pl.Series([], dtype=pl.Float64),
                 "played_at": pl.Series([], dtype=pl.Utf8),
+                "updated_at": pl.Series([], dtype=pl.Utf8),
                 "player_1_report": pl.Series([], dtype=pl.Int64),
                 "player_2_report": pl.Series([], dtype=pl.Int64),
                 "match_result": pl.Series([], dtype=pl.Int64),
@@ -729,6 +731,17 @@ class DataAccessService:
                     job.data['match_id'],
                     job.data['player_discord_uid'],
                     300  # ABORT_TIMER_SECONDS
+                )
+            
+            elif job.job_type == WriteJobType.SYSTEM_ABORT_UNCONFIRMED:
+                # Use the new update_match_reports_and_result method
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.update_match_reports_and_result,
+                    job.data['match_id'],
+                    job.data['player_1_report'],
+                    job.data['player_2_report'],
+                    -1  # match_result: -1 for aborted
                 )
             
             # Add other job types as we implement them
@@ -1903,6 +1916,58 @@ class DataAccessService:
         job = WriteJob(
             job_type=WriteJobType.INSERT_COMMAND_CALL,
             data=job_data,
+            timestamp=time.time()
+        )
+        
+        await self._queue_write(job)
+    
+    async def record_system_abort(
+        self,
+        match_id: int,
+        p1_report: Optional[int],
+        p2_report: Optional[int]
+    ) -> None:
+        """
+        Record a system-initiated abort for unconfirmed matches.
+        
+        This method is used when players fail to confirm a match in time.
+        It updates match reports and sets the match result to -1 (aborted)
+        WITHOUT decrementing player abort counters.
+        
+        Args:
+            match_id: The ID of the match to abort
+            p1_report: Player 1's report value (-4 if they didn't confirm, None if they did)
+            p2_report: Player 2's report value (-4 if they didn't confirm, None if they did)
+        """
+        # Update in-memory DataFrame immediately to reflect the abort
+        if self._matches_1v1_df is not None:
+            self._matches_1v1_df = self._matches_1v1_df.with_columns([
+                pl.when(pl.col("id") == match_id)
+                  .then(pl.lit(p1_report))
+                  .otherwise(pl.col("player_1_report"))
+                  .alias("player_1_report"),
+                pl.when(pl.col("id") == match_id)
+                  .then(pl.lit(p2_report))
+                  .otherwise(pl.col("player_2_report"))
+                  .alias("player_2_report"),
+                pl.when(pl.col("id") == match_id)
+                  .then(pl.lit(-1))  # match_result: -1 for aborted
+                  .otherwise(pl.col("match_result"))
+                  .alias("match_result"),
+                pl.when(pl.col("id") == match_id)
+                  .then(pl.lit("ABORTED"))
+                  .otherwise(pl.col("status"))
+                  .alias("status")
+            ])
+            print(f"[DataAccessService] Updated match {match_id} state to ABORTED in memory (unconfirmed)")
+
+        job = WriteJob(
+            job_type=WriteJobType.SYSTEM_ABORT_UNCONFIRMED,
+            data={
+                'match_id': match_id,
+                'player_1_report': p1_report,
+                'player_2_report': p2_report
+            },
             timestamp=time.time()
         )
         

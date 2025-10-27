@@ -831,6 +831,10 @@ class MatchFoundView(discord.ui.View):
         self.result_select = MatchResultSelect(match_result, is_player1, self)
         self.add_item(self.result_select)
         
+        # Add confirm button (moved to row 0, before abort button)
+        self.confirm_button = MatchConfirmButton(self)
+        self.add_item(self.confirm_button)
+        
         # Add abort button (moved to row 0)
         self.abort_button = MatchAbortButton(self)
         self.add_item(self.abort_button)
@@ -839,31 +843,11 @@ class MatchFoundView(discord.ui.View):
         self.confirm_select = MatchResultConfirmSelect(self)
         self.add_item(self.confirm_select)
 
-        # Start a background task to disable the abort button when the timer expires
+        # The abort deadline is for display purposes only now
         self.abort_deadline = get_current_unix_timestamp() + matchmaker.ABORT_TIMER_SECONDS
-        self.abort_disable_task = asyncio.create_task(self.disable_abort_after_delay())
 
         # Update dropdown states based on initial data
         self._update_dropdown_states()
-    
-    async def disable_abort_after_delay(self):
-        """A background task to disable the abort button after the deadline."""
-        await asyncio.sleep(matchmaker.ABORT_TIMER_SECONDS)
-
-        # Double-check if the button should still be active
-        if self.abort_button.disabled or self.match_result.match_result in ["aborted", "conflict", "player1_win", "player2_win", "draw"]:
-            return
-
-        self.abort_button.disabled = True
-
-        # Try to update the message
-        async with self.edit_lock:
-            # Update the embed to notify the user
-            embed = self.get_embed()  # Get the current embed state
-            embed.add_field(name="⚠️ Abort Window Closed", value="The time to abort this match has expired.", inline=False)
-            
-            # Edit the original message using bot token (never expires!)
-            await self._edit_original_message(embed, self)
     
     async def _edit_original_message(self, embed: discord.Embed, view: discord.ui.View = None) -> bool:
         """
@@ -1072,24 +1056,7 @@ class MatchFoundView(discord.ui.View):
             result_display = "Conflict"
             mmr_display = "- MMR Awarded: :x: Report Conflict Detected"
         elif self.match_result.match_result == 'aborted':
-            # Get match data from DataAccessService (in-memory, instant)
-            from src.backend.services.data_access_service import DataAccessService
-            data_service = DataAccessService()
-            match_data = data_service.get_match(self.match_result.match_id)
-            if not match_data:
-                raise ValueError(f"[MatchFoundView] Match {self.match_result.match_id} not found in DataAccessService memory")
-            
-            p1_report = match_data.get("player_1_report")
-            p2_report = match_data.get("player_2_report")
-
-            if p1_report == -3:
-                aborted_by = p1_display_name
-            elif p2_report == -3:
-                aborted_by = p2_display_name
-            else:
-                aborted_by = "Unknown"
-
-            result_display = f"Aborted by {aborted_by}"
+            result_display = "Aborted"
             mmr_display = "- MMR Awarded: `+/-0` (Match aborted)"
         elif self.match_result.match_result:
             # Convert to human-readable format
@@ -1177,12 +1144,14 @@ class MatchFoundView(discord.ui.View):
     
     async def handle_completion_notification(self, status: str, data: dict):
         """This is the callback that the backend will invoke."""
+        print(f"📬 [DEBUG] MatchFoundView.handle_completion_notification RECEIVED: status={status}, match_id={self.match_result.match_id}, data_keys={list(data.keys())}")
         flow = FlowTracker(f"match_completion_notification_{status}", 
                           user_id=self.match_result.player_1_discord_id if self.is_player1 else self.match_result.player_2_discord_id)
         
         flow.checkpoint("notification_received")
         
         if status == "complete":
+            print(f"📬 [DEBUG] Processing 'complete' status for match {self.match_result.match_id}")
             flow.checkpoint("process_complete_status")
             # Update the view's internal state with the final results
             result_raw = data.get('match_result_raw')
@@ -1217,35 +1186,48 @@ class MatchFoundView(discord.ui.View):
             await self._send_final_notification_embed(data)
             flow.checkpoint("send_final_embed_complete")
             
+            # The view's work is done for a completed match
+            self.stop()
             flow.complete("success")
             
         elif status == "abort":
+            print(f"📬 [DEBUG] Processing 'abort' status for match {self.match_result.match_id}")
             flow.checkpoint("process_abort_status")
             # Update the view's internal state to reflect the abort
             self.match_result.match_result = "aborted"
             self.match_result.match_result_confirmation_status = "Aborted"
+            print(f"📬 [DEBUG] Updated match_result to 'aborted' for match {self.match_result.match_id}")
 
             flow.checkpoint("disable_components")
             # Immediately disable all components to prevent further actions
             self.disable_all_components()
+            print(f"📬 [DEBUG] Disabled all components for match {self.match_result.match_id}")
 
             flow.checkpoint("update_abort_embed_start")
             # Update the embed with the abort information using bot token (persistent)
             async with self.edit_lock:
                 embed = self.get_embed()
                 await self._edit_original_message(embed, self)
+            print(f"📬 [DEBUG] Updated embed with abort info for match {self.match_result.match_id}")
             flow.checkpoint("update_abort_embed_complete")
 
             flow.checkpoint("send_abort_embed_start")
             # Send a follow-up notification to ensure the user sees the final state
-            await self._send_abort_notification_embed()
+            # Pass the report codes from the data payload
+            print(f"📬 [DEBUG] About to send abort notification embed for match {self.match_result.match_id}")
+            await self._send_abort_notification_embed(
+                p1_report=data.get('p1_report'),
+                p2_report=data.get('p2_report')
+            )
+            print(f"📬 [DEBUG] Abort notification embed sent for match {self.match_result.match_id}")
             flow.checkpoint("send_abort_embed_complete")
             
-            # The view's work is done
+            # The view's work is done for an aborted match
             self.stop()
             flow.complete("success")
             
         elif status == "conflict":
+            print(f"📬 [DEBUG] Processing 'conflict' status for match {self.match_result.match_id}")
             flow.checkpoint("process_conflict_status")
             # Update the view's state to reflect the conflict
             self.match_result.match_result = "conflict"
@@ -1265,8 +1247,29 @@ class MatchFoundView(discord.ui.View):
             await self._send_conflict_notification_embed()
             flow.checkpoint("send_conflict_embed_complete")
             
+            # The view's work is done for a conflict
+            self.stop()
             flow.complete("success")
 
+        elif status == "confirmation_timeout":
+            print(f"📬 [DEBUG] Processing 'confirmation_timeout' status for match {self.match_result.match_id}")
+            flow.checkpoint("process_confirmation_timeout")
+            # The backend has confirmed the confirmation window is closed.
+            # Disable the abort and confirm buttons.
+            self.abort_button.disabled = True
+            self.confirm_button.disabled = True
+            print(f"📬 [DEBUG] Disabled abort and confirm buttons for match {self.match_result.match_id}")
+            
+            flow.checkpoint("update_timeout_embed_start")
+            # Update the embed to show the abort window is closed
+            async with self.edit_lock:
+                embed = self.get_embed()
+                await self._edit_original_message(embed, self)
+            print(f"📬 [DEBUG] Updated embed to show timeout for match {self.match_result.match_id}")
+            flow.checkpoint("update_timeout_embed_complete")
+            print(f"📬 [DEBUG] 'confirmation_timeout' processing COMPLETE for match {self.match_result.match_id}")
+            flow.complete("success")
+            
         # The view's work is done
         self.stop()
         
@@ -1341,9 +1344,17 @@ class MatchFoundView(discord.ui.View):
         except discord.HTTPException as e:
             print(f"Error sending conflict notification for match {self.match_result.match_id}: {e}")
 
-    async def _send_abort_notification_embed(self):
-        """Sends a follow-up message indicating the match was aborted."""
+    async def _send_abort_notification_embed(self, p1_report: Optional[int] = None, p2_report: Optional[int] = None):
+        """
+        Sends a follow-up message indicating the match was aborted.
+        
+        Args:
+            p1_report: Player 1's report code (optional, will be fetched if not provided)
+            p2_report: Player 2's report code (optional, will be fetched if not provided)
+        """
+        print(f"📨 [DEBUG] _send_abort_notification_embed START for match {self.match_result.match_id}, p1_report={p1_report}, p2_report={p2_report}")
         if not self.channel:
+            print(f"❌ [DEBUG] No channel available, cannot send abort notification for match {self.match_result.match_id}")
             return
 
         # Get match data from DataAccessService (in-memory, instant)
@@ -1351,7 +1362,10 @@ class MatchFoundView(discord.ui.View):
         data_service = DataAccessService()
         match_data = data_service.get_match(self.match_result.match_id)
         if not match_data:
+            print(f"❌ [DEBUG] Match {self.match_result.match_id} not found in DataAccessService")
             raise ValueError(f"[MatchFoundView] Match {self.match_result.match_id} not found in DataAccessService memory")
+
+        print(f"📨 [DEBUG] Got match data for match {self.match_result.match_id}")
 
         p1_info = data_service.get_player_info(match_data['player_1_discord_uid'])
         p2_info = data_service.get_player_info(match_data['player_2_discord_uid'])
@@ -1359,11 +1373,41 @@ class MatchFoundView(discord.ui.View):
         p1_name = p1_info.get('player_name') if p1_info else str(match_data['player_1_discord_uid'])
         p2_name = p2_info.get('player_name') if p2_info else str(match_data['player_2_discord_uid'])
 
+        # Use provided report codes or fetch from match data
+        if p1_report is None:
+            p1_report = match_data.get("player_1_report")
+        if p2_report is None:
+            p2_report = match_data.get("player_2_report")
+
+        print(f"📨 [DEBUG] Report codes (final): p1={p1_report}, p2={p2_report}")
+
         aborted_by = "Unknown"
-        if match_data.get("player_1_report") == -3:
+        reason = "The match was aborted. No MMR changes were applied."
+
+        # Determine the specific abort reason based on report codes
+        if p1_report == -4 and p2_report == -4:
+            aborted_by = "System"
+            reason = "The match was automatically aborted because neither player confirmed in time."
+        elif p1_report == -4 and p2_report is None:
+            aborted_by = "System"
+            reason = f"The match was automatically aborted because **{p1_name}** did not confirm in time."
+        elif p2_report == -4 and p1_report is None:
+            aborted_by = "System"
+            reason = f"The match was automatically aborted because **{p2_name}** did not confirm in time."
+        elif p1_report == -4:
+            aborted_by = "System"
+            reason = f"The match was automatically aborted because **{p1_name}** did not confirm in time."
+        elif p2_report == -4:
+            aborted_by = "System"
+            reason = f"The match was automatically aborted because **{p2_name}** did not confirm in time."
+        elif p1_report == -3:
             aborted_by = p1_name
-        elif match_data.get("player_2_report") == -3:
+            reason = f"The match was aborted by **{aborted_by}**. No MMR changes were applied."
+        elif p2_report == -3:
             aborted_by = p2_name
+            reason = f"The match was aborted by **{aborted_by}**. No MMR changes were applied."
+
+        print(f"📨 [DEBUG] Abort reason determined: {reason}")
             
         p1_flag = get_flag_emote(p1_info['country']) if p1_info else '🏳️'
         p2_flag = get_flag_emote(p2_info['country']) if p2_info else '🏳️'
@@ -1398,13 +1442,16 @@ class MatchFoundView(discord.ui.View):
         
         abort_embed.add_field(
             name="**Reason:**",
-            value=f"The match was aborted by **{aborted_by}**. No MMR changes were applied.",
+            value=reason,
             inline=False
         )
 
         try:
+            print(f"📨 [DEBUG] Sending abort embed to channel for match {self.match_result.match_id}")
             await self.channel.send(embed=abort_embed)
+            print(f"✅ [DEBUG] Abort notification embed successfully sent for match {self.match_result.match_id}")
         except discord.HTTPException as e:
+            print(f"❌ [DEBUG] Error sending abort notification for match {self.match_result.match_id}: {e}")
             print(f"Error sending abort notification for match {self.match_result.match_id}: {e}")
 
     def disable_all_components(self):
@@ -1415,6 +1462,64 @@ class MatchFoundView(discord.ui.View):
 
     async def on_timeout(self):
         pass # Timeout is now handled by the match completion service
+
+
+class MatchConfirmButton(discord.ui.Button):
+    """Button to confirm the match"""
+    
+    def __init__(self, parent_view):
+        self.parent_view = parent_view
+        
+        super().__init__(
+            emoji="✅",
+            label="Confirm Match",
+            style=discord.ButtonStyle.green,
+            row=0,
+            disabled=False
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        """Handle the confirm match button click."""
+        player_discord_uid = interaction.user.id
+        match_id = self.parent_view.match_result.match_id
+        
+        # Immediately defer the response
+        await interaction.response.defer()
+        
+        # Validate that the user is one of the two players
+        if player_discord_uid not in [
+            self.parent_view.match_result.player_1_discord_id,
+            self.parent_view.match_result.player_2_discord_id
+        ]:
+            await interaction.followup.send(
+                "❌ You are not a participant in this match.",
+                ephemeral=True
+            )
+            return
+        
+        # Call the backend to record the confirmation
+        from src.backend.services.match_completion_service import MatchCompletionService
+        match_completion_service = MatchCompletionService()
+        
+        try:
+            await match_completion_service.confirm_match(match_id, player_discord_uid)
+            
+            # Disable the button and update the view
+            self.disabled = True
+            async with self.parent_view.edit_lock:
+                await interaction.edit_original_response(view=self.parent_view)
+            
+            # Provide feedback to the user
+            await interaction.followup.send(
+                "✅ You have confirmed the match! Waiting for your opponent.",
+                ephemeral=True
+            )
+        except Exception as e:
+            print(f"Error confirming match {match_id} for player {player_discord_uid}: {e}")
+            await interaction.followup.send(
+                "❌ An error occurred while confirming the match. Please try again.",
+                ephemeral=True
+            )
 
 
 class MatchAbortButton(discord.ui.Button):

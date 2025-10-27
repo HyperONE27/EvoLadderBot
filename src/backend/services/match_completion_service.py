@@ -38,6 +38,8 @@ class MatchCompletionService:
             cls._instance.processing_locks: Dict[int, Lock] = {}
             # New dictionary to store callbacks
             cls._instance.notification_callbacks: Dict[int, List[Callable]] = {}
+            # Track match confirmations: match_id -> set of player_discord_uids
+            cls._instance.match_confirmations: Dict[int, Set[int]] = {}
             # Initialize logger
             cls._instance.logger = logging.getLogger(__name__)
         return cls._instance
@@ -67,6 +69,9 @@ class MatchCompletionService:
             if match_id not in self.notification_callbacks:
                 self.notification_callbacks[match_id] = []
             self.notification_callbacks[match_id].append(on_complete_callback)
+        
+        # Initialize confirmation tracking for this match
+        self.match_confirmations[match_id] = set()
 
         task = asyncio.create_task(self._monitor_match_completion(match_id))
         self.monitoring_tasks[match_id] = task
@@ -86,8 +91,46 @@ class MatchCompletionService:
         # Clean up callbacks and locks
         self.notification_callbacks.pop(match_id, None)
         self.processing_locks.pop(match_id, None)
+        self.match_confirmations.pop(match_id, None)
 
         print(f"🛑 Stopped monitoring match {match_id}")
+    
+    async def confirm_match(self, match_id: int, player_discord_uid: int) -> bool:
+        """
+        Record that a player has confirmed the match.
+        
+        If both players confirm, the auto-abort timer is cancelled.
+        
+        Args:
+            match_id: The ID of the match being confirmed
+            player_discord_uid: The Discord UID of the player confirming
+            
+        Returns:
+            True if the confirmation was recorded successfully
+        """
+        lock = self._get_lock(match_id)
+        async with lock:
+            # Add player to confirmations set
+            if match_id not in self.match_confirmations:
+                self.match_confirmations[match_id] = set()
+            
+            self.match_confirmations[match_id].add(player_discord_uid)
+            self.logger.info(f"Player {player_discord_uid} confirmed match {match_id}")
+            
+            # Check if both players have confirmed
+            if len(self.match_confirmations[match_id]) == 2:
+                self.logger.info(f"Both players confirmed match {match_id}, cancelling auto-abort timer")
+                
+                # Cancel the auto-abort timer
+                task = self.monitoring_tasks.pop(match_id, None)
+                if task:
+                    task.cancel()
+                    self.logger.info(f"Auto-abort timer cancelled for match {match_id}")
+                
+                # Clean up confirmations
+                self.match_confirmations.pop(match_id, None)
+            
+            return True
     
     async def wait_for_match_completion(self, match_id: int, timeout: int = 30) -> Optional[dict]:
         """
@@ -127,46 +170,83 @@ class MatchCompletionService:
 
     async def check_match_completion(self, match_id: int):
         """
-        Manually check if a match is complete and handle it.
-        
-        This method uses atomic status transitions to prevent race conditions
-        between completion and abort operations. The lock is held for the
-        entire check-then-act sequence.
+        Public, lock-acquiring method to check match completion.
+        This is the main entry point for external services.
+        """
+        lock = self._get_lock(match_id)
+        async with lock:
+            await self._check_match_completion_locked(match_id)
+
+    async def _check_match_completion_locked(self, match_id: int):
+        """
+        Internal completion check that assumes the lock for the match_id is already held.
         """
         import time
         start_time = time.perf_counter()
         
-        lock = self._get_lock(match_id)
-        async with lock:
-            try:
-                print(f"🔍 CHECK: Manual completion check for match {match_id}")
-                # Get match data from DataAccessService (in-memory, instant)
-                from src.backend.services.data_access_service import DataAccessService
-                data_service = DataAccessService()
-                match_data = data_service.get_match(match_id)
-                if not match_data:
-                    raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
+        try:
+            print(f"🔍 CHECK: Manual completion check for match {match_id}")
+            # Get match data from DataAccessService (in-memory, instant)
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+            match_data = data_service.get_match(match_id)
+            if not match_data:
+                raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
+            
+            # Check current status - if already processed, skip
+            current_status = match_data.get('status', 'IN_PROGRESS')
+            p1_report = match_data.get('player_1_report')
+            p2_report = match_data.get('player_2_report')
+
+            is_unconfirmed_abort = current_status == 'ABORTED' and (p1_report == -4 or p2_report == -4)
+
+            if current_status in ('COMPLETE', 'CONFLICT', 'PROCESSING_COMPLETION') or (current_status == 'ABORTED' and not is_unconfirmed_abort):
+                print(f"🔍 CHECK: Match {match_id} already in terminal/processing state: {current_status}, skipping notification")
+                return True
+            
+            # Check if both players have reported
+            match_result = match_data.get('match_result')
+            
+            print(f"🔍 CHECK: Match {match_id} status={current_status}, reports: p1={p1_report}, p2={p2_report}, result={match_result}")
+            
+            # Abort if any report indicates an abort, or if the match_result is definitively -1
+            if p1_report in [-3, -4] or p2_report in [-3, -4] or match_result == -1:
+                print(f"🚫 Match {match_id} was aborted")
+                # Atomically transition to ABORTED state
+                data_service.update_match_status(match_id, 'ABORTED')
+                self.processed_matches.add(match_id)  # Mark as processed
+                await self._handle_match_abort(match_id, match_data)
                 
-                # Check current status - if already processed, skip
-                current_status = match_data.get('status', 'IN_PROGRESS')
-                if current_status in ('COMPLETE', 'ABORTED', 'CONFLICT', 'PROCESSING_COMPLETION'):
-                    print(f"🔍 CHECK: Match {match_id} already in terminal/processing state: {current_status}, skipping")
-                    return True
+                # Notify any waiting tasks
+                if match_id in self.completion_waiters:
+                    self.completion_waiters[match_id].set()
+                    del self.completion_waiters[match_id]
                 
-                # Check if both players have reported
-                p1_report = match_data.get('player_1_report')
-                p2_report = match_data.get('player_2_report')
-                match_result = match_data.get('match_result')
-                
-                print(f"🔍 CHECK: Match {match_id} status={current_status}, reports: p1={p1_report}, p2={p2_report}, result={match_result}")
-                
-                # Abort if any report is -3 (initiator) or both are -1/-3 with match_result=-1
-                if (p1_report == -3 or p2_report == -3) or (match_result == -1 and (p1_report in (-3, -1) and p2_report in (-3, -1))):
-                    print(f"🚫 Match {match_id} was aborted")
-                    # Atomically transition to ABORTED state
-                    data_service.update_match_status(match_id, 'ABORTED')
+                return True
+            
+            if p1_report is not None and p2_report is not None:
+                if match_result == -2:
+                    # Conflicting reports - manual resolution needed
+                    print(f"⚠️ Conflicting reports for match {match_id}, manual resolution required")
+                    # Atomically transition to CONFLICT state
+                    data_service.update_match_status(match_id, 'CONFLICT')
+                    await self._handle_match_conflict(match_id)
+                elif match_result is not None:
+                    # Match is complete - atomically transition to PROCESSING_COMPLETION
+                    # to prevent concurrent abort/complete operations
+                    print(f"✅ CHECK: Match {match_id} ready for completion, transitioning to PROCESSING_COMPLETION")
+                    data_service.update_match_status(match_id, 'PROCESSING_COMPLETION')
                     self.processed_matches.add(match_id)  # Mark as processed
-                    await self._handle_match_abort(match_id, match_data)
+                    
+                    # Perform completion actions while lock is held
+                    await self._handle_match_completion(match_id, match_data)
+                    
+                    # Atomically transition to COMPLETE state
+                    data_service.update_match_status(match_id, 'COMPLETE')
+                    print(f"✅ CHECK: Match {match_id} completed successfully")
+                    
+                    # Invalidate leaderboard cache since MMR values changed
+                    LeaderboardService.invalidate_cache()
                     
                     # Notify any waiting tasks
                     if match_id in self.completion_waiters:
@@ -174,56 +254,66 @@ class MatchCompletionService:
                         del self.completion_waiters[match_id]
                     
                     return True
-                
-                if p1_report is not None and p2_report is not None:
-                    if match_result == -2:
-                        # Conflicting reports - manual resolution needed
-                        print(f"⚠️ Conflicting reports for match {match_id}, manual resolution required")
-                        # Atomically transition to CONFLICT state
-                        data_service.update_match_status(match_id, 'CONFLICT')
-                        await self._handle_match_conflict(match_id)
-                    elif match_result is not None:
-                        # Match is complete - atomically transition to PROCESSING_COMPLETION
-                        # to prevent concurrent abort/complete operations
-                        print(f"✅ CHECK: Match {match_id} ready for completion, transitioning to PROCESSING_COMPLETION")
-                        data_service.update_match_status(match_id, 'PROCESSING_COMPLETION')
-                        self.processed_matches.add(match_id)  # Mark as processed
-                        
-                        # Perform completion actions while lock is held
-                        await self._handle_match_completion(match_id, match_data)
-                        
-                        # Atomically transition to COMPLETE state
-                        data_service.update_match_status(match_id, 'COMPLETE')
-                        print(f"✅ CHECK: Match {match_id} completed successfully")
-                        
-                        # Invalidate leaderboard cache since MMR values changed
-                        LeaderboardService.invalidate_cache()
-                        
-                        # Notify any waiting tasks
-                        if match_id in self.completion_waiters:
-                            self.completion_waiters[match_id].set()
-                            del self.completion_waiters[match_id]
-                        
-                        return True
-                else:
-                    print(f"📝 CHECK: Match {match_id} still waiting for reports: p1={p1_report}, p2={p2_report}")
-                
-                return False
-            except Exception as e:
-                print(f"❌ Error checking match completion for {match_id}: {e}")
-                return False
-            finally:
-                duration_ms = (time.perf_counter() - start_time) * 1000
-                if duration_ms > 100:
-                    print(f"⚠️ [MatchCompletion PERF] check_match_completion for match {match_id} took {duration_ms:.2f}ms")
-                elif duration_ms > 50:
-                    print(f"🟡 [MatchCompletion PERF] check_match_completion for match {match_id} took {duration_ms:.2f}ms")
-    
+            else:
+                print(f"📝 CHECK: Match {match_id} still waiting for reports: p1={p1_report}, p2={p2_report}")
+            
+            return False
+        except Exception as e:
+            print(f"❌ Error checking match completion for {match_id}: {e}")
+            return False
+        finally:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            if duration_ms > 100:
+                print(f"⚠️ [MatchCompletion PERF] check_match_completion for match {match_id} took {duration_ms:.2f}ms")
+            elif duration_ms > 50:
+                print(f"🟡 [MatchCompletion PERF] check_match_completion for match {match_id} took {duration_ms:.2f}ms")
+
     async def _monitor_match_completion(self, match_id: int):
         """Monitor a specific match for completion."""
+        from src.backend.services.matchmaking_service import matchmaker
+        
         try:
+            # First, wait for the abort timer to expire
+            await asyncio.sleep(matchmaker.ABORT_TIMER_SECONDS)
+            
+            # After abort timer expires, check if both players confirmed
+            lock = self._get_lock(match_id)
+            async with lock:
+                # Check if match is still being monitored
+                if match_id not in self.monitored_matches:
+                    print(f"🛑 [DEBUG] Match {match_id} is no longer being monitored, skipping confirmation check")
+                    return
+
+                print(f"⏰ [DEBUG] Confirmation timer expired for match {match_id}")
+                
+                # First, notify frontends that the confirmation window is closed
+                # This allows them to disable buttons before the final abort notification arrives
+                print(f"📢 [DEBUG] About to notify players of confirmation timeout for match {match_id}")
+                await self._notify_players_confirmation_timeout(match_id)
+                print(f"✅ [DEBUG] Confirmation timeout notification sent for match {match_id}")
+                
+                # Get match data from DataAccessService (in-memory, instant)
+                from src.backend.services.data_access_service import DataAccessService
+                data_service = DataAccessService()
+                match_data = data_service.get_match(match_id)
+                if not match_data:
+                    raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
+                
+                # Check if match has already been resolved
+                match_result = match_data.get('match_result')
+                if match_result is not None:
+                    self.logger.info(f"Match {match_id} already resolved, skipping confirmation check")
+                    return
+                
+                # Check confirmations
+                confirmed_players = self.match_confirmations.get(match_id, set())
+                if len(confirmed_players) < 2:
+                    # Not all players confirmed, handle unconfirmed abort
+                    await self._handle_unconfirmed_abort(match_id, match_data)
+                    return
+            
+            # If both players confirmed, continue normal monitoring loop
             while match_id in self.monitored_matches:
-                # Check if match is complete
                 lock = self._get_lock(match_id)
                 async with lock:
                     # Get match data from DataAccessService (in-memory, instant)
@@ -261,7 +351,7 @@ class MatchCompletionService:
             print(f"❌ Error monitoring match {match_id}: {e}")
         finally:
             # Clean up
-            self.stop_monitoring_match(match_id)
+            # self.stop_monitoring_match(match_id) # Cleanup is now handled by terminal state handlers
             self.processing_locks.pop(match_id, None) # Clean up the lock
     
     async def _handle_match_completion(self, match_id: int, match_data: dict):
@@ -317,17 +407,34 @@ class MatchCompletionService:
         finally:
             duration_ms = (time.perf_counter() - start_time) * 1000
             print(f"🏁 [MatchCompletion PERF] Total _handle_match_completion for match {match_id}: {duration_ms:.2f}ms")
+            # Ensure cleanup is always performed
+            self.stop_monitoring_match(match_id)
     
     async def _handle_match_abort(self, match_id: int, match_data: dict):
         """Handle an aborted match."""
         try:
+            print(f"🛑 [DEBUG] _handle_match_abort START for match {match_id}")
             # Import matchmaker for queue lock release
             from src.backend.services.matchmaking_service import matchmaker
             
-            # Re-fetch to ensure we have the latest state
+            # Get the latest match data to ensure we have the report codes
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+            latest_match_data = data_service.get_match(match_id)
+            if not latest_match_data:
+                latest_match_data = match_data
+            
+            # Re-fetch to ensure we have the latest state for the final results
             final_match_data = await self._get_match_final_results(match_id)
             if not final_match_data:
-                final_match_data = match_data
+                # If we can't get final results, build minimal data from latest match data
+                final_match_data = {
+                    'match_id': match_id,
+                    'player_1_discord_uid': latest_match_data.get('player_1_discord_uid'),
+                    'player_2_discord_uid': latest_match_data.get('player_2_discord_uid'),
+                    'p1_report': latest_match_data.get('player_1_report'),
+                    'p2_report': latest_match_data.get('player_2_report'),
+                }
 
             # Mark as processed (abort) and notify any waiters
             if match_id not in self.processed_matches:
@@ -337,28 +444,96 @@ class MatchCompletionService:
                     del self.completion_waiters[match_id]
 
             # Release queue lock for both players so they can re-queue
-            p1_uid = final_match_data.get('player_1_discord_uid')
-            p2_uid = final_match_data.get('player_2_discord_uid')
+            p1_uid = latest_match_data.get('player_1_discord_uid')
+            p2_uid = latest_match_data.get('player_2_discord_uid')
             if p1_uid and p2_uid:
                 await matchmaker.release_queue_lock_for_players([p1_uid, p2_uid])
                 print(f"🔓 Released queue locks for players {p1_uid} and {p2_uid} after abort")
 
-            # Notify all callbacks with abort status
+            # Notify all callbacks with abort status and include player report codes
             callbacks = self.notification_callbacks.pop(match_id, [])
+            print(f"🛑 [DEBUG] _handle_match_abort: Found {len(callbacks)} callbacks to invoke for match {match_id}")
             print(f"  -> Notifying {len(callbacks)} callbacks for match {match_id} abort.")
-            for callback in callbacks:
+            for idx, callback in enumerate(callbacks):
                 try:
-                    await callback(status="abort", data={"match_id": match_id, "match_data": final_match_data})
+                    print(f"🛑 [DEBUG] Invoking abort callback {idx} for match {match_id}")
+                    await callback(
+                        status="abort", 
+                        data={
+                            "match_id": match_id, 
+                            "match_data": final_match_data,
+                            "p1_report": latest_match_data.get('player_1_report'),
+                            "p2_report": latest_match_data.get('player_2_report'),
+                        }
+                    )
+                    print(f"✅ [DEBUG] Abort callback {idx} completed for match {match_id}")
                 except Exception as e:
+                    print(f"❌ [DEBUG] Error executing abort callback {idx} for match {match_id}: {e}")
                     print(f"❌ Error executing abort callback for match {match_id}: {e}")
 
         except Exception as e:
+            print(f"❌ [DEBUG] ERROR in _handle_match_abort for match {match_id}: {e}")
             print(f"❌ Error handling match abort for {match_id}: {e}")
             import traceback
             traceback.print_exc()
         finally:
+            print(f"🛑 [DEBUG] _handle_match_abort FINALLY block for match {match_id}")
             # Clean up monitoring for this match
             self.stop_monitoring_match(match_id)
+    
+    async def _handle_unconfirmed_abort(self, match_id: int, match_data: dict):
+        """
+        Handle a match that was not confirmed by all players in time.
+        
+        This sets player_1_report and/or player_2_report to -4 for players who
+        didn't confirm, and match_result to -1 (aborted), WITHOUT decrementing
+        abort counters.
+        """
+        try:
+            print(f"🚫 [DEBUG] _handle_unconfirmed_abort START for match {match_id}")
+            self.logger.info(f"Handling unconfirmed abort for match {match_id}")
+            
+            # Get player UIDs
+            p1_uid = match_data.get('player_1_discord_uid')
+            p2_uid = match_data.get('player_2_discord_uid')
+            
+            print(f"🚫 [DEBUG] Players: p1={p1_uid}, p2={p2_uid}")
+            
+            # Determine which players confirmed
+            confirmed_players = self.match_confirmations.get(match_id, set())
+            
+            print(f"🚫 [DEBUG] Confirmed players: {confirmed_players}")
+            
+            # Set report values: -4 for unconfirmed, None for confirmed
+            p1_report = None if p1_uid in confirmed_players else -4
+            p2_report = None if p2_uid in confirmed_players else -4
+            
+            print(f"🚫 [DEBUG] Report codes: p1={p1_report}, p2={p2_report}")
+            
+            self.logger.info(
+                f"Match {match_id} unconfirmed abort: "
+                f"p1_report={p1_report}, p2_report={p2_report}"
+            )
+            
+            # Call the new data service method
+            from src.backend.services.data_access_service import DataAccessService
+            data_service = DataAccessService()
+            print(f"🚫 [DEBUG] Calling record_system_abort for match {match_id}")
+            await data_service.record_system_abort(match_id, p1_report, p2_report)
+            print(f"🚫 [DEBUG] record_system_abort completed for match {match_id}")
+            
+            # Directly trigger the abort handling to ensure callbacks are invoked
+            # This call is now safe because we are already holding the lock
+            print(f"🚫 [DEBUG] Calling _check_match_completion_locked for match {match_id}")
+            await self._check_match_completion_locked(match_id)
+            print(f"🚫 [DEBUG] _check_match_completion_locked completed for match {match_id}")
+            
+            self.logger.info(f"Successfully recorded unconfirmed abort for match {match_id}")
+            print(f"🚫 [DEBUG] _handle_unconfirmed_abort COMPLETE for match {match_id}")
+            
+        except Exception as e:
+            print(f"❌ [DEBUG] ERROR in _handle_unconfirmed_abort for match {match_id}: {e}")
+            self.logger.error(f"Error handling unconfirmed abort for match {match_id}: {e}", exc_info=True)
 
     async def _handle_match_conflict(self, match_id: int):
         """Handle a match with conflicting reports."""
@@ -384,6 +559,21 @@ class MatchCompletionService:
             # unregister_match_views_by_match_id(match_id) # REMOVED
             self.stop_monitoring_match(match_id)
             self.processing_locks.pop(match_id, None)
+
+    async def _notify_players_confirmation_timeout(self, match_id: int):
+        """Notify all registered frontends that the confirmation time has expired."""
+        callbacks = self.notification_callbacks.get(match_id, [])
+        print(f"🔔 [DEBUG] _notify_players_confirmation_timeout: match {match_id} has {len(callbacks)} callbacks registered")
+        self.logger.info(f"  -> Notifying {len(callbacks)} callbacks for match {match_id} confirmation timeout.")
+        for idx, callback in enumerate(callbacks):
+            try:
+                print(f"🔔 [DEBUG] Invoking callback {idx} for confirmation timeout on match {match_id}")
+                # This notification does not include a data payload
+                await callback(status="confirmation_timeout", data={})
+                print(f"✅ [DEBUG] Callback {idx} completed for confirmation timeout on match {match_id}")
+            except Exception as e:
+                print(f"❌ [DEBUG] Error executing confirmation_timeout callback {idx} for match {match_id}: {e}")
+                self.logger.error(f"❌ Error executing confirmation_timeout callback for match {match_id}: {e}")
 
     async def _notify_players_match_complete(self, match_id: int, final_results: dict):
         """Notify all registered frontends that the match is complete."""
