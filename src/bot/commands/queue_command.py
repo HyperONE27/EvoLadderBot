@@ -1869,6 +1869,7 @@ async def store_replay_background(match_id: int, player_id: int, replay_bytes: b
         
         if result.get("success"):
             replay_data = result.get("replay_data")
+            stored_match_id = result.get("match_id")
             
             if replay_data and stored_match_id:
                 try:
