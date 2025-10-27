@@ -998,24 +998,25 @@ class Matchmaker:
 					games_drawn=1 if p2_drawn else None
 				)
 				
-				# Calculate and store MMR change
-				p1_mmr_change = mmr_service.calculate_mmr_change(
-					p1_current_mmr, 
-					p2_current_mmr, 
-					match_result
-				)
-				
-				# Update match MMR change using DataAccessService (async, non-blocking)
-				await data_service.update_match_mmr_change(match_id, p1_mmr_change)
-				
-				print(f"[Matchmaker] Updated MMR for match {match_id}:")
-				print(f"   Player 1 ({player1_uid}): {p1_current_mmr} -> {mmr_outcome.player_one_mmr} ({p1_race})")
-				print(f"   Player 2 ({player2_uid}): {p2_current_mmr} -> {mmr_outcome.player_two_mmr} ({p2_race})")
-				print(f"   MMR Change: {p1_mmr_change:+} (positive = player 1 gained)")
-			else:
-				print(f"[Matchmaker] Could not get MMR data for players in match {match_id}")
-		
-		return True
+			# Calculate and store MMR change
+			p1_mmr_change = mmr_service.calculate_mmr_change(
+				p1_current_mmr, 
+				p2_current_mmr, 
+				match_result
+			)
+			
+			# Update match MMR change using DataAccessService (async, non-blocking)
+			await data_service.update_match_mmr_change(match_id, p1_mmr_change)
+			
+			print(f"[Matchmaker] Updated MMR for match {match_id}:")
+			print(f"   Player 1 ({player1_uid}): {p1_current_mmr} -> {mmr_outcome.player_one_mmr} ({p1_race})")
+			print(f"   Player 2 ({player2_uid}): {p2_current_mmr} -> {mmr_outcome.player_two_mmr} ({p2_race})")
+			print(f"   MMR Change: {p1_mmr_change:+} (positive = player 1 gained)")
+			
+			return p1_mmr_change
+		else:
+			print(f"[Matchmaker] Could not get MMR data for players in match {match_id}")
+			return 0.0
 
 	async def is_player_in_queue(self, discord_user_id: int) -> bool:
 		"""Check if a player is in the queue."""

@@ -646,30 +646,45 @@ class QueueSearchingView(discord.ui.View):
             # Match found! Update the view immediately
             is_player1 = match_result.player_1_discord_id == self.player.discord_user_id
             
-            flow.checkpoint("create_match_found_view")
-            # Create match found view
-            match_view = MatchFoundView(match_result, is_player1)
-            
-            flow.checkpoint("update_match_view_start")
-            # Edit the searching message in DMs to show the match view
+            flow.checkpoint("edit_searching_message_to_confirmation")
+            # Step 1: Edit the original "Searching..." message to show match found confirmation
             if not self.last_interaction:
                 raise RuntimeError(f"Cannot display match view: no interaction stored for player {self.player.discord_user_id}")
             
-            # Offload the embed generation to executor
+            # Create a nice confirmation embed
+            opponent_name = match_result.player_2_user_id if is_player1 else match_result.player_1_user_id
+            opponent_display = f"vs {opponent_name}"
+            
+            confirmation_embed = discord.Embed(
+                title="🎉 Match Found!",
+                description=f"Your match is ready. Full details below.",
+                color=discord.Color.green()
+            )
+            
+            await self.last_interaction.edit_original_response(
+                content=None,
+                embed=confirmation_embed,
+                view=None
+            )
+            flow.checkpoint("searching_message_edited")
+            
+            flow.checkpoint("create_match_found_view")
+            # Step 2: Create match found view
+            match_view = MatchFoundView(match_result, is_player1)
+            
+            # Step 3: Generate the match embed
             loop = asyncio.get_running_loop()
             embed = await loop.run_in_executor(None, match_view.get_embed)
             flow.checkpoint("generate_match_embed_complete")
             
-            # Propagate channel and message ID to the match view for persistent tracking
-            match_view.channel = self.channel
-            match_view.original_message_id = self.message_id
+            # Step 4: Send a new message with the match view
+            flow.checkpoint("send_new_match_message")
+            new_match_message = await self.channel.send(embed=embed, view=match_view)
+            flow.checkpoint("new_match_message_sent")
             
-            # Edit the existing searching message to show the match view
-            flow.checkpoint("edit_to_match_view")
-            await self.last_interaction.edit_original_response(
-                embed=embed,
-                view=match_view
-            )
+            # Step 5: Update the match view with the new message's ID and channel
+            match_view.channel = new_match_message.channel
+            match_view.original_message_id = new_match_message.id
             
             # Register for replay detection
             await match_view.register_for_replay_detection(self.last_interaction.channel_id)
@@ -811,15 +826,18 @@ class MatchFoundView(discord.ui.View):
     """View shown when a match is found"""
     
     def __init__(self, match_result: MatchResult, is_player1: bool):
-        super().__init__(timeout=None)  # No timeout - let match completion service handle cleanup
+        super().__init__(timeout=3600)  # 1-hour timeout for the view
         self.match_result = match_result
         self.is_player1 = is_player1
         self.selected_result = match_result.match_result
         self.confirmation_status = match_result.match_result_confirmation_status
-        self.channel: Optional[discord.TextChannel] = None  # Store channel for long-running updates
-        self.original_message_id: Optional[int] = None  # Store message ID for persistent editing
         self.edit_lock = asyncio.Lock()
+        self.confirmation_window_closed = False
         
+        # Message tracking - initialized to None, set externally after message is sent
+        self.channel: Optional[discord.TextChannel] = None
+        self.original_message_id: Optional[int] = None
+
         # Performance tracking
         self.view_creation_time = time.time()
         
@@ -1252,13 +1270,12 @@ class MatchFoundView(discord.ui.View):
             flow.complete("success")
 
         elif status == "confirmation_timeout":
-            print(f"📬 [DEBUG] Processing 'confirmation_timeout' status for match {self.match_result.match_id}")
             flow.checkpoint("process_confirmation_timeout")
             # The backend has confirmed the confirmation window is closed.
             # Disable the abort and confirm buttons.
             self.abort_button.disabled = True
             self.confirm_button.disabled = True
-            print(f"📬 [DEBUG] Disabled abort and confirm buttons for match {self.match_result.match_id}")
+            self.confirmation_window_closed = True
             
             flow.checkpoint("update_timeout_embed_start")
             # Update the embed to show the abort window is closed
@@ -1318,10 +1335,33 @@ class MatchFoundView(discord.ui.View):
         p1_sign = "+" if p1_mmr_rounded >= 0 else ""
         p2_sign = "+" if p2_mmr_rounded >= 0 else ""
 
+        # Build dynamic result field based on match outcome
+        match_result_raw = final_results['match_result_raw']
+        if match_result_raw == 1:
+            # Player 1 won
+            result_value = f"🏆 **{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_name}**"
+        elif match_result_raw == 2:
+            # Player 2 won
+            result_value = f"🏆 **{p2_rank_emote} {p2_flag} {p2_race_emote} {p2_name}**"
+        elif match_result_raw == 0:
+            # Draw
+            result_value = f"⚖️ **Draw**"
+        else:
+            # Aborted or Conflict
+            result_value = final_results['result_text']
+
+        notification_embed.add_field(name="", value="\u3164", inline=False)
+
+        notification_embed.add_field(
+            name="**Result:**",
+            value=result_value,
+            inline=True
+        )
+
         notification_embed.add_field(
             name="**MMR Changes:**",
             value=f"- {p1_name}: `{p1_sign}{p1_mmr_rounded} ({int(p1_current_mmr)} → {int(p1_new_mmr)})`\n- {p2_name}: `{p2_sign}{p2_mmr_rounded} ({int(p2_current_mmr)} → {int(p2_new_mmr)})`",
-            inline=False
+            inline=True
         )
         
         try:
@@ -1504,8 +1544,9 @@ class MatchConfirmButton(discord.ui.Button):
         try:
             await match_completion_service.confirm_match(match_id, player_discord_uid)
             
-            # Disable the button and update the view
+            # Disable the confirm and abort buttons and update the view
             self.disabled = True
+            self.parent_view.abort_button.disabled = True
             async with self.parent_view.edit_lock:
                 await interaction.edit_original_response(view=self.parent_view)
             
@@ -1596,10 +1637,6 @@ class MatchAbortButton(discord.ui.Button):
             self.label = f"Match Aborted ({remaining_aborts} left this month)"
 
             self.parent_view.disable_all_components()
-
-            # Stop the abort disable task as the match is now aborted
-            if self.parent_view.abort_disable_task and not self.parent_view.abort_disable_task.done():
-                self.parent_view.abort_disable_task.cancel()
             
             flow.checkpoint("send_abort_ui_update")
             # Update the embed to show abort status temporarily
@@ -1656,10 +1693,6 @@ class MatchResultConfirmSelect(discord.ui.Select):
         self.parent_view.confirm_select.disabled = True
         self.parent_view.abort_button.disabled = True
         self.parent_view.last_interaction = interaction
-
-        # Stop the abort disable task as a result has been confirmed
-        if self.parent_view.abort_disable_task and not self.parent_view.abort_disable_task.done():
-            self.parent_view.abort_disable_task.cancel()
 
         flow.checkpoint("update_discord_message_start")
         # Update the message to show the final state before backend processing
@@ -2176,6 +2209,10 @@ async def on_message(message: discord.Message, bot=None):
         # Each player should only see their own replay status
         match_view._update_dropdown_states()
         
+        # FIX: Ensure abort button remains disabled if the confirmation window is closed
+        if match_view.confirmation_window_closed:
+            match_view.abort_button.disabled = True
+            
         # Edit the original message using bot token (never expires!)
         embed = match_view.get_embed()
         await match_view._edit_original_message(embed, match_view)
