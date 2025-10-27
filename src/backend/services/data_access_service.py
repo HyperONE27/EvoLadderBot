@@ -1827,7 +1827,15 @@ class DataAccessService:
     # ========== Write Methods (Replays Table) ==========
     
     async def insert_replay(self, replay_data: Dict[str, Any]) -> bool:
-        """Insert a new replay record."""
+        """
+        Insert a new replay record.
+        
+        Args:
+            replay_data: Replay data dictionary
+            
+        Returns:
+            True if the write was queued successfully
+        """
         job = WriteJob(
             job_type=WriteJobType.INSERT_REPLAY,
             data=replay_data,

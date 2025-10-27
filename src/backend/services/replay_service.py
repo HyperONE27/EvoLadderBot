@@ -381,7 +381,8 @@ class ReplayService:
             return {
                 "success": True,
                 "unix_epoch": get_current_unix_timestamp(),
-                "replay_data": parsed_dict
+                "replay_data": parsed_dict,
+                "match_id": match_id
             }
             
         except Exception as e:

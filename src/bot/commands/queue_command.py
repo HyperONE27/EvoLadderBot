@@ -1868,11 +1868,34 @@ async def store_replay_background(match_id: int, player_id: int, replay_bytes: b
         )
         
         if result.get("success"):
-            # Send replay details embed as a new message
             replay_data = result.get("replay_data")
+            
             if replay_data:
-                replay_embed = ReplayDetailsEmbed.get_success_embed(replay_data)
-                await channel.send(embed=replay_embed)
+                # Send initial "Verifying..." message
+                verifying_embed = discord.Embed(
+                    description="📄 Replay stored successfully. Verifying match details...",
+                    color=discord.Color.blue()
+                )
+                status_message = await channel.send(embed=verifying_embed)
+                
+                # Define callback for verification completion
+                async def on_verification_complete(verification_results):
+                    """Update the embed with final verification results."""
+                    try:
+                        final_embed = ReplayDetailsEmbed.get_success_embed(
+                            replay_data=replay_data,
+                            verification_results=verification_results
+                        )
+                        await status_message.edit(embed=final_embed)
+                    except Exception as e:
+                        print(f"❌ Error updating verification embed: {e}")
+                
+                # Start verification process with replay_data directly
+                match_completion_service.start_replay_verification(
+                    match_id=match_id,
+                    replay_data=replay_data,
+                    callback=on_verification_complete
+                )
             
             print(f"✅ Background replay storage completed for match {match_id} (player: {player_id})")
         else:

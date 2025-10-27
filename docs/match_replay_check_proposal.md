@@ -86,7 +86,11 @@ We should automatically detect and report the winner IF AND ONLY IF all of the f
   - The precision window is as large as 20 minutes to allow for a little bit of inefficiency in finding matches in-game, as well as for people who decide to screw around in the replay after the match result is determined.
 - No observers: check the observers field.
 - Winner detection: check that all of the above pass, then find the race of the player who won, find the player in the assigned match data who has that races, and mark them as the winner. (We should mutate the view/corresponding UI elements when we do this, too.)
-  - We avoid directly matching the name of the player who won in the replay to the names of the players assigned in the match, because players can have incongruent IDs, but their races should match.
+  - We get `result` from `_replays_df`, which tells us if the winner is `player_1_name` or `player_2_name`. (If `result` is 0, then it was a draw, otherwise, there was a winner.)
+  - Based on `result = 1` or `result = 2`, get either `player_1_race` or `player_2_race`.
+  - In the row of `_matches_1v1_df` corresponding to the current match, either `player_1_race` or `player_2_race` of `_matches_1v1_df` row will be a match.
+  - Based on which one matches, get the corresponding player.
+  - The reason we avoid directly matching the name of the player who won in the replay to the names of the players assigned in the match, because players can have incongruent IDs, but the race of the winner in the replay needs to match the queue race of one of the players in the match.
 
 ## Testing
 Write this JSON into the test file:
@@ -105,37 +109,3 @@ We also have test replays in `/tests/test_data/test_replay_files`:
 Parse them and store the relevant output in a minimal `_replays_df`.
 
 The first of these should match in all of the above criteria, the second and third should fail in all of them.
-
-## Constraints
-
-## Critical Data Integrity Fixes
-
-### Issue 1: Short Map Names in Database
-**Problem:** The matchmaking service was storing short map names (e.g., "Tokamak") instead of full official names (e.g., "Tokamak LE") in the database.
-
-**Fix Applied:** Modified `src/backend/services/matchmaking_service.py` to convert short names to full names before storing:
-```python
-map_short_name = random.choice(available_maps)
-# Convert short name to full map name for storage
-map_full_name = self.maps_service.get_map_name(map_short_name)
-# Store map_full_name in database instead of map_short_name
-```
-
-### Issue 2: Fuzzy Map Matching (Security Risk)
-**Problem:** Initial implementation used fuzzy matching (remove " LE" suffixes, check containment) which could allow validation of cheat map names. Example: "Fake Tokamak" would match "Tokamak LE" due to containment logic.
-
-**Fix Applied:** Reverted to strict, exact matching in `src/backend/services/match_completion_service.py`:
-```python
-# Case-insensitive exact comparison (full map names must match exactly)
-return match_map.lower() == replay_map.lower()
-```
-
-### Test Data Alignment
-Updated test data in `tests/test_replay_verification.py` to use full map names ("Tokamak LE" instead of "Tokamak").
-
-### Backwards Compatibility Note
-- Matches created before this fix will have short names in the database. These will correctly fail map verification until the database is migrated to full names.
-- This is the intended behavior - enforcing strict compliance going forward.
-- `data/misc/maps.json` remains the single source of truth for official map names.
-
-## Summary
