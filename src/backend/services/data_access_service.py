@@ -148,11 +148,6 @@ class DataAccessService:
             
             elapsed = (time.time() - start_time) * 1000
             print(f"[DataAccessService] Async initialization complete in {elapsed:.2f}ms")
-            print(f"[DataAccessService]    - Players: {len(self._players_df) if self._players_df is not None else 0} rows")
-            print(f"[DataAccessService]    - MMRs: {len(self._mmrs_1v1_df) if self._mmrs_1v1_df is not None else 0} rows")
-            print(f"[DataAccessService]    - Preferences: {len(self._preferences_1v1_df) if self._preferences_1v1_df is not None else 0} rows")
-            print(f"[DataAccessService]    - Matches: {len(self._matches_1v1_df) if self._matches_1v1_df is not None else 0} rows")
-            print(f"[DataAccessService]    - Replays: {len(self._replays_df) if self._replays_df is not None else 0} rows")
             
             self._initialized = True
     
@@ -176,7 +171,7 @@ class DataAccessService:
                 "country": pl.Series([], dtype=pl.Utf8),
                 "remaining_aborts": pl.Series([], dtype=pl.Int32),
             })
-        print(f"[DataAccessService]   Players loaded: {len(self._players_df)} rows")
+        print(f"[DataAccessService]   Players loaded: {len(self._players_df)} rows, size: {self._players_df.estimated_size('mb'):.2f} MB")
         
         # Load mmrs_1v1 table
         print("[DataAccessService]   Loading mmrs_1v1...")
@@ -185,7 +180,7 @@ class DataAccessService:
             self._db_reader.get_leaderboard_1v1,
             None,  # race filter
             None,  # country filter
-            10000,  # limit
+            None,  # limit
             0  # offset
         )
         if mmrs_data:
@@ -201,7 +196,7 @@ class DataAccessService:
                 "games_lost": pl.Series([], dtype=pl.Int64),
                 "games_drawn": pl.Series([], dtype=pl.Int64),
             })
-        print(f"[DataAccessService]   MMRs loaded: {len(self._mmrs_1v1_df)} rows")
+        print(f"[DataAccessService]   MMRs loaded: {len(self._mmrs_1v1_df)} rows, size: {self._mmrs_1v1_df.estimated_size('mb'):.2f} MB")
         
         # Load preferences_1v1 table
         print("[DataAccessService]   Loading preferences_1v1...")
@@ -220,15 +215,15 @@ class DataAccessService:
                 "last_chosen_races": pl.Series([], dtype=pl.Utf8),
                 "last_chosen_vetoes": pl.Series([], dtype=pl.Utf8),
             })
-        print(f"[DataAccessService]   Preferences loaded: {len(self._preferences_1v1_df)} rows")
+        print(f"[DataAccessService]   Preferences loaded: {len(self._preferences_1v1_df)} rows, size: {self._preferences_1v1_df.estimated_size('mb'):.2f} MB")
         
         # Load matches_1v1 table
         print("[DataAccessService]   Loading matches_1v1...")
-        # Load recent matches only (last 1000) to keep memory usage reasonable
+        # Load all matches
         matches_data = await loop.run_in_executor(
             None,
             self._db_reader.adapter.execute_query,
-            "SELECT * FROM matches_1v1 ORDER BY played_at DESC LIMIT 1000",
+            "SELECT * FROM matches_1v1 ORDER BY played_at DESC",
             {}
         )
         if matches_data:
@@ -270,16 +265,15 @@ class DataAccessService:
                 "player_2_replay_time": pl.Series([], dtype=pl.Utf8),
                 "status": pl.Series([], dtype=pl.Utf8),  # New field: IN_PROGRESS, PROCESSING_COMPLETION, COMPLETE, ABORTED, CONFLICT
             })
-        print(f"[DataAccessService]   Matches loaded: {len(self._matches_1v1_df)} rows")
+        print(f"[DataAccessService]   Matches loaded: {len(self._matches_1v1_df)} rows, size: {self._matches_1v1_df.estimated_size('mb'):.2f} MB")
         
         # Load replays table
         print("[DataAccessService]   Loading replays...")
-        # Load recent replays only (last 1000)
-        # Note: replays table may not have uploaded_at, use ID ordering
+        # Load all replays
         replays_data = await loop.run_in_executor(
             None,
             self._db_reader.adapter.execute_query,
-            "SELECT * FROM replays ORDER BY id DESC LIMIT 1000",
+            "SELECT * FROM replays ORDER BY id DESC",
             {}
         )
         if replays_data:
@@ -289,7 +283,7 @@ class DataAccessService:
                 "id": pl.Series([], dtype=pl.Int64),
                 "replay_path": pl.Series([], dtype=pl.Utf8),
             })
-        print(f"[DataAccessService]   Replays loaded: {len(self._replays_df)} rows")
+        print(f"[DataAccessService]   Replays loaded: {len(self._replays_df)} rows, size: {self._replays_df.estimated_size('mb'):.2f} MB")
     
     # ========== Write-Ahead Log (WAL) Methods ==========
     
