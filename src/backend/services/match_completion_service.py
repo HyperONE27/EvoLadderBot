@@ -10,6 +10,7 @@ from asyncio import Lock
 from typing import Callable, Dict, List, Optional, Set
 
 from src.backend.services.leaderboard_service import LeaderboardService
+from src.bot.config import REPLAY_TIMESTAMP_TOLERANCE_SECONDS
 
 
 class MatchCompletionService:
@@ -522,6 +523,184 @@ class MatchCompletionService:
     # REMOVED FOR DECOUPLING
     # async def _send_conflict_notification(self, match_id: int): ...
     # async def _send_final_notification(self, match_id: int, final_results: dict): ...
+
+    async def start_replay_verification(
+        self, match_id: int, uploader_id: int, replay_data: dict, on_complete_callback: Callable
+    ):
+        """
+        Starts a background task to verify a replay and calls a callback with the results.
+        
+        Args:
+            match_id: The ID of the match
+            uploader_id: Discord UID of the player who uploaded the replay
+            replay_data: The parsed replay dictionary
+            on_complete_callback: Async function to call with verification results
+        """
+        asyncio.create_task(
+            self._verify_replay_task(match_id, uploader_id, replay_data, on_complete_callback)
+        )
+
+    async def _verify_replay_task(
+        self, match_id: int, uploader_id: int, replay_data: dict, on_complete_callback: Callable
+    ):
+        """The actual task that performs verification and auto-reporting."""
+        from src.backend.services.data_access_service import DataAccessService
+        from src.backend.services.matchmaking_service import matchmaker
+        
+        data_service = DataAccessService()
+        verification_results = {}
+
+        lock = self._get_lock(match_id)
+        async with lock:
+            match_info = data_service.get_match(match_id)
+            if not match_info:
+                verification_results = {"error": "Match data not found for verification."}
+                await on_complete_callback(verification_results)
+                return
+
+            # Perform verification checks
+            races_ok = self._verify_races(match_info, replay_data)
+            map_ok = self._verify_map(match_info, replay_data)
+            timestamp_ok = self._verify_timestamp(match_info, replay_data)
+            observers_ok = self._verify_observers(replay_data)
+            all_ok = all([races_ok, map_ok, timestamp_ok, observers_ok])
+
+            verification_results = {
+                "races_match": races_ok,
+                "map_match": map_ok,
+                "timestamp_match": timestamp_ok,
+                "observers_ok": observers_ok,
+                "all_ok": all_ok,
+            }
+
+            if all_ok:
+                # Determine winner and auto-report for the uploader only
+                winner_report = self._determine_winner_report(match_info, replay_data)
+                if winner_report is not None:
+                    print(f"🤖 Auto-reporting match {match_id} result: {winner_report} for uploader {uploader_id}")
+                    await matchmaker.record_match_result(match_id, uploader_id, winner_report)
+
+        await on_complete_callback(verification_results)
+
+    def _verify_races(self, match_info: dict, replay_data: dict) -> bool:
+        """
+        Verify that the races in the replay match the races assigned in the match.
+        
+        Both races should be unique and the count of each race in the replay 
+        should match the count of each race in the assigned match details.
+        """
+        match_p1_race = match_info.get('player_1_race')
+        match_p2_race = match_info.get('player_2_race')
+        replay_p1_race = replay_data.get('player_1_race')
+        replay_p2_race = replay_data.get('player_2_race')
+        
+        match_races = sorted([match_p1_race, match_p2_race])
+        replay_races = sorted([replay_p1_race, replay_p2_race])
+        
+        return match_races == replay_races
+
+    def _verify_map(self, match_info: dict, replay_data: dict) -> bool:
+        """
+        Verify that the map in the replay matches the assigned map.
+        
+        Requires EXACT match - map names must be identical (case-insensitive).
+        Both match_info and replay_data should contain full official map names from maps.json.
+        """
+        match_map = match_info.get('map_played')
+        replay_map = replay_data.get('map_name')
+        
+        if not match_map or not replay_map:
+            return False
+        
+        # Case-insensitive exact comparison (full map names should match exactly)
+        return match_map.lower() == replay_map.lower()
+
+    def _verify_timestamp(self, match_info: dict, replay_data: dict) -> bool:
+        """
+        Verify that the replay was created within ~20 minutes of match assignment.
+        
+        Subtracts the duration from replay_date to get the game start time,
+        then checks if it's within 20 minutes of played_at timestamp.
+        """
+        from datetime import datetime, timezone, timedelta
+        
+        played_at = match_info.get('played_at')
+        replay_date_str = replay_data.get('replay_date')
+        duration = replay_data.get('duration', 0)
+        
+        if not played_at or not replay_date_str:
+            return False
+        
+        try:
+            # Parse timestamps and ensure both are timezone-aware
+            if isinstance(played_at, str):
+                match_time = datetime.fromisoformat(played_at.replace('Z', '+00:00'))
+            else:
+                match_time = played_at
+            
+            # Ensure match_time is timezone-aware
+            if match_time.tzinfo is None:
+                match_time = match_time.replace(tzinfo=timezone.utc)
+            
+            replay_end_time = datetime.fromisoformat(replay_date_str.replace('Z', '+00:00'))
+            
+            # Ensure replay_end_time is timezone-aware
+            if replay_end_time.tzinfo is None:
+                replay_end_time = replay_end_time.replace(tzinfo=timezone.utc)
+            
+            # Calculate game start time
+            game_start_time = replay_end_time - timedelta(seconds=duration)
+            
+            # Check if within 20 minutes
+            time_diff = abs((game_start_time - match_time).total_seconds())
+            return time_diff <= REPLAY_TIMESTAMP_TOLERANCE_SECONDS
+            
+        except (ValueError, AttributeError) as e:
+            print(f"Error parsing timestamps for verification: {e}")
+            return False
+
+    def _verify_observers(self, replay_data: dict) -> bool:
+        """Verify that there are no observers in the replay."""
+        observers = replay_data.get('observers', [])
+        return len(observers) == 0
+
+    def _determine_winner_report(self, match_info: dict, replay_data: dict) -> Optional[int]:
+        """
+        Determine the winner report value based on the replay result.
+        
+        Uses race-matching logic: identifies the winning player's race from the replay,
+        then matches it against the assigned races in match_info to determine the winner.
+        This is more reliable than trusting player names, which can be inconsistent.
+        
+        Returns 1 for player 1 win, 2 for player 2 win, None if winner is indeterminate.
+        """
+        result = replay_data.get('result')
+        
+        if result not in [1, 2]:
+            return result if result == 0 else None
+        
+        winner_race = replay_data.get('player_1_race') if result == 1 else replay_data.get('player_2_race')
+        
+        if not winner_race:
+            return None
+        
+        # Match the winning race against the assigned match races
+        match_p1_race = match_info.get('player_1_race')
+        match_p2_race = match_info.get('player_2_race')
+        
+        # This handles cases where players might have swapped races compared to their
+        # P1/P2 assignment. We only care that the winning race is one of the assigned races.
+        if winner_race == match_p1_race and winner_race != match_p2_race:
+            return 1
+        elif winner_race == match_p2_race and winner_race != match_p1_race:
+            return 2
+        elif winner_race == match_p1_race and winner_race == match_p2_race:
+            # Mirror match: We can't be certain who won based on race alone,
+            # so we fall back to trusting the replay's P1/P2 result.
+            return result
+        else:
+            # Winner's race doesn't match either assigned race (players may have swapped).
+            return None
 
 
 # Global instance
