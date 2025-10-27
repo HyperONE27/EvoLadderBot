@@ -237,8 +237,8 @@ class MapVetoSelect(discord.ui.Select):
             options.append(
                 discord.SelectOption(
                     label=map_data["short_name"],
-                    value=map_data["short_name"],
-                    default=map_data["short_name"] in (default_values or [])
+                    value=map_data["name"],
+                    default=map_data["name"] in (default_values or [])
                 )
             )
         
@@ -521,9 +521,15 @@ class QueueView(discord.ui.View):
         # Add map veto info
         veto_count = len(self.vetoed_maps)
         if self.vetoed_maps:
+            # Convert full names to short names for display
+            short_names = []
+            for full_name in self.vetoed_maps:
+                short_name = maps_service.get_short_name_by_full_name(full_name)
+                short_names.append(short_name)
+            
             # Sort maps according to the service's defined order
             map_order = maps_service.get_map_short_names()
-            sorted_maps = [map_name for map_name in map_order if map_name in self.vetoed_maps]
+            sorted_maps = [map_name for map_name in map_order if map_name in short_names]
             # Add Discord number emotes
             number_emotes = [":one:", ":two:", ":three:", ":four:"]
             map_list = "\n".join([f"{number_emotes[i]} {map_name}" for i, map_name in enumerate(sorted_maps)])
@@ -1025,9 +1031,8 @@ class MatchFoundView(discord.ui.View):
         )
         
         # Match Information section
-        map_short_name = self.match_result.map_choice
-        map_name = maps_service.get_map_name(map_short_name) or map_short_name
-
+        map_name = self.match_result.map_choice
+        
         # Determine map link based on server region
         map_link: Optional[str] = None
         server_code = self.match_result.server_choice
@@ -1036,17 +1041,17 @@ class MatchFoundView(discord.ui.View):
             if region_info:
                 region_name = region_info["name"].lower()
                 if "americas" in region_name:
-                    map_link = maps_service.get_map_battlenet_link(map_short_name, "americas")
+                    map_link = maps_service.get_map_battlenet_link(map_name, "americas")
                 elif "europe" in region_name:
-                    map_link = maps_service.get_map_battlenet_link(map_short_name, "europe")
+                    map_link = maps_service.get_map_battlenet_link(map_name, "europe")
                 elif "asia" in region_name:
-                    map_link = maps_service.get_map_battlenet_link(map_short_name, "asia")
+                    map_link = maps_service.get_map_battlenet_link(map_name, "asia")
 
         if not map_link:
             # Fallback to Americas link if specific region not available
-            map_link = maps_service.get_map_battlenet_link(map_short_name, "americas")
+            map_link = maps_service.get_map_battlenet_link(map_name, "americas")
 
-        map_author = maps_service.get_map_author(map_short_name)
+        map_author = maps_service.get_map_author(map_name)
         map_link_display = map_link if map_link else "Unavailable"
         
         embed.add_field(

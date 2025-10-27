@@ -90,7 +90,7 @@ async def test_match_creation_flow():
             'player_2_discord_uid': 987654321,
             'player_1_race': 'bw_terran',
             'player_2_race': 'sc2_zerg',
-            'map_played': 'TestMap',
+            'map_played': '[SC:Evo] Death Valley (데스밸리)',
             'server_choice': 'TestServer',
             'player_1_mmr': 1500,
             'player_2_mmr': 1600,

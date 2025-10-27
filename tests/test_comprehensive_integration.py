@@ -109,7 +109,7 @@ async def test_match_operations():
         'player_2_discord_uid': test_uid_2,
         'player_1_race': 'bw_terran',
         'player_2_race': 'sc2_protoss',
-        'map_played': 'Integration Test Map',
+        'map_played': '[SC:Evo] Radeon (라데온)',
         'server_choice': 'US-West',
         'player_1_mmr': 1550,
         'player_2_mmr': 1500,
@@ -128,7 +128,7 @@ async def test_match_operations():
     elapsed_ms = (time.perf_counter() - start) * 1000
     
     assert match is not None, "Match should exist"
-    assert match['map_played'] == 'Integration Test Map', "Map should match"
+    assert match['map_played'] == '[SC:Evo] Radeon (라데온)', "Map should match"
     assert elapsed_ms < 1.0, f"Match read should be < 1ms, got {elapsed_ms:.2f}ms"
     print(f"[PASS] Match retrieval in {elapsed_ms:.2f}ms")
     

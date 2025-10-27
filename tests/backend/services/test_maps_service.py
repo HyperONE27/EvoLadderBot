@@ -12,17 +12,18 @@ MAPS_FIXTURE = TEST_DATA_DIR / "maps_sample.json"
 
 
 TEST_CASES: list[tuple[str, Dict[str, Any]]] = [
-    ("map_short_names", {"method": "get_map_short_names", "expected": ["Map1"]}),
-    ("map_names", {"method": "get_map_names", "expected": ["Map One"]}),
-    ("map_lookup", {"method": "get_map_name", "args": ("Map1",), "expected": "Map One"}),
+    ("map_names_new", {"method": "get_map_names", "expected": ["Map One"]}),
+    ("map_by_name", {"method": "get_map_by_name", "args": ("Map One",), "expected_contains": "name"}),
     (
-        "season_one_excluded",
+        "available_maps",
         {
-            "method": "get_map_short_names",
-            "expected": ["Map1"],
-            "negative": "Map2",
+            "method": "get_available_maps",
+            "expected": ["Map One"],
         },
     ),
+    # Deprecated methods - kept for backwards compatibility
+    ("deprecated_map_short_names", {"method": "get_map_short_names", "expected": ["Map1"]}),
+    ("deprecated_map_lookup", {"method": "get_map_name", "args": ("Map1",), "expected": "Map One"}),
 ]
 
 
@@ -35,12 +36,17 @@ def test_maps_service(case_name: str, payload: Dict[str, Any]) -> None:
     args: tuple[Any, ...] = payload.get("args", ())
 
     result = method(*args)
-    expected = payload["expected"]
+    expected = payload.get("expected")
+    expected_contains = payload.get("expected_contains")
 
-    if isinstance(result, list) and isinstance(expected, list):
-        assert sorted(result) == sorted(expected), case_name
-    else:
-        assert result == expected, case_name
+    if expected is not None:
+        if isinstance(result, list) and isinstance(expected, list):
+            assert sorted(result) == sorted(expected), case_name
+        else:
+            assert result == expected, case_name
+
+    if expected_contains and isinstance(result, dict):
+        assert expected_contains in result, f"{case_name}: expected key {expected_contains} not found in result"
 
     negative = payload.get("negative")
     if negative and isinstance(result, list):

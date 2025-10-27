@@ -478,10 +478,13 @@ class Matchmaker:
 		return "scevo" + str(random.randint(100, 999))
 
 	def _get_available_maps(self, p1: Player, p2: Player) -> List[str]:
-		"""Get maps that haven't been vetoed by either player using maps service."""
+		"""Get maps that haven't been vetoed by either player using maps service.
+		
+		Returns full map names.
+		"""
 		all_maps = self.maps_service.get_available_maps()
 		
-		# Get vetoed maps from both players
+		# Get vetoed maps from both players (now full names)
 		vetoed_maps = set(p1.preferences.vetoed_maps + p2.preferences.vetoed_maps)
 		
 		# Return maps that aren't vetoed

@@ -248,7 +248,7 @@ class TestCacheInvalidationOnAbort:
                 "player_2_discord_uid": [888888888],
                 "player_1_race": ["sc2_terran"],
                 "player_2_race": ["sc2_zerg"],
-                "map_played": ["Stasis"],
+                "map_played": ["[TLMC21] Celestial Enclave"],
                 "server_choice": ["NA"],
                 "player_1_mmr": [2000],
                 "player_2_mmr": [2000],

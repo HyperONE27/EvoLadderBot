@@ -6,7 +6,7 @@ Currently, the replay upload flow stores replay metadata in the `replays` table 
 
 We can do this by **surfacing validation results** directly in the `MatchFoundViewEmbed` shown to players after a replay upload. Data parsed from replays exists in Polars dataframes in memory, specifically the `_replays_df` DataFrame. We can compare this with the details assigned to the match in `_matches_1v1_df` and cross-verify that the game was actually played with the correct parameters.
 
-If everything checks out, we can streamline the match reporting process by automatically reporting the winner. If not, players will have to fill out the 
+If everything checks out, we can streamline the match reporting process by automatically reporting the winner. If not, players will have to fill out the match report. However, for the first phase of implementation, we will only add the verification results without automatically recording the result.
 
 ## Proposal
 
@@ -92,7 +92,7 @@ We should automatically detect and report the winner IF AND ONLY IF all of the f
 Write this JSON into the test file:
 
 ```json
-[{"idx":13,"id":14,"player_1_discord_uid":"218147282875318274","player_2_discord_uid":"473117604488151043","player_1_race":"bw_zerg","player_2_race":"sc2_protoss","player_1_mmr":1610,"player_2_mmr":1500,"player_1_report":2,"player_2_report":2,"match_result":2,"mmr_change":-25,"map_played":"Tokamak","server_used":"USE","played_at":"2025-10-24 06:42:00+00","player_1_replay_path":"https://ibigtopmfsmarkujjfen.supabase.co/storage/v1/object/public/replays/14/3812a4e1c1ea9c34ddda_1761288313.SC2Replay","player_1_replay_time":"2025-10-24 06:45:14+00","player_2_replay_path":"https://ibigtopmfsmarkujjfen.supabase.co/storage/v1/object/public/replays/14/13fc2de194b91eabaee5_1761288312.SC2Replay","player_2_replay_time":"2025-10-24 06:45:13+00"}]
+[{"idx":13,"id":14,"player_1_discord_uid":"218147282875318274","player_2_discord_uid":"473117604488151043","player_1_race":"bw_zerg","player_2_race":"sc2_protoss","player_1_mmr":1610,"player_2_mmr":1500,"player_1_report":2,"player_2_report":2,"match_result":2,"mmr_change":-25,"map_played":"Tokamak LE","server_used":"USE","played_at":"2025-10-24 06:42:00+00","player_1_replay_path":"https://ibigtopmfsmarkujjfen.supabase.co/storage/v1/object/public/replays/14/3812a4e1c1ea9c34ddda_1761288313.SC2Replay","player_1_replay_time":"2025-10-24 06:45:14+00","player_2_replay_path":"https://ibigtopmfsmarkujjfen.supabase.co/storage/v1/object/public/replays/14/13fc2de194b91eabaee5_1761288312.SC2Replay","player_2_replay_time":"2025-10-24 06:45:13+00"}]
 ```
 
 This corresponds to the row of the `matches_1v1` SQL table that we will load into a minimal `_matches_1v1_df`.

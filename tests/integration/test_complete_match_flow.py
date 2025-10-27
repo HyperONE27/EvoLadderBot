@@ -70,7 +70,7 @@ def create_mock_matches_1v1_df():
         "player_2_discord_uid": pl.Series([2], dtype=pl.Int64),
         "player_1_race": ["terran"],
         "player_2_race": ["zerg"],
-        "map_played": ["Python"],
+        "map_played": ["[SC:Evo] Sylphid (실피드)"],
         "server_choice": ["NA"],
         "player_1_mmr": pl.Series([1500], dtype=pl.Int64),
         "player_2_mmr": pl.Series([1600], dtype=pl.Int64),

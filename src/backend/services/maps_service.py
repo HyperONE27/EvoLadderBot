@@ -14,8 +14,8 @@ class MapsService(BaseConfigService):
     """Service for map-related data."""
 
     def __init__(self, config_path: str = "data/misc/maps.json") -> None:
-        super().__init__(config_path, code_field="short_name", name_field="name")
-        with open("data/misc/maps.json", "r", encoding="utf-8") as f:
+        super().__init__(config_path, code_field="name", name_field="name")
+        with open(config_path, "r", encoding="utf-8") as f:
             self.maps_data = json.load(f)["maps"]
 
     # ------------------------------------------------------------------
@@ -46,42 +46,39 @@ class MapsService(BaseConfigService):
         """Get the list of maps for the current season."""
         return self.maps_data.get(config.CURRENT_SEASON, [])
 
-    def get_map_by_short_name(self, short_name: str) -> Optional[Dict[str, Any]]:
-        return self.get_by_code(short_name)
+    def get_map_by_name(self, map_name: str) -> Optional[Dict[str, Any]]:
+        """Get map data by full name. Primary lookup method."""
+        return self.get_by_code(map_name)
 
-    def get_map_name(self, short_name: str) -> str:
-        return self.get_name_by_code(short_name)
-
-    def get_map_short_names(self) -> list:
-        """Get the short names of all maps in the current season."""
-        return [map_data["short_name"] for map_data in self.get_maps()]
-
-    def get_map_names(self) -> List[str]:
-        return self.get_names()
+    def get_map_names(self) -> list:
+        """Get the full names of all maps in the current season."""
+        return [map_data["name"] for map_data in self.get_maps()]
 
     def get_available_maps(self) -> list:
-        """Get the short names of all available maps in the current season."""
-        return self.get_map_short_names()
+        """Get the full names of all available maps in the current season."""
+        return self.get_map_names()
 
-    def get_map_author(self, short_name: str) -> Optional[str]:
-        """Return the author for the given map, if available."""
-
-        map_data = self.get_map_by_short_name(short_name)
+    def get_map_author(self, map_name: str) -> Optional[str]:
+        """Return the author for the given map, if available.
+        
+        Args:
+            map_name: Full map name (e.g., "Tokamak LE")
+        """
+        map_data = self.get_map_by_name(map_name)
         if not map_data:
             return None
         author = map_data.get("author")
         return str(author) if isinstance(author, str) else None
 
-    def get_map_battlenet_link(self, short_name: str, region: str) -> Optional[str]:
+    def get_map_battlenet_link(self, map_name: str, region: str) -> Optional[str]:
         """Return the Battle.net link for the given map and region.
 
         Args:
-            short_name: Map short name.
+            map_name: Full map name (e.g., "Tokamak LE")
             region: Region identifier. Accepts "americas", "europe",
                 "asia" or abbreviations "am", "eu", "as" (case-insensitive).
         """
-
-        map_data = self.get_map_by_short_name(short_name)
+        map_data = self.get_map_by_name(map_name)
         if not map_data:
             return None
 
@@ -101,3 +98,47 @@ class MapsService(BaseConfigService):
 
         link_value = map_data.get(link_key)
         return str(link_value) if isinstance(link_value, str) and link_value else None
+
+    # ------------------------------------------------------------------
+    # DEPRECATED: Short name methods (kept for backwards compatibility)
+    # ------------------------------------------------------------------
+    def get_map_by_short_name(self, short_name: str) -> Optional[Dict[str, Any]]:
+        """DEPRECATED: Use get_map_by_name with full name instead.
+        
+        This method is kept for backwards compatibility but should not be used
+        in new code. It will attempt to find a map by short_name.
+        """
+        for map_data in self.get_maps():
+            if map_data.get("short_name") == short_name:
+                return map_data
+        return None
+
+    def get_map_name(self, short_name: str) -> str:
+        """DEPRECATED: Use full names directly instead.
+        
+        This method is kept for backwards compatibility. It converts a short name
+        to the full name.
+        """
+        map_data = self.get_map_by_short_name(short_name)
+        if not map_data:
+            return short_name
+        return str(map_data.get("name", short_name))
+
+    def get_short_name_by_full_name(self, full_name: str) -> str:
+        """DEPRECATED: Short names are being deprecated.
+        
+        This method is kept for backwards compatibility. It converts a full name
+        to the short name.
+        """
+        map_data = self.get_map_by_name(full_name)
+        if not map_data:
+            return full_name
+        return str(map_data.get("short_name", full_name))
+
+    def get_map_short_names(self) -> list:
+        """DEPRECATED: Use get_map_names instead.
+        
+        Get the short names of all maps in the current season.
+        This method is kept for backwards compatibility.
+        """
+        return [map_data["short_name"] for map_data in self.get_maps()]

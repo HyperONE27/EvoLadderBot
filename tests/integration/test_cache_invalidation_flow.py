@@ -67,7 +67,7 @@ def initialized_service():
         "player_2_discord_uid": [2],
         "player_1_race": ["terran"],
         "player_2_race": ["zerg"],
-        "map_played": ["Python"],
+        "map_played": ["[SC:Evo] Vermeer (버미어)"],
         "server_choice": ["NA"],
         "player_1_mmr": [1500],
         "player_2_mmr": [1600],

@@ -69,7 +69,7 @@ def mock_match_data():
         "player_2_discord_uid": 354878201232752640,
         "player_1_race": "bw_terran",
         "player_2_race": "sc2_protoss",
-        "map_played": "Test Map",
+        "map_played": "[TLMC21] Mothership",
         "server_choice": "US-East",
         "in_game_channel": "scevo123",
         "state": "in_progress",

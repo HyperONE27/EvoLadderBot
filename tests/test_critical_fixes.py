@@ -90,7 +90,7 @@ async def test_match_abort():
         'player_2_discord_uid': test_uid_2,
         'player_1_race': 'bw_terran',
         'player_2_race': 'sc2_zerg',
-        'map_played': 'Abort Test Map',
+        'map_played': '[SC:Evo] Holy World (홀리울드)',
         'server_choice': 'US-West',
         'player_1_mmr': 1500,
         'player_2_mmr': 1500,
