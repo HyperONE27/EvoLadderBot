@@ -63,3 +63,32 @@ WAL_PATH = get_wal_path()
 # Used to verify that replays are from the correct match window.
 REPLAY_TIMESTAMP_WINDOW_MINUTES = 20
 
+# --- Matchmaking Configuration ---
+# Time window in seconds to consider a player "active"
+MM_ACTIVITY_WINDOW_SECONDS = 15 * 60
+
+# How often to prune the recent_activity list, in seconds
+MM_PRUNE_INTERVAL_SECONDS = 60
+
+# Global matchmaking interval (matchwave) in seconds
+MM_MATCH_INTERVAL_SECONDS = 5
+
+# Time window in seconds for players to abort a match after it's found
+MM_ABORT_TIMER_SECONDS = 10
+
+# The number of matchmaking waves before the MMR window expands
+MM_MMR_EXPANSION_STEP = 1
+
+# --- Queue Pressure Ratio Thresholds ---
+MM_HIGH_PRESSURE_THRESHOLD = 0.5
+MM_MODERATE_PRESSURE_THRESHOLD = 0.3
+
+# --- MMR Window Parameters (Base, Growth) ---
+MM_HIGH_PRESSURE_PARAMS = (75, 25)
+MM_MODERATE_PRESSURE_PARAMS = (100, 35)
+MM_LOW_PRESSURE_PARAMS = (125, 45)
+MM_DEFAULT_PARAMS = (75, 25)
+
+
+# --- Logging Configuration ---
+# Log level (e.g., "INFO", "DEBUG", "WARNING")

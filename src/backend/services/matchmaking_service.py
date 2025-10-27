@@ -15,6 +15,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from src.backend.core import config
 from src.backend.services.maps_service import MapsService
 from src.backend.services.regions_service import RegionsService
 
@@ -88,32 +89,32 @@ class Matchmaker:
 	# --- System Tuning Parameters ---
 	# The time window in seconds to consider a player "active" after their last activity.
 	# Chosen based on the average game length (10-15 minutes).
-	ACTIVITY_WINDOW_SECONDS = 15 * 60
+	ACTIVITY_WINDOW_SECONDS = config.MM_ACTIVITY_WINDOW_SECONDS
 
 	# How often to prune the recent_activity list, in seconds.
-	PRUNE_INTERVAL_SECONDS = 60
+	PRUNE_INTERVAL_SECONDS = config.MM_PRUNE_INTERVAL_SECONDS
 
 	# Global matchmaking interval (matchwave) in seconds.
-	MATCH_INTERVAL_SECONDS = 5
+	MATCH_INTERVAL_SECONDS = config.MM_MATCH_INTERVAL_SECONDS
 
 	# Time window in seconds for players to abort a match after it's found.
-	ABORT_TIMER_SECONDS = 10
+	ABORT_TIMER_SECONDS = config.MM_ABORT_TIMER_SECONDS
 
 	# The number of matchmaking waves before the MMR window expands.
 	# With a 45-second wave interval, expansion occurs once per wave.
-	MMR_EXPANSION_STEP = 1
+	MMR_EXPANSION_STEP = config.MM_MMR_EXPANSION_STEP
 
 	# --- Queue Pressure Ratio Thresholds ---
 	# Ratio of (players in queue) / (total active players).
-	HIGH_PRESSURE_THRESHOLD = 0.5  # More than 50% of active players are queueing.
-	MODERATE_PRESSURE_THRESHOLD = 0.3 # More than 30% of active players are queueing.
+	HIGH_PRESSURE_THRESHOLD = config.MM_HIGH_PRESSURE_THRESHOLD
+	MODERATE_PRESSURE_THRESHOLD = config.MM_MODERATE_PRESSURE_THRESHOLD
 
 	# --- MMR Window Parameters (Base, Growth) ---
 	# (base, growth) values for the max_diff function under different pressures.
-	HIGH_PRESSURE_PARAMS = (75, 25)
-	MODERATE_PRESSURE_PARAMS = (100, 35)
-	LOW_PRESSURE_PARAMS = (125, 45)
-	DEFAULT_PARAMS = (75, 25) # Fallback for when effective_pop is zero.
+	HIGH_PRESSURE_PARAMS = config.MM_HIGH_PRESSURE_PARAMS
+	MODERATE_PRESSURE_PARAMS = config.MM_MODERATE_PRESSURE_PARAMS
+	LOW_PRESSURE_PARAMS = config.MM_LOW_PRESSURE_PARAMS
+	DEFAULT_PARAMS = config.MM_DEFAULT_PARAMS
 
 	def __init__(self, players: Optional[List[Player]] = None):
 		self.players: List[Player] = players or []
