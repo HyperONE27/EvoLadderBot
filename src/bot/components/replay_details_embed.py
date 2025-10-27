@@ -1,5 +1,5 @@
 import discord
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from src.backend.services.races_service import RacesService
 from src.bot.utils.discord_utils import get_race_emote
@@ -9,7 +9,7 @@ class ReplayDetailsEmbed:
     """Class for creating replay details embeds."""
 
     @staticmethod
-    def get_success_embed(replay_data: Dict[str, Any], verification_results: Optional[Dict[str, Any]] = None) -> discord.Embed:
+    def get_success_embed(replay_data: Dict[str, Any]) -> discord.Embed:
         """Creates a gray embed with details of a parsed replay."""
         # Extract data
         p1_name = replay_data.get('player_1_name')
@@ -65,43 +65,6 @@ class ReplayDetailsEmbed:
         embed.add_field(
             name="Observers Present",
             value=observers_text,
-            inline=False
-        )
-        
-        # --- Replay Verification Section ---
-        verification_text = ""
-        if verification_results is None:
-            verification_text = "⏳ Verifying details..."
-        else:
-            # Detailed messages for each verification check
-            check_messages = {
-                "races_match": ("Races match", "Races played correspond to races queued with.", "Races played DO NOT correspond to races queued with."),
-                "map_match": ("Map name matches", "Map used corresponds to the map assigned.", "Map used DOES NOT correspond to the map assigned."),
-                "timestamp_match": ("Timestamp matches", "Match was initiated within the allowed time window.", "Match was NOT initiated within the allowed time window."),
-                "observers_ok": ("No observers", "No unverified observers detected.", "Unauthorized observers detected."),
-            }
-
-            lines = []
-            for key, (name, pass_msg, fail_msg) in check_messages.items():
-                result = verification_results.get(key)
-                if result is True:
-                    lines.append(f"- {name}: ✅ {pass_msg}")
-                elif result is False:
-                    lines.append(f"- {name}: ❌ {fail_msg}")
-            
-            # Add winner detection status
-            if verification_results.get("all_ok"):
-                lines.append("- Winner detection: ✅ Match details verified, automatically reporting the winner.")
-                lines.append("\n✅ No issues detected.")
-            else:
-                lines.append("- Winner detection: ❌ Details not verified, please report winner manually.")
-                lines.append("\n⚠️ One or more match parameters were incorrect.")
-            
-            verification_text = "\n".join(lines)
-        
-        embed.add_field(
-            name="**Replay Verification**",
-            value=verification_text,
             inline=False
         )
         

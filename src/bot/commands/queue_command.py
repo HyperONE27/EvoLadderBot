@@ -12,7 +12,6 @@ from src.bot.config import QUEUE_SEARCHING_HEARTBEAT_SECONDS
 from src.backend.services.app_context import (
     command_guard_service as guard_service,
     maps_service,
-    match_completion_service,
     mmr_service,
     notification_service,
     queue_service,
@@ -22,6 +21,7 @@ from src.backend.services.app_context import (
     user_info_service,
 )
 from src.backend.services.command_guard_service import CommandGuardError
+from src.backend.services.match_completion_service import match_completion_service
 from src.backend.services.matchmaking_service import MatchResult, Player, QueuePreferences, matchmaker
 from src.backend.services.replay_service import ReplayRaw, parse_replay_data_blocking
 from src.backend.services.user_info_service import get_user_info
@@ -839,42 +839,6 @@ class MatchFoundView(discord.ui.View):
 
         # Update dropdown states based on initial data
         self._update_dropdown_states()
-    
-    async def handle_auto_report(self, winner_report: int) -> None:
-        """
-        Handle auto-reported match result by updating UI to show confirmed state.
-        
-        This method encapsulates the UI state management for auto-reported matches,
-        keeping the view responsible for its own state changes.
-        
-        Args:
-            winner_report: The auto-reported winner (1 for player 1, 2 for player 2, 0 for draw)
-        """
-        try:
-            # Determine the winner state string
-            if winner_report == 1:
-                new_state = "player1_win"
-            elif winner_report == 2:
-                new_state = "player2_win"
-            else:
-                new_state = "draw"
-            
-            async with self.edit_lock:
-                # Update internal state to reflect auto-report
-                self.selected_result = new_state
-                self.match_result.match_result = new_state
-                self.match_result.match_result_confirmation_status = "Confirmed"
-                
-                # Disable all user controls since match is now resolved
-                self.disable_all_components()
-                
-                # Update the Discord message to reflect the confirmed state
-                embed = self.get_embed()
-                await self._edit_original_message(embed=embed, view=self)
-            
-            print(f"🤖 Auto-reported match view updated: winner={winner_report}, state={new_state}")
-        except Exception as e:
-            print(f"❌ Failed to update MatchFoundView after auto-report: {e}")
     
     async def disable_abort_after_delay(self):
         """A background task to disable the abort button after the deadline."""
@@ -1886,13 +1850,11 @@ class StarCraftRaceSelect(discord.ui.Select):
 
 
 async def store_replay_background(match_id: int, player_id: int, replay_bytes: bytes, replay_info: dict, channel):
-    """Background task to store replay, verify, and auto-report if valid"""
-    from src.backend.services.data_access_service import DataAccessService
-    data_service = DataAccessService()
+    """Background task to store replay without blocking UI updates"""
     try:
         print(f"[Background] Starting replay storage for match {match_id} (player: {player_id})")
         
-        # 1. Store the replay file and update DB
+        # Use the async method for non-blocking database writes
         result = await replay_service.store_upload_from_parsed_dict_async(
             match_id,
             player_id,
@@ -1900,75 +1862,17 @@ async def store_replay_background(match_id: int, player_id: int, replay_bytes: b
             replay_info
         )
         
-        if not result.get("success"):
+        if result.get("success"):
+            # Send replay details embed as a new message
+            replay_data = result.get("replay_data")
+            if replay_data:
+                replay_embed = ReplayDetailsEmbed.get_success_embed(replay_data)
+                await channel.send(embed=replay_embed)
+            
+            print(f"✅ Background replay storage completed for match {match_id} (player: {player_id})")
+        else:
             error_message = result.get("error")
             print(f"❌ Background replay storage failed for match {match_id}: {error_message}")
-            return
-        
-        replay_data = result.get("replay_data")
-        if not replay_data:
-            return
-        
-        # 2. Send initial embed with "Verifying..." placeholder
-        initial_embed = ReplayDetailsEmbed.get_success_embed(replay_data, verification_results=None)
-        details_message = await channel.send(embed=initial_embed)
-        
-        # 3. Define the callback for when verification is complete
-        async def on_verification_complete(verification_results: dict):
-            try:
-                # Update the embed with final verification results
-                final_embed = ReplayDetailsEmbed.get_success_embed(replay_data, verification_results)
-                await details_message.edit(embed=final_embed)
-                print(f"✅ Replay verification embed updated for match {match_id}")
-            except discord.NotFound:
-                print(f"⚠️ Could not find message {details_message.id} to edit for match {match_id}.")
-                return
-            except Exception as e:
-                print(f"❌ Failed to edit verification embed for match {match_id}: {e}")
-                return
-            
-            if not verification_results.get("all_ok"):
-                return
-            
-            # Verification passed - notify the match view to handle auto-report UI update
-            match_view = channel_to_match_view_map.get(channel.id)
-            if not match_view:
-                print(f"⚠️ No match view found for channel {channel.id}")
-                return
-            
-            # Determine the winner report value
-            winner_report = replay_info.get("result")
-            if winner_report is None:
-                print(f"⚠️ Could not determine winner report value for match {match_id}")
-                return
-            
-            # The backend's _determine_winner_report will return None if races are swapped.
-            # We must use that method's result to decide if we should update the UI.
-            match_info = data_service.get_match(match_id)
-            if not match_info: return
-
-            # Get the definitive winner report from the verification logic
-            definitive_winner_report = match_completion_service._determine_winner_report(match_info, replay_info)
-
-            if definitive_winner_report is None:
-                print(f"⚠️ Auto-report UI update skipped for match {match_id}: indeterminate winner.")
-                return
-
-            try:
-                # Delegate to the view to handle its own state updates
-                await match_view.handle_auto_report(definitive_winner_report)
-            except Exception as e:
-                print(f"❌ Failed to handle auto-report for match {match_id}: {e}")
-        
-        # 4. Start background verification process
-        await match_completion_service.start_replay_verification(
-            match_id=match_id,
-            uploader_id=player_id,
-            replay_data=replay_info,
-            on_complete_callback=on_verification_complete
-        )
-        
-        print(f"✅ Background replay storage completed for match {match_id} (player: {player_id})")
             
     except Exception as e:
         print(f"❌ Background replay storage error for match {match_id}: {e}")

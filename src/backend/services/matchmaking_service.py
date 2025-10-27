@@ -555,9 +555,7 @@ class Matchmaker:
 				print(f"❌ No available maps for {p1.user_id} vs {p2.user_id}")
 				continue
 					
-			map_short_name = random.choice(available_maps)
-			# Convert short name to full map name for storage
-			map_full_name = self.maps_service.get_map_name(map_short_name)
+			map_choice = random.choice(available_maps)
 			server_choice = self.regions_service.get_random_game_server()
 			in_game_channel = self.generate_in_game_channel()
 					
@@ -586,7 +584,7 @@ class Matchmaker:
 				'player_2_discord_uid': p2.discord_user_id,
 				'player_1_race': p1_race,
 				'player_2_race': p2_race,
-				'map_played': map_full_name,
+				'map_played': map_choice,
 				'server_choice': server_choice,
 				'player_1_mmr': p1_mmr,
 				'player_2_mmr': p2_mmr,
@@ -611,7 +609,7 @@ class Matchmaker:
 				player_2_user_id=p2.user_id,
 				player_1_race=p1_race,
 				player_2_race=p2_race,
-				map_choice=map_full_name,
+				map_choice=map_choice,
 				server_choice=server_choice,
 				in_game_channel=in_game_channel,
 				player_1_rank=p1_rank,

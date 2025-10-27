@@ -107,11 +107,6 @@ CURRENT_SEASON = "season_alpha"
 # Queue searching view heartbeat timer (seconds) - how often to update the searching view
 QUEUE_SEARCHING_HEARTBEAT_SECONDS = 10
 
-# Replay verification timestamp tolerance (seconds) - maximum allowed time difference
-# between match assignment and replay creation for the replay to pass verification.
-# Allows for inefficiency in finding in-game matches and post-match replay scrubbing.
-REPLAY_TIMESTAMP_TOLERANCE_SECONDS = 1200  # 20 minutes
-
 # =============================================================================
 # PRUNE COMMAND PROTECTION TIMERS
 # =============================================================================
