@@ -46,6 +46,7 @@ from contextlib import suppress
 from src.backend.services.performance_service import FlowTracker
 from src.bot.components.replay_details_embed import ReplayDetailsEmbed
 from src.bot.config import GLOBAL_TIMEOUT
+from src.backend.core.config import EXPECTED_GAME_PRIVACY, EXPECTED_GAME_SPEED, EXPECTED_GAME_DURATION, EXPECTED_LOCKED_ALLIANCES
 
 
 class QueueSearchingViewManager:
@@ -989,7 +990,7 @@ class MatchFoundView(discord.ui.View):
         print(f"  [MatchEmbed PERF] Match data lookup: {(checkpoint6-checkpoint5)*1000:.2f}ms")
         
         # Create title with new format: rank, flag, race, name, MMR
-        title = f"Match #{self.match_result.match_id}: {p1_rank_emote} {p1_flag} {p1_race_emote} {p1_display_name} ({p1_mmr}) vs {p2_rank_emote} {p2_flag} {p2_race_emote} {p2_display_name} ({p2_mmr})"
+        title = f"Match #{self.match_result.match_id}:\n{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_display_name} ({p1_mmr}) vs {p2_rank_emote} {p2_flag} {p2_race_emote} {p2_display_name} ({p2_mmr})"
         
         # Get race names for display using races service
         p1_race_name = race_service.get_race_name(p1_race)
@@ -997,9 +998,11 @@ class MatchFoundView(discord.ui.View):
         
         # Get server information with region using regions service
         server_display = regions_service.format_server_with_region(self.match_result.server_choice)
-        
+
         # Build player information with alt IDs and rank letters: rank, flag, race, name, race_name
-        p1_info_line = f"- Player 1: {p1_rank_emote} {p1_flag} {p1_race_emote} {p1_display_name} ({p1_race_name})"
+        p1_info_line = f"- {p1_rank_emote} {p1_flag} {p1_race_emote} {p1_display_name} ({p1_race_name})"
+        p2_info_line = f"- {p2_rank_emote} {p2_flag} {p2_race_emote} {p2_display_name} ({p2_race_name})"
+
         if p1_info:
             alt_ids_1 = []
             if p1_info.get('alt_player_name_1'):
@@ -1007,9 +1010,7 @@ class MatchFoundView(discord.ui.View):
             if p1_info.get('alt_player_name_2'):
                 alt_ids_1.append(p1_info.get('alt_player_name_2'))
             if alt_ids_1:
-                p1_info_line += f"\n  - a.k.a. {', '.join(alt_ids_1)}"
-        
-        p2_info_line = f"- Player 2: {p2_rank_emote} {p2_flag} {p2_race_emote} {p2_display_name} ({p2_race_name})"
+                p1_info_line += f"\n  - (a.k.a. {', '.join(alt_ids_1)})"
         if p2_info:
             alt_ids_2 = []
             if p2_info.get('alt_player_name_1'):
@@ -1017,8 +1018,8 @@ class MatchFoundView(discord.ui.View):
             if p2_info.get('alt_player_name_2'):
                 alt_ids_2.append(p2_info.get('alt_player_name_2'))
             if alt_ids_2:
-                p2_info_line += f"\n  - a.k.a. {', '.join(alt_ids_2)}"
-        
+                p2_info_line += f"\n  - (a.k.a. {', '.join(alt_ids_2)})"
+
         embed = discord.Embed(
             title=title,
             description="",  # Empty description as requested
@@ -1027,7 +1028,7 @@ class MatchFoundView(discord.ui.View):
         
         # Player Information section
         embed.add_field(
-            name="**Player Information:**",
+            name="**👥 Player Information:**",
             value=f"{p1_info_line}\n{p2_info_line}",
             inline=False
         )
@@ -1057,17 +1058,38 @@ class MatchFoundView(discord.ui.View):
         map_link_display = map_link if map_link else "Unavailable"
         
         embed.add_field(
-            name="**Match Information:**",
+            name="**🌐 Match Information and Settings:**",
             value=(
                 f"- Map: `{map_name}`\n"
                 f"  - Map Link: `{map_link_display}`\n"
-                f"  - Author: `{map_author}`\n"
-                f"- Server: `{server_display}`\n"
-                f"- In-Game Channel: `{self.match_result.in_game_channel}`"
+                f"  - Author: `{map_author}`"
             ),
             inline=False
         )
+
+        embed.add_field(
+            name="",
+            value=(
+                f"- Server: `{server_display}`\n"
+                f"- In-Game Channel: `{self.match_result.in_game_channel}`\n"
+                f"- Locked Alliances: `{EXPECTED_LOCKED_ALLIANCES}`"
+            ),
+            inline=True
+        )
+
+        embed.add_field(
+            name="",
+            value=(
+                f"- Game Privacy: `{EXPECTED_GAME_PRIVACY}`\n"
+                f"- Game Speed: `{EXPECTED_GAME_SPEED}`\n"
+                f"- Game Duration: `{EXPECTED_GAME_DURATION}`"
+            ),
+            inline=True
+        )
+
+        embed.add_field(name="", value="", inline=False)
         
+
         # Match Result section
         
         if self.match_result.match_result == 'conflict':
@@ -1108,12 +1130,12 @@ class MatchFoundView(discord.ui.View):
             mmr_display = f"- MMR Awarded: `{p1_display_name}: TBD`, `{p2_display_name}: TBD`"
             
         embed.add_field(
-            name="**Match Result:**",
+            name="**📊 Match Result:**",
             value= (
                 f"- Result: `{result_display}`\n"
                 f"{mmr_display}"
             ),
-            inline=False
+            inline=True
         )
         
         # Replay section
@@ -1123,7 +1145,7 @@ class MatchFoundView(discord.ui.View):
             if self.match_result.replay_uploaded == "Yes"
             else f"- Replay Uploaded: `{self.match_result.replay_uploaded}`"
         )
-        embed.add_field(name="**Replay Status:**", value=replay_status_value, inline=False)
+        embed.add_field(name="**🎞️ Replay Status:**", value=replay_status_value, inline=True)
 
         # Abort validity section
         # Get abort timer deadline (current time + ABORT_TIMER_SECONDS)
@@ -1136,15 +1158,31 @@ class MatchFoundView(discord.ui.View):
         checkpoint8 = time.perf_counter()
         print(f"  [MatchEmbed PERF] Abort count lookup: {(checkpoint8-checkpoint7)*1000:.2f}ms")
         
+        embed.add_field(name="\u3164", value="\u3164", inline=False)
+
         abort_validity_value = (
             f"You can use the button below to abort the match if you are unable to play.\n"
             f"Aborting matches has no MMR penalty, but you have a limited number per month.\n" 
-            f"Abusing this feature (e.g., dodging opponents/matchups, repeatedly aborting at\n"
-            f"the last second, deliberately wasting the time of others, etc.) will result in a ban.\n"
+            f"**Abusing this feature (e.g., dodging matchups/opponents, repeatedly aborting at "
+            f"the last second, wasting the time of others, etc.) will result in a BAN.**\n"
             f"You can only abort the match before <t:{self.abort_deadline}:T> (<t:{self.abort_deadline}:R>)."
         )
-        embed.add_field(name="**Can't play? Need to leave?**", value=abort_validity_value, inline=False)
-        
+        embed.add_field(name="**💨 Can't play? Need to leave? Abort the match!**", value=abort_validity_value, inline=False)
+
+        embed.add_field(name="\u3164", value="\u3164", inline=False)
+
+        embed.add_field(
+            name="⚠️ As soon as you see this, press the ✅ Confirm Match button below. ⚠️",
+            value=(
+                f"This confirms that you have seen the match and are ready to play. "
+                f"If you do not confirm, you will automatically be dropped from the match by <t:{self.abort_deadline}:T> (<t:{self.abort_deadline}:R>). "
+                f"**Dropping too many matches will result in a BAN.**"
+            ),
+            inline=True
+        )
+    
+        embed.add_field(name="**ℹ️ To report the match result, upload a replay.**", value="The dropdown menus below will unlock and allow you to report the match result, once you upload a replay.", inline=True)
+
         total_time = (time.perf_counter() - start_time) * 1000
         if total_time > 100:
             print(f"⚠️ [ME] Total:{total_time:.1f}ms")

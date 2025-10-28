@@ -1,0 +1,682 @@
+[
+  {
+      "region_1": "NAW",
+      "region_2": "NAW",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "NAC",
+      "mapping": "US Central"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "NAC",
+      "mapping": "US Central"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "NAE",
+      "mapping": "US Central"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "NAE",
+      "mapping": "US Central"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "NAE",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "CAM",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "CAM",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "CAM",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "CAM",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "SAM",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "SAM",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "SAM",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "SAM",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "SAM",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "EUW",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "EUW",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "EUW",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "EUW",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "EUW",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "EUW",
+      "region_2": "EUW",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "EUE",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "EUE",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "EUE",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "EUE",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "EUE",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "EUW",
+      "region_2": "EUE",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "EUE",
+      "region_2": "EUE",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "AFR",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "AFR",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "AFR",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "AFR",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "AFR",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "EUW",
+      "region_2": "AFR",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "EUE",
+      "region_2": "AFR",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "AFR",
+      "region_2": "AFR",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "MEA",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "MEA",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "MEA",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "MEA",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "MEA",
+      "mapping": "US East"
+  },
+  {
+      "region_1": "EUW",
+      "region_2": "MEA",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "EUE",
+      "region_2": "MEA",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "AFR",
+      "region_2": "MEA",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "MEA",
+      "region_2": "MEA",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "SEA",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "SEA",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "SEA",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "SEA",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "SEA",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUW",
+      "region_2": "SEA",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUE",
+      "region_2": "SEA",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "AFR",
+      "region_2": "SEA",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "MEA",
+      "region_2": "SEA",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "SEA",
+      "region_2": "SEA",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "KRJ",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "KRJ",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "KRJ",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "KRJ",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "KRJ",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUW",
+      "region_2": "KRJ",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUE",
+      "region_2": "KRJ",
+      "mapping": "US Central"
+  },
+  {
+      "region_1": "AFR",
+      "region_2": "KRJ",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "MEA",
+      "region_2": "KRJ",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "SEA",
+      "region_2": "KRJ",
+      "mapping": "Taiwan"
+  },
+  {
+      "region_1": "KRJ",
+      "region_2": "KRJ",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "CHN",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "CHN",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "CHN",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "CHN",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "CHN",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUW",
+      "region_2": "CHN",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUE",
+      "region_2": "CHN",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "AFR",
+      "region_2": "CHN",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "MEA",
+      "region_2": "CHN",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "SEA",
+      "region_2": "CHN",
+      "mapping": "Taiwan"
+  },
+  {
+      "region_1": "KRJ",
+      "region_2": "CHN",
+      "mapping": "Taiwan"
+  },
+  {
+      "region_1": "CHN",
+      "region_2": "CHN",
+      "mapping": "Taiwan"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "THM",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "THM",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "THM",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "THM",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "THM",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUW",
+      "region_2": "THM",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUE",
+      "region_2": "THM",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "AFR",
+      "region_2": "THM",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "MEA",
+      "region_2": "THM",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "SEA",
+      "region_2": "THM",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "KRJ",
+      "region_2": "THM",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "CHN",
+      "region_2": "THM",
+      "mapping": "Taiwan"
+  },
+  {
+      "region_1": "THM",
+      "region_2": "THM",
+      "mapping": "Taiwan"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "OCE",
+      "mapping": "Taiwan"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "OCE",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "OCE",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "OCE",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "OCE",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUW",
+      "region_2": "OCE",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUE",
+      "region_2": "OCE",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "AFR",
+      "region_2": "OCE",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "MEA",
+      "region_2": "OCE",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "SEA",
+      "region_2": "OCE",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "KRJ",
+      "region_2": "OCE",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "CHN",
+      "region_2": "OCE",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "THM",
+      "region_2": "OCE",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "OCE",
+      "region_2": "OCE",
+      "mapping": "Australia"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "USB",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "USB",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "USB",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "USB",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "USB",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUW",
+      "region_2": "USB",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "EUE",
+      "region_2": "USB",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "AFR",
+      "region_2": "USB",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "MEA",
+      "region_2": "USB",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "SEA",
+      "region_2": "USB",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "KRJ",
+      "region_2": "USB",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "CHN",
+      "region_2": "USB",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "THM",
+      "region_2": "USB",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "OCE",
+      "region_2": "USB",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "USB",
+      "region_2": "USB",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "NAW",
+      "region_2": "FER",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "NAC",
+      "region_2": "FER",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "NAE",
+      "region_2": "FER",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "CAM",
+      "region_2": "FER",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "SAM",
+      "region_2": "FER",
+      "mapping": "US West"
+  },
+  {
+      "region_1": "EUW",
+      "region_2": "FER",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "EUE",
+      "region_2": "FER",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "AFR",
+      "region_2": "FER",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "MEA",
+      "region_2": "FER",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "SEA",
+      "region_2": "FER",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "KRJ",
+      "region_2": "FER",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "CHN",
+      "region_2": "FER",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "THM",
+      "region_2": "FER",
+      "mapping": "Korea"
+  },
+  {
+      "region_1": "OCE",
+      "region_2": "FER",
+      "mapping": "Singapore"
+  },
+  {
+      "region_1": "USB",
+      "region_2": "FER",
+      "mapping": "Central EU"
+  },
+  {
+      "region_1": "FER",
+      "region_2": "FER",
+      "mapping": "Korea"
+  }
+]

@@ -474,9 +474,30 @@ class Matchmaker:
 		
 		return matches
 
-	def generate_in_game_channel(self) -> str:
-		"""Generate a random 3-digit in-game channel name."""
-		return "scevo" + str(random.randint(100, 999))
+	def generate_in_game_channel(self, match_id: int) -> str:
+		"""
+		Generate an in-game channel name based on the match ID.
+		
+		The channel name is scevo## where ## is based on the ones digit of the match_id:
+		- If ones digit is 1-9: use that digit (padded to 2 digits)
+		- If ones digit is 0: use 10
+		
+		Examples:
+		- match_id=1 -> scevo01
+		- match_id=9 -> scevo09
+		- match_id=10 -> scevo10
+		- match_id=11 -> scevo01
+		- match_id=20 -> scevo10
+		
+		Args:
+			match_id: The match ID
+			
+		Returns:
+			In-game channel name in format scevo##
+		"""
+		ones_digit = match_id % 10
+		channel_number = 10 if ones_digit == 0 else ones_digit
+		return f"scevo{channel_number:02d}"
 
 	def _get_available_maps(self, p1: Player, p2: Player) -> List[str]:
 		"""Get maps that haven't been vetoed by either player using maps service.
@@ -561,8 +582,7 @@ class Matchmaker:
 					
 			map_choice = random.choice(available_maps)
 			server_choice = self.regions_service.get_random_game_server()
-			in_game_channel = self.generate_in_game_channel()
-					
+				
 			# Determine which races to use for the match
 			# p1 is always from the lead side, p2 is always from the follow side
 			if is_bw_match:
@@ -573,7 +593,7 @@ class Matchmaker:
 				# Lead side is SC2, follow side is BW
 				p1_race = p1.get_race_for_match(False)  # SC2 race
 				p2_race = p2.get_race_for_match(True)  # BW race
-			
+		
 			# Get current MMR values for both players
 			p1_mmr = int(p1.get_effective_mmr(is_bw_match) or 1500)
 			p2_mmr = int(p2.get_effective_mmr(not is_bw_match) or 1500)
@@ -596,6 +616,10 @@ class Matchmaker:
 			}
 			
 			match_id = await data_service.create_match(match_data)
+			
+			# Generate in-game channel based on match_id
+			in_game_channel = self.generate_in_game_channel(match_id)
+			
 			flow.checkpoint(f"create_match_db_complete_{p1.discord_user_id}_vs_{p2.discord_user_id}")
 
 			flow.checkpoint(f"create_match_result_object_{p1.discord_user_id}_vs_{p2.discord_user_id}")
