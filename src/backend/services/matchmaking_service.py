@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from src.backend.core import config
 from src.backend.services.maps_service import MapsService
 from src.backend.services.regions_service import RegionsService
+from src.backend.services.mmr_service import MMRService
 
 @dataclass
 class QueuePreferences:
@@ -160,7 +161,7 @@ class Matchmaker:
 			else:
 				# MMR not found - create default MMR entry
 				print(f"[DataAccessService] MMR not found for {player.discord_user_id}/{race}, creating default")
-				from src.backend.services.mmr_service import MMRService
+				
 				mmr_service = MMRService()
 				default_mmr = mmr_service.default_mmr()
 				
@@ -1003,15 +1004,25 @@ class Matchmaker:
 		p1_race = match_data.get('player_1_race')
 		p2_race = match_data.get('player_2_race')
 
+		# Initialize MMR service (needed for calculations below)
+		mmr_service = MMRService()
+		
 		if p1_race and p2_race:
-			# Get current MMR values from DataAccessService (in-memory, instant)
-			p1_current_mmr = data_service.get_player_mmr(player1_uid, p1_race)
-			p2_current_mmr = data_service.get_player_mmr(player2_uid, p2_race)
+			# Get complete MMR records from DataAccessService (in-memory, instant)
+			# Retrieve all data in one call per player to avoid redundant lookups
+			p1_all_mmrs = data_service.get_all_player_mmrs(player1_uid)
+			p2_all_mmrs = data_service.get_all_player_mmrs(player2_uid)
+			
+			# Get current stats for each player's race
+			p1_stats = p1_all_mmrs.get(p1_race, {})
+			p2_stats = p2_all_mmrs.get(p2_race, {})
+			
+			# Extract current MMR values
+			p1_current_mmr = p1_stats.get('mmr')
+			p2_current_mmr = p2_stats.get('mmr')
 			
 			if p1_current_mmr is not None and p2_current_mmr is not None:
 				# Calculate MMR changes
-				from src.backend.services.mmr_service import MMRService
-				mmr_service = MMRService()
 				
 				# Update match result in database
 				await data_service.update_match(match_id, match_result=match_result)
@@ -1032,23 +1043,31 @@ class Matchmaker:
 				p2_lost = match_result == 1
 				p2_drawn = match_result == 0
 				
-				# Get current game counts from DataAccessService
-				p1_all_mmrs = data_service.get_all_player_mmrs(player1_uid)
-				p2_all_mmrs = data_service.get_all_player_mmrs(player2_uid)
+				p1_current_games = p1_stats.get('games_played', 0)
+				p1_current_won = p1_stats.get('games_won', 0)
+				p1_current_lost = p1_stats.get('games_lost', 0)
+				p1_current_drawn = p1_stats.get('games_drawn', 0)
+				
+				p2_current_games = p2_stats.get('games_played', 0)
+				p2_current_won = p2_stats.get('games_won', 0)
+				p2_current_lost = p2_stats.get('games_lost', 0)
+				p2_current_drawn = p2_stats.get('games_drawn', 0)
 				
 				# Update both players' MMR using DataAccessService (async, non-blocking)
 				await data_service.update_player_mmr(
 					player1_uid, p1_race, int(mmr_outcome.player_one_mmr),
-					games_won=1 if p1_won else None,
-					games_lost=1 if p1_lost else None,
-					games_drawn=1 if p1_drawn else None
+					games_played=p1_current_games + 1,  # INCREMENT total games
+					games_won=p1_current_won + 1 if p1_won else p1_current_won,
+					games_lost=p1_current_lost + 1 if p1_lost else p1_current_lost,
+					games_drawn=p1_current_drawn + 1 if p1_drawn else p1_current_drawn
 				)
 				
 				await data_service.update_player_mmr(
 					player2_uid, p2_race, int(mmr_outcome.player_two_mmr),
-					games_won=1 if p2_won else None,
-					games_lost=1 if p2_lost else None,
-					games_drawn=1 if p2_drawn else None
+					games_played=p2_current_games + 1,  # INCREMENT total games
+					games_won=p2_current_won + 1 if p2_won else p2_current_won,
+					games_lost=p2_current_lost + 1 if p2_lost else p2_current_lost,
+					games_drawn=p2_current_drawn + 1 if p2_drawn else p2_current_drawn
 				)
 				
 			# Calculate and store MMR change

@@ -105,54 +105,6 @@ async def termsofservice_command(interaction: discord.Interaction):
     # Log the action
     log_user_action(user_info, "viewed terms of service")
 
-    # Create confirmation callback
-    async def confirm_callback(interaction: discord.Interaction):
-        # Update in backend that user has confirmed the terms of service
-        success = user_info_service.accept_terms_of_service(user_info["id"])
-
-        if not success:
-            error_embed = discord.Embed(
-                title="❌ Error",
-                description="An error occurred while confirming your acceptance. Please try again.",
-                color=discord.Color.red()
-            )
-            await send_ephemeral_response(interaction, embed=error_embed)
-            return
-
-        # Log the confirmation
-        log_user_action(user_info, "confirmed terms of service")
-
-        # Show post-confirmation view
-        post_confirm_view = ConfirmEmbedView(
-            title="Terms of Service Confirmed",
-            description="Thank you for confirming the EvoLadderBot Terms of Service.",
-            mode="post_confirmation",
-            reset_target=None  # No restart option for TOS
-        )
-        post_confirm_view.embed.set_footer(
-            text="You may now use all EvoLadderBot features.",
-            icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
-        )
-        await send_ephemeral_response(interaction, embed=post_confirm_view.embed, view=post_confirm_view)
-
-    # Create custom cancel callback for terms of service
-    async def cancel_callback(interaction: discord.Interaction):
-        # Log the decline
-        log_user_action(user_info, "declined terms of service")
-
-        # Create custom decline embed
-        decline_embed = discord.Embed(
-            title="❌ Terms of Service Declined",
-            description="Since you have declined the Terms of Service, you may not use EvoLadderBot services.",
-            color=discord.Color.red()
-        )
-        decline_embed.set_footer(
-            text="You may use /termsofservice to review the terms again if you change your mind.",
-            icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
-        )
-
-        await send_ephemeral_response(interaction, embed=decline_embed)
-
     # Create custom view with only confirm and cancel buttons (no restart)
     class TOSConfirmView(discord.ui.View):
         def __init__(self) -> None:
@@ -160,11 +112,51 @@ async def termsofservice_command(interaction: discord.Interaction):
 
         @discord.ui.button(label="I Accept These Terms", emoji="✅", style=discord.ButtonStyle.success)
         async def accept_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await confirm_callback(interaction)
+            # Update in backend that user has confirmed the terms of service
+            success = user_info_service.accept_terms_of_service(user_info["id"])
+
+            if not success:
+                error_embed = discord.Embed(
+                    title="❌ Error",
+                    description="An error occurred while confirming your acceptance. Please try again.",
+                    color=discord.Color.red()
+                )
+                await interaction.response.edit_message(embed=error_embed, view=None)
+                return
+
+            # Log the confirmation
+            log_user_action(user_info, "confirmed terms of service")
+
+            # Show post-confirmation view (replaces the original message)
+            post_confirm_view = ConfirmEmbedView(
+                title="Terms of Service Confirmed",
+                description="Thank you for confirming the EvoLadderBot Terms of Service.",
+                mode="post_confirmation",
+                reset_target=None  # No restart option for TOS
+            )
+            post_confirm_view.embed.set_footer(
+                text="You may now use all EvoLadderBot features.",
+                icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
+            )
+            await interaction.response.edit_message(embed=post_confirm_view.embed, view=post_confirm_view)
 
         @discord.ui.button(label="I Decline These Terms", emoji="✖️", style=discord.ButtonStyle.danger)
         async def decline_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await cancel_callback(interaction)
+            # Log the decline
+            log_user_action(user_info, "declined terms of service")
+
+            # Create custom decline embed
+            decline_embed = discord.Embed(
+                title="❌ Terms of Service Declined",
+                description="Since you have declined the Terms of Service, you may not use EvoLadderBot services.",
+                color=discord.Color.red()
+            )
+            decline_embed.set_footer(
+                text="You may use /termsofservice to review the terms again if you change your mind.",
+                icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
+            )
+
+            await interaction.response.edit_message(embed=decline_embed, view=None)
 
     confirm_view = TOSConfirmView()
 

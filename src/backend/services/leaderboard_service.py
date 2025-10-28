@@ -42,22 +42,6 @@ if TYPE_CHECKING:
 _non_common_countries_cache = None
 
 
-# invalidate_leaderboard_cache() removed - DataAccessService handles this now
-
-@staticmethod
-def invalidate_cache():
-    """Invalidate leaderboard cache - now handled by DataAccessService."""
-    # DataAccessService handles cache invalidation automatically
-    pass
-
-def invalidate_leaderboard_cache():
-    """Invalidate leaderboard cache - now handled by DataAccessService."""
-    # DataAccessService handles cache invalidation automatically
-    pass
-
-# _refresh_leaderboard_worker() removed - DataAccessService handles this now
-
-
 def _get_filtered_leaderboard_dataframe(
     df: pl.DataFrame,
     country_filter: Optional[List[str]] = None,
@@ -284,33 +268,7 @@ class LeaderboardService:
         """
         perf_start = time.time()
         
-        # Perform on-demand cache refresh if cache was invalidated
-        if not self.data_service.is_leaderboard_cache_valid():
-            cache_refresh_start = time.time()
-            print("[LeaderboardService] Cache invalid - performing on-demand refresh")
-            
-            # Reload MMR data from database synchronously (one-time cost paid by this user)
-            # This ensures the next leaderboard request gets fresh data
-            loop = asyncio.get_running_loop()
-            mmrs_data = await loop.run_in_executor(
-                None,
-                self.data_service._db_reader.get_leaderboard_1v1,
-                None,  # race filter
-                None,  # country filter
-                10000,  # limit
-                0  # offset
-            )
-            
-            if mmrs_data:
-                self.data_service._mmrs_1v1_df = pl.DataFrame(mmrs_data, infer_schema_length=None)
-                print(f"[LeaderboardService] Reloaded {len(self.data_service._mmrs_1v1_df)} MMR records from database")
-            
-            # Mark cache as valid for subsequent requests
-            self.data_service.mark_leaderboard_cache_valid()
-            cache_refresh_time = (time.time() - cache_refresh_start) * 1000
-            print(f"[LeaderboardService] On-demand cache refresh completed in {cache_refresh_time:.2f}ms")
-        
-        # Get cached DataFrame (already has ranks computed)
+        # Get DataFrame directly from DataAccessService (single source of truth)
         # DataAccessService provides data directly from memory
         df = self._get_cached_leaderboard_dataframe()
         

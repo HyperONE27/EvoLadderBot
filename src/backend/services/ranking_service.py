@@ -32,6 +32,7 @@ Intended usage:
 """
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Dict, List, Optional, Tuple, Any
 from src.backend.services.data_access_service import DataAccessService
@@ -78,28 +79,58 @@ class RankingService:
             
             all_mmr_data = self._load_all_mmr_data()
             
-            print(f"[Ranking Service] Loaded {len(all_mmr_data)} MMR entries from database")
+            print(f"[Ranking Service] Loaded {len(all_mmr_data)} MMR entries from DataAccessService (in-memory)")
             
             # Use a temporary dict to build new rankings
             new_rankings = {}
             
-            # Separate ranked and unranked entries based on games_played
+            # Define the cutoff time: two weeks before the current moment, in UTC
+            inactivity_threshold = datetime.now(timezone.utc) - timedelta(weeks=2)
+            
+            # Separate ranked and unranked entries based on games_played and last_played
             ranked_entries = []
             unranked_entries = []
             
             for entry in all_mmr_data:
                 games_played = entry.get("games_played", 0)
-                if games_played == 0:
-                    # Player-race with 0 games is unranked
+                last_played_str = entry.get("last_played")
+
+                # Default to unranked unless all conditions for being ranked are met.
+                is_unranked = True
+
+                # A player is ranked ONLY IF:
+                # 1. They have played at least one game.
+                # 2. They have a last_played timestamp.
+                # 3. That timestamp is valid and within the last two weeks.
+                if games_played > 0 and last_played_str is not None:
+                    try:
+                        last_played_dt = None
+                        # Handle both string and datetime objects from the data layer for robustness
+                        if isinstance(last_played_str, str):
+                            last_played_dt = datetime.fromisoformat(last_played_str)
+                        elif isinstance(last_played_str, datetime):
+                            last_played_dt = last_played_str
+
+                        if last_played_dt:
+                            # Ensure the datetime is timezone-aware before comparison
+                            if last_played_dt.tzinfo is None:
+                                last_played_dt = last_played_dt.replace(tzinfo=timezone.utc)
+
+                            if last_played_dt >= inactivity_threshold:
+                                is_unranked = False  # All conditions met, mark as RANKED.
+                    except (ValueError, TypeError) as e:
+                        # Timestamp is malformed, remains unranked.
+                        print(f"[Ranking Service] Warning: Could not parse timestamp '{last_played_str}' for player {entry.get('discord_uid')}: {e}. Excluding from ranking.")
+
+                if is_unranked:
                     unranked_entries.append(entry)
                 else:
-                    # Player-race with at least 1 game is eligible for ranking
                     ranked_entries.append(entry)
             
             total_ranked_entries = len(ranked_entries)
             total_unranked_entries = len(unranked_entries)
             
-            print(f"[Ranking Service] Ranked entries: {total_ranked_entries}, Unranked entries (0 games): {total_unranked_entries}")
+            print(f"[Ranking Service] Ranked entries: {total_ranked_entries}, Unranked entries (0 games or inactive > 2 weeks): {total_unranked_entries}")
             
             if total_ranked_entries == 0:
                 print("[Ranking Service] No ranked entries - all players will be unranked")
@@ -211,8 +242,14 @@ class RankingService:
             # Get MMR data from DataAccessService (in-memory, instant)
             mmr_df = self.data_service.get_leaderboard_dataframe()
             
-            # Convert to list of dicts, already sorted by MMR DESC, last_played DESC, id DESC
-            return mmr_df.to_dicts()
+            if mmr_df is None or mmr_df.is_empty():
+                return []
+
+            # Sort the DataFrame: higher MMR is better. For ties, more recent play is better.
+            sorted_df = mmr_df.sort(by=["mmr", "last_played", "id"], descending=[True, True, True])
+            
+            # Convert to list of dicts, now correctly sorted
+            return sorted_df.to_dicts()
             
         except Exception as e:
             print(f"[Ranking Service] Error loading MMR data: {e}")

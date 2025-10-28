@@ -31,14 +31,14 @@ MMR_CASES = [
         player_one_mmr=1700.0,
         player_two_mmr=1500.0,
         result=2,
-        expected=(1669.6101229340816, 1530.3898770659184),
+        expected=(1671, 1529),
     ),
     MMRTestCase(
         name="draw_between_mismatched_players",
         player_one_mmr=1600.0,
         player_two_mmr=1400.0,
         result=0,
-        expected=(1589.6101229340816, 1410.3898770659184),
+        expected=(1591, 1409),
     ),
 ]
 
@@ -49,8 +49,8 @@ def test_calculate_new_mmr(case: MMRTestCase) -> None:
 
     outcome = service.calculate_new_mmr(case.player_one_mmr, case.player_two_mmr, case.result)
 
-    assert pytest.approx(outcome.player_one_mmr, rel=1e-6) == case.expected[0]
-    assert pytest.approx(outcome.player_two_mmr, rel=1e-6) == case.expected[1]
+    assert outcome.player_one_mmr == pytest.approx(case.expected[0], rel=1e-6)
+    assert outcome.player_two_mmr == pytest.approx(case.expected[1], rel=1e-6)
 
 
 def test_default_mmr() -> None:

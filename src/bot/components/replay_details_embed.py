@@ -235,12 +235,12 @@ class ReplayDetailsEmbed:
         lines.append("")  # Empty line for spacing
         if all_ok:
             lines.append(
-                "✅ **Verification Complete:** All checks passed."
+                "✅ **Verification Complete:** All checks passed.\n"
                 "⚠️ This embed is provided for informational purposes only. You must still report the match result manually."
             )
         else:
             lines.append(
-                "⚠️ **Verification Issues:** One or more checks failed."
+                "⚠️ **Verification Issues:** One or more checks failed.\n"
                 "⚠️ Please review the issues above and ensure match parameters are correct for future games."
             )
         

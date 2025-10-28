@@ -106,6 +106,7 @@ class DataAccessService:
         self._write_queue: asyncio.Queue = asyncio.Queue()
         self._write_event = asyncio.Event()  # Event-driven notification for write worker
         self._init_lock = asyncio.Lock()
+        self._mmr_lock = asyncio.Lock()  # Lock for thread-safe MMR DataFrame updates
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None  # Store a reference to the main loop
 
         # Write-Ahead Log (WAL) for durable write queue
@@ -117,9 +118,6 @@ class DataAccessService:
         self._write_queue_size_peak = 0
         self._total_writes_queued = 0
         self._total_writes_completed = 0
-        
-        # Leaderboard cache invalidation (event-driven)
-        self._leaderboard_cache_is_valid = False
         
         self._init_done = True  # Mark that __init__ has completed
         print("[DataAccessService] Singleton initialized (DataFrames not loaded yet)")
@@ -187,6 +185,8 @@ class DataAccessService:
         )
         if mmrs_data:
             self._mmrs_1v1_df = pl.DataFrame(mmrs_data, infer_schema_length=None)
+            print(f"[DataAccessService]   MMRs schema: {self._mmrs_1v1_df.schema}")
+            print(f"[DataAccessService]   MMRs columns: {self._mmrs_1v1_df.columns}")
         else:
             self._mmrs_1v1_df = pl.DataFrame({
                 "discord_uid": pl.Series([], dtype=pl.Int64),
@@ -197,6 +197,7 @@ class DataAccessService:
                 "games_won": pl.Series([], dtype=pl.Int64),
                 "games_lost": pl.Series([], dtype=pl.Int64),
                 "games_drawn": pl.Series([], dtype=pl.Int64),
+                "last_played": pl.Series([], dtype=pl.Datetime),
             })
         print(f"[DataAccessService]   MMRs loaded: {len(self._mmrs_1v1_df)} rows, size: {self._mmrs_1v1_df.estimated_size('mb'):.2f} MB")
         
@@ -514,7 +515,7 @@ class DataAccessService:
                             self._write_queue_size_peak = current_size
                         
                         # Log if queue is backing up
-                        if current_size > 10:
+                        if current_size > 5:
                             print(f"[DataAccessService] WARNING: Write queue backed up: {current_size} jobs pending")
                         
                         # Write to WAL first (durability)
@@ -871,29 +872,6 @@ class DataAccessService:
         print(f"[DataAccessService]   Total writes completed: {self._total_writes_completed}")
         print(f"[DataAccessService]   Peak queue size: {self._write_queue_size_peak}")
     
-    # ========== Leaderboard Cache Invalidation (Event-Driven) ==========
-    
-    def invalidate_leaderboard_cache(self) -> None:
-        """
-        Invalidate the leaderboard cache.
-        
-        This is called whenever MMR-adjusting operations occur (match completion, abort, etc).
-        The next call to get_leaderboard_data will refresh the cache on-demand.
-        
-        This design eliminates the need for a 60-second background refresh loop,
-        dramatically reducing idle CPU usage while maintaining data freshness.
-        """
-        self._leaderboard_cache_is_valid = False
-        print("[DataAccessService] Leaderboard cache invalidated (event-driven)")
-    
-    def is_leaderboard_cache_valid(self) -> bool:
-        """Check if the leaderboard cache is currently valid."""
-        return self._leaderboard_cache_is_valid
-    
-    def mark_leaderboard_cache_valid(self) -> None:
-        """Mark the leaderboard cache as valid after a refresh."""
-        self._leaderboard_cache_is_valid = True
-    
     # ========== Read Methods (Players Table) ==========
     
     def get_player_info(self, discord_uid: int) -> Optional[Dict[str, Any]]:
@@ -980,7 +958,7 @@ class DataAccessService:
         mmr = result["mmr"][0]
         return float(mmr) if mmr is not None else None
     
-    def get_all_player_mmrs(self, discord_uid: int) -> Dict[str, float]:
+    def get_all_player_mmrs(self, discord_uid: int) -> Dict[str, Dict[str, Any]]:
         """
         Get all MMRs for a player across all races.
         
@@ -988,13 +966,17 @@ class DataAccessService:
             discord_uid: Discord user ID
             
         Returns:
-            Dict mapping race code to complete record dict with MMR, games_played, games_won, games_lost, games_drawn
+            Dict mapping race code to complete record dict with MMR, games_played, games_won, games_lost, games_drawn, last_played
         """
         if self._mmrs_1v1_df is None:
             print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
             return {}
         
+        print(f"[DataAccessService] get_all_player_mmrs called for {discord_uid}")
+        print(f"[DataAccessService]   Total rows in DataFrame: {len(self._mmrs_1v1_df)}")
+        
         result = self._mmrs_1v1_df.filter(pl.col("discord_uid") == discord_uid)
+        print(f"[DataAccessService]   Filter found {len(result)} rows for discord_uid={discord_uid}")
         
         if len(result) == 0:
             return {}
@@ -1010,7 +992,9 @@ class DataAccessService:
                     "games_won": int(row["games_won"]) if row["games_won"] is not None else 0,
                     "games_lost": int(row["games_lost"]) if row["games_lost"] is not None else 0,
                     "games_drawn": int(row["games_drawn"]) if row["games_drawn"] is not None else 0,
+                    "last_played": row.get("last_played"),
                 }
+                print(f"[DataAccessService]   Found {race}: mmr={mmrs[race]['mmr']}, games={mmrs[race]['games_played']}")
         
         return mmrs
     
@@ -1039,41 +1023,6 @@ class DataAccessService:
             on="discord_uid",
             how="left"
         )
-        
-        # Add last_played from matches (most recent match for each player/race)
-        if self._matches_1v1_df is not None and len(self._matches_1v1_df) > 0:
-            # Get the most recent match date for each player/race combination
-            last_played = self._matches_1v1_df.group_by(["player_1_discord_uid", "player_1_race"]).agg([
-                pl.col("played_at").max().alias("last_played_p1")
-            ]).rename({"player_1_discord_uid": "discord_uid", "player_1_race": "race"})
-            
-            # Also get player 2 matches
-            last_played_p2 = self._matches_1v1_df.group_by(["player_2_discord_uid", "player_2_race"]).agg([
-                pl.col("played_at").max().alias("last_played_p2")
-            ]).rename({"player_2_discord_uid": "discord_uid", "player_2_race": "race"})
-            
-            # Combine both and get the most recent
-            # Rename columns to match before concatenating
-            last_played = last_played.rename({"last_played_p1": "last_played"})
-            last_played_p2 = last_played_p2.rename({"last_played_p2": "last_played"})
-            
-            all_last_played = pl.concat([last_played, last_played_p2])
-            if len(all_last_played) > 0:
-                all_last_played = all_last_played.group_by(["discord_uid", "race"]).agg([
-                    pl.col("last_played").max().alias("last_played")
-                ])
-                
-                leaderboard_df = leaderboard_df.join(
-                    all_last_played,
-                    on=["discord_uid", "race"],
-                    how="left"
-                )
-            else:
-                # No matches yet, add empty last_played column
-                leaderboard_df = leaderboard_df.with_columns(pl.lit(None).alias("last_played"))
-        else:
-            # No matches yet, add empty last_played column
-            leaderboard_df = leaderboard_df.with_columns(pl.lit(None).alias("last_played"))
         
         return leaderboard_df
     
@@ -1282,9 +1231,6 @@ class DataAccessService:
             
             await self._write_queue.put(job)
             self._total_writes_queued += 1
-            
-            # Invalidate leaderboard cache - player info (name, country) is displayed
-            self.invalidate_leaderboard_cache()
         
         return True
     
@@ -1357,6 +1303,74 @@ class DataAccessService:
     
     # ========== Write Methods (MMRs Table) ==========
     
+    def _update_mmr_dataframe_row(
+        self,
+        discord_uid: int,
+        race: str,
+        update_data: Dict[str, Any]
+    ) -> bool:
+        """
+        Helper method to update a specific row in the MMR DataFrame.
+        
+        Uses conditional expressions with verification to ensure updates are applied correctly.
+        Maintains DataFrame row order and integrity.
+        
+        Args:
+            discord_uid: Discord user ID
+            race: Race code
+            update_data: Dictionary of column names to new values
+            
+        Returns:
+            True if the row was found and updated, False otherwise
+        """
+        if self._mmrs_1v1_df is None or self._mmrs_1v1_df.is_empty():
+            print(f"[DataAccessService] WARNING: Cannot update - MMRs DataFrame is empty")
+            return False
+        
+        # Check if the row exists BEFORE update
+        mask = (pl.col("discord_uid") == discord_uid) & (pl.col("race") == race)
+        before_filter = self._mmrs_1v1_df.filter(mask)
+        
+        if before_filter.is_empty():
+            print(f"[DataAccessService] WARNING: No MMR record found for discord_uid={discord_uid}, race={race}")
+            return False
+        
+        # Get the old value of a field we're updating (for verification)
+        verification_column = list(update_data.keys())[0]
+        old_value = before_filter[verification_column][0]
+        
+        # Build conditional update expressions for each column
+        updates = {}
+        for column, value in update_data.items():
+            if column in self._mmrs_1v1_df.columns:
+                # Cast to the correct dtype to match the column
+                col_dtype = self._mmrs_1v1_df.schema[column]
+                updates[column] = pl.when(mask).then(pl.lit(value).cast(col_dtype)).otherwise(pl.col(column))
+        
+        # Apply the updates
+        print(f"[DataAccessService] Applying updates for {discord_uid}/{race}: {list(update_data.keys())}")
+        self._mmrs_1v1_df = self._mmrs_1v1_df.with_columns(**updates)
+        print(f"[DataAccessService] After with_columns, DataFrame has {len(self._mmrs_1v1_df)} rows")
+        
+        # VERIFY the update actually happened
+        after_filter = self._mmrs_1v1_df.filter(mask)
+        print(f"[DataAccessService] After update filter found {len(after_filter)} rows")
+        
+        if after_filter.is_empty():
+            print(f"[DataAccessService] ERROR: Row disappeared after update for discord_uid={discord_uid}, race={race}")
+            return False
+        
+        new_value = after_filter[verification_column][0]
+        expected_value = update_data[verification_column]
+        
+        # Compare values (handle different types)
+        if new_value != expected_value:
+            print(f"[DataAccessService] ERROR: Update failed verification for discord_uid={discord_uid}, race={race}")
+            print(f"  Expected {verification_column}={expected_value}, got {new_value}")
+            return False
+        
+        return True
+    
     async def update_player_mmr(
         self,
         discord_uid: int,
@@ -1388,53 +1402,57 @@ class DataAccessService:
             print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
             return False
         
-        # Check if record exists
-        mask = (pl.col("discord_uid") == discord_uid) & (pl.col("race") == race)
-        if len(self._mmrs_1v1_df.filter(mask)) == 0:
-            print(f"[DataAccessService] WARNING: MMR record not found for {discord_uid}/{race}")
-            return False
+        async with self._mmr_lock:
+            # Prepare update data
+            update_data = {
+                "mmr": int(new_mmr),
+                "last_played": datetime.now(timezone.utc)
+            }
+            
+            if games_played is not None:
+                update_data["games_played"] = games_played
+            if games_won is not None:
+                update_data["games_won"] = games_won
+            if games_lost is not None:
+                update_data["games_lost"] = games_lost
+            if games_drawn is not None:
+                update_data["games_drawn"] = games_drawn
+            
+            # Update the in-memory DataFrame using the helper method
+            success = self._update_mmr_dataframe_row(discord_uid, race, update_data)
+            
+            if not success:
+                return False
+            
+            # Prepare database write data
+            write_data = {
+                'discord_uid': discord_uid,
+                'race': race,
+                'new_mmr': new_mmr
+            }
+            
+            if games_played is not None:
+                write_data['games_played'] = games_played
+            if games_won is not None:
+                write_data['games_won'] = games_won
+            if games_lost is not None:
+                write_data['games_lost'] = games_lost
+            if games_drawn is not None:
+                write_data['games_drawn'] = games_drawn
+            
+            # Queue database write
+            job = WriteJob(
+                job_type=WriteJobType.UPDATE_MMR,
+                data=write_data,
+                timestamp=time.time()
+            )
+            
+            await self._queue_write(job)
         
-        # Build update expressions
-        updates = {
-            "mmr": pl.when(mask).then(pl.lit(int(new_mmr))).otherwise(pl.col("mmr"))
-        }
-        
-        write_data = {
-            'discord_uid': discord_uid,
-            'race': race,
-            'new_mmr': new_mmr
-        }
-        
-        if games_played is not None:
-            updates["games_played"] = pl.when(mask).then(pl.lit(games_played)).otherwise(pl.col("games_played"))
-            write_data['games_played'] = games_played
-        
-        if games_won is not None:
-            updates["games_won"] = pl.when(mask).then(pl.lit(games_won)).otherwise(pl.col("games_won"))
-            write_data['games_won'] = games_won
-        
-        if games_lost is not None:
-            updates["games_lost"] = pl.when(mask).then(pl.lit(games_lost)).otherwise(pl.col("games_lost"))
-            write_data['games_lost'] = games_lost
-        
-        if games_drawn is not None:
-            updates["games_drawn"] = pl.when(mask).then(pl.lit(games_drawn)).otherwise(pl.col("games_drawn"))
-            write_data['games_drawn'] = games_drawn
-        
-        # Apply updates to DataFrame
-        self._mmrs_1v1_df = self._mmrs_1v1_df.with_columns(**updates)
-        
-        # Queue database write
-        job = WriteJob(
-            job_type=WriteJobType.UPDATE_MMR,
-            data=write_data,
-            timestamp=time.time()
-        )
-        
-        await self._queue_write(job)
-        
-        # Invalidate leaderboard cache - MMR has changed
-        self.invalidate_leaderboard_cache()
+        # Trigger ranking service refresh (outside lock to avoid deadlock)
+        from src.backend.services.app_context import ranking_service
+        if ranking_service:
+            await ranking_service.trigger_refresh()
         
         return True
     
@@ -1474,55 +1492,76 @@ class DataAccessService:
         # Ensure MMR is an integer
         mmr = int(mmr)
         
-        # Check if record exists
-        mask = (pl.col("discord_uid") == discord_uid) & (pl.col("race") == race)
-        existing = self._mmrs_1v1_df.filter(mask)
+        async with self._mmr_lock:
+            # Check if record exists
+            mask = (pl.col("discord_uid") == discord_uid) & (pl.col("race") == race)
+            existing = self._mmrs_1v1_df.filter(mask)
+            
+            if not existing.is_empty():
+                # --- UPDATE PATH ---
+                # Prepare update data
+                update_data = {
+                    "mmr": mmr,
+                    "player_name": player_name,
+                    "games_played": games_played,
+                    "games_won": games_won,
+                    "games_lost": games_lost,
+                    "games_drawn": games_drawn,
+                    "last_played": datetime.now(timezone.utc)
+                }
+                
+                # Update the in-memory DataFrame using the helper method
+                success = self._update_mmr_dataframe_row(discord_uid, race, update_data)
+                
+                if not success:
+                    print(f"[DataAccessService] ERROR: Failed to update MMR for {discord_uid}/{race}")
+                    return False
+            else:
+                # --- CREATE PATH ---
+                # Create new record with schema matching the existing DataFrame
+                new_row_data = {
+                    "id": None,  # Will be assigned by database
+                    "discord_uid": discord_uid,
+                    "player_name": player_name,
+                    "race": race,
+                    "mmr": mmr,
+                    "games_played": games_played,
+                    "games_won": games_won,
+                    "games_lost": games_lost,
+                    "games_drawn": games_drawn,
+                    "last_played": datetime.now(timezone.utc)
+                }
+                
+                # Create DataFrame with explicit schema to ensure compatibility
+                new_row_df = pl.DataFrame([new_row_data], schema=self._mmrs_1v1_df.schema)
+                
+                # Concatenate to add the new row
+                self._mmrs_1v1_df = pl.concat([self._mmrs_1v1_df, new_row_df])
+                
+                print(f"[DataAccessService] Created new MMR record for {discord_uid}/{race}")
+            
+            # Queue database write
+            job = WriteJob(
+                job_type=WriteJobType.CREATE_MMR,
+                data={
+                    'discord_uid': discord_uid,
+                    'player_name': player_name,
+                    'race': race,
+                    'mmr': mmr,
+                    'games_played': games_played,
+                    'games_won': games_won,
+                    'games_lost': games_lost,
+                    'games_drawn': games_drawn
+                },
+                timestamp=time.time()
+            )
+            
+            await self._queue_write(job)
         
-        if len(existing) > 0:
-            # Update existing record
-            updates = {
-                "mmr": pl.when(mask).then(pl.lit(mmr)).otherwise(pl.col("mmr")),
-                "player_name": pl.when(mask).then(pl.lit(player_name)).otherwise(pl.col("player_name")),
-                "games_played": pl.when(mask).then(pl.lit(games_played)).otherwise(pl.col("games_played")),
-                "games_won": pl.when(mask).then(pl.lit(games_won)).otherwise(pl.col("games_won")),
-                "games_lost": pl.when(mask).then(pl.lit(games_lost)).otherwise(pl.col("games_lost")),
-                "games_drawn": pl.when(mask).then(pl.lit(games_drawn)).otherwise(pl.col("games_drawn"))
-            }
-            self._mmrs_1v1_df = self._mmrs_1v1_df.with_columns(**updates)
-        else:
-            # Create new record with explicit integer type
-            new_row = pl.DataFrame({
-                "discord_uid": [discord_uid],
-                "player_name": [player_name],
-                "race": [race],
-                "mmr": pl.Series([mmr], dtype=pl.Int64),
-                "games_played": [games_played],
-                "games_won": [games_won],
-                "games_lost": [games_lost],
-                "games_drawn": [games_drawn]
-            })
-            self._mmrs_1v1_df = pl.concat([self._mmrs_1v1_df, new_row], how="diagonal")
-        
-        # Queue database write
-        job = WriteJob(
-            job_type=WriteJobType.CREATE_MMR,
-            data={
-                'discord_uid': discord_uid,
-                'player_name': player_name,
-                'race': race,
-                'mmr': mmr,
-                'games_played': games_played,
-                'games_won': games_won,
-                'games_lost': games_lost,
-                'games_drawn': games_drawn
-            },
-            timestamp=time.time()
-        )
-        
-        await self._queue_write(job)
-        
-        # Invalidate leaderboard cache - MMR has changed
-        self.invalidate_leaderboard_cache()
+        # Trigger ranking service refresh (outside lock to avoid deadlock)
+        from src.backend.services.app_context import ranking_service
+        if ranking_service:
+            await ranking_service.trigger_refresh()
         
         return True
     
@@ -2072,10 +2111,6 @@ class DataAccessService:
             await self._write_queue.put(job)
             self._total_writes_queued += 1
             
-            # Invalidate leaderboard cache - abort may affect standings if replay uploads affect records
-            # Abort itself doesn't change MMR, but we invalidate to be safe for any side effects
-            self.invalidate_leaderboard_cache()
-            
             return True
             
         except Exception as e:
@@ -2158,9 +2193,6 @@ class DataAccessService:
             
             await self._write_queue.put(job)
             self._total_writes_queued += 1
-            
-            # Invalidate leaderboard cache - MMR change indicates match completion
-            self.invalidate_leaderboard_cache()
             
             return True
             

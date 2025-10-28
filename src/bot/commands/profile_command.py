@@ -13,6 +13,7 @@ from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote,
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.utils.command_decorators import dm_only
 from src.backend.services.performance_service import FlowTracker
+from datetime import datetime, timezone
 
 
 # API Call / Data Handling
@@ -162,12 +163,19 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
         total_games_won = 0
         total_games_lost = 0
         total_games_drawn = 0
+        last_played_overall = None
         
         for mmr_entry in sorted_mmr_data:
             total_games_played += mmr_entry.get('games_played', 0)
             total_games_won += mmr_entry.get('games_won', 0)
             total_games_lost += mmr_entry.get('games_lost', 0)
             total_games_drawn += mmr_entry.get('games_drawn', 0)
+            
+            # Track the most recent last_played timestamp
+            last_played_dt = mmr_entry.get('last_played')
+            if last_played_dt:
+                if last_played_overall is None or last_played_dt > last_played_overall:
+                    last_played_overall = last_played_dt
         
         # Add Overall Statistics section if player has played games
         if total_games_played > 0:
@@ -175,6 +183,14 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
             overall_stats = f"- **Total Games:** {total_games_played}\n"
             overall_stats += f"- **Record:** {total_games_won}W-{total_games_lost}L-{total_games_drawn}D\n"
             overall_stats += f"- **Win Rate:** {overall_win_rate:.1f}%"
+            
+            # Add last played date if available
+            if last_played_overall:
+                if last_played_overall.tzinfo is None:
+                    last_played_overall = last_played_overall.replace(tzinfo=timezone.utc)
+                discord_ts = f"<t:{int(last_played_overall.timestamp())}:f>"
+                overall_stats += f"\n- **Last Played:** {discord_ts}"
+            
             embed.add_field(name="📈 Overall Statistics", value=overall_stats, inline=False)
             # Add spacing between sections
             embed.add_field(name="\n\n", value="\n\n", inline=False)
@@ -199,7 +215,7 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
                 
                 # Display "Unranked" for races with 0 games
                 if games_played == 0:
-                    bw_text += f"- {rank_emote} {race_emote} **{race_name}:** Unranked"
+                    bw_text += f"- {rank_emote} {race_emote} **{race_name}:** No MMR • No games played"
                 else:
                     bw_text += f"- {rank_emote} {race_emote} **{race_name}:** {mmr_value} MMR"
                     
@@ -207,6 +223,16 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
                     win_rate = (games_won / games_played * 100) if games_played > 0 else 0
                     bw_text += f" • {games_won}W-{games_lost}L-{games_drawn}D ({win_rate:.1f}%)"
                 
+                # Add last played information if available
+                last_played_dt = mmr_entry.get('last_played')
+                if last_played_dt and games_played > 0:
+                    # Ensure the datetime object is timezone-aware (it should be UTC)
+                    if last_played_dt.tzinfo is None:
+                        last_played_dt = last_played_dt.replace(tzinfo=timezone.utc)
+                    
+                    discord_ts = f"<t:{int(last_played_dt.timestamp())}:f>"
+                    bw_text += f"\n  - **Last Played:** {discord_ts}"
+
                 bw_text += "\n"
             
             bw_emote = get_game_emote('brood_war')
@@ -235,14 +261,24 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
                 
                 # Display "Unranked" for races with 0 games
                 if games_played == 0:
-                    sc2_text += f"- {rank_emote} {race_emote} **{race_name}:** Unranked"
+                    sc2_text += f"- {rank_emote} {race_emote} **{race_name}:** No MMR • No games played"
                 else:
                     sc2_text += f"- {rank_emote} {race_emote} **{race_name}:** {mmr_value} MMR"
                     
                     # Win/Loss record
                     win_rate = (games_won / games_played * 100) if games_played > 0 else 0
                     sc2_text += f" • {games_won}W-{games_lost}L-{games_drawn}D ({win_rate:.1f}%)"
-                
+
+                # Add last played information if available
+                last_played_dt = mmr_entry.get('last_played')
+                if last_played_dt and games_played > 0:
+                    # Ensure the datetime object is timezone-aware (it should be UTC)
+                    if last_played_dt.tzinfo is None:
+                        last_played_dt = last_played_dt.replace(tzinfo=timezone.utc)
+                        
+                    discord_ts = f"<t:{int(last_played_dt.timestamp())}:f>"
+                    sc2_text += f"\n  - **Last Played:** {discord_ts}"
+
                 sc2_text += "\n"
             
             sc2_emote = get_game_emote('starcraft_2')

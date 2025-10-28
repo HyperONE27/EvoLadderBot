@@ -85,7 +85,7 @@ class TestValidationService:
             ("עברית", True, None),
             ("ไทย", True, None),
             ("한", False, "at least 3 characters"),
-            ("이것은매우긴이름입니다", False, "cannot exceed 12 characters"),
+            ("이것은매우긴이름입니다정말", False, "cannot exceed 12 characters"),
             ("Test@User", False, "invalid characters"),
             ("User#123", False, "invalid characters"),
             ("Name$", False, "invalid characters"),

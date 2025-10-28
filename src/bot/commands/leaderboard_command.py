@@ -538,7 +538,7 @@ class LeaderboardView(discord.ui.View):
         # Always show the true total count in the footer
         # Use true_total_players if it exceeds the displayed count
         display_count = true_total_players if true_total_players > total_players else total_players
-        footer_text = f"Page {pagination_info['current_page']}/{pagination_info['total_pages']} • {display_count} players"
+        footer_text = f"Page {pagination_info['current_page']}/{pagination_info['total_pages']} • {display_count} players\n⚠️ Players who have not played in the last 2 weeks are not ranked or displayed on the leaderboard."
         
         # Add warning if true count exceeds 1000 (display limit due to Discord UI constraints)
         if true_total_players > 1000:
