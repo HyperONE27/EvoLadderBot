@@ -116,7 +116,7 @@
   - ✅ Removed all action deferral, since the bot is now so fast that deferral hurts UX
 
 ### MORE RANDOM BUGS???
-- ⏰ Accepting ToS does not properly record having accepted
+- ✅ Accepting ToS does not properly record having accepted (FIXED)
 
 ## PRE-BETA
 
@@ -144,3 +144,56 @@
   - ⏰ Wire up Paddle 
   - ❌ Add columns to `players` table for managing subscription status
   - ⏰ Create a new `subscriptions` table to handle subscription status management
+
+
+  ===
+
+Hi, all. Thanks for your ongoing patience and anticipation. The wait is almost over:
+# The SC: Evo Complete ranked ladder OPEN ALPHA launches this calendar week (Pacific Time).
+
+The core functionality for the alpha testing phase is already in place. I'm preparing a few final touches and tools so our bot team can quickly address any issues that occur during deployment without taking the bot down.
+## You can expect the following:
+- 🤖 **Automated Matchmaking:**
+  - The alpha boasts full support for 1v1.
+    - 2v2 and other gamemodes may be implemented for the beta testing phase and/or official release.
+  - You can queue with **up to two races** at once: one from Brood War and one from StarCraft II.
+  - Each of the six races has its **own separate MMR.**
+  - We're fine-tuning matchmaking algorithm parameters:
+    - During downtime, matches form quickly, even across wider skill gaps.
+    - During peak activity, opponents will be matched more closely in MMR.
+    - The matchmaker adjusts for players currently mid-match and those who have missed several rounds of matchmaking.
+  - Beginning in the beta, we'll experiment with **ping-weighted matchmaking** at lower MMRs, prioritizing smoother connections over absolute MMR proximity.
+- 🏆 **Global Leaderboard & Ranks**
+  - Ranks will be determined based on percentiles (:SRank: :ARank: :BRank: :CRank: :DRank: :ERank: :FRank:) and displayed on a global leaderboard.
+  - The leaderboard is filterable: you can view top players by race or country.
+- ⚔️ **Match Experience**
+  - The ladder bot automatically designates races, maps, and match settings based on player regions and preferences.
+  - The bot assigns a dedicated in-game channel for each match to help you find your opponents more easily.
+  - **Replay uploading** is required for match reporting:
+    - The bot parses and stores replay records.
+    - Due to technical limitations, reporting is manual for now — just click through a couple menus to confirm the winner.
+    - Semi-automatic verification is planned for the beta and beyond.
+  - **Mandatory match confirmation** ensures you're not stuck with an AFK opponent and can quickly queue again.
+  - **Limited match abortion** provides flexibility in the rare occasion you have to end a session early.
+- ⚖️ **Competitive Integrity**
+  - As a community-run project, the SC: Evo Complete ladder can enforce standards of fairness and integrity long absent from the official ladder.
+  - All bot interactions are logged and monitored for potential abuse.
+  - All replays are stored permanently and can be retrieved for future review or analysis.
+  - A dedicated team of volunteer admins will help investigate reports and uphold competitive integrity.
+  
+Please note:
+- The alpha and beta testing phases will be free for all players, but the ladder will transition to a **low-cost paid subscription model** for the official release.
+  - We want to ensure this cost is not a paywall, but a way to sustain what we’ve built together.
+  - It goes toward everything that makes SC: Evo Complete great:
+    - The servers that keep the ladder chugging.
+    - The maps and modeling you admire for hours.
+    - The tools that catch what breaks.
+    - The admins who keep matches fair.
+    - The developers who push update after update.
+    - The prize pools that serious tournaments deserve.
+  - We will strive to set the monthly cost as low as possible, at around **just a few dollars per month.**
+- Player stats and MMR **may or may not be** reset closer to the official launch date.
+
+This is an **alpha**, which means things **will** break! We're counting on your feedback to help us find and squash bugs, as well as report cheaters! We will have a dedicated channel for all reports.
+
+Thanks for tuning in. I will see you later this week!

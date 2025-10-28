@@ -282,12 +282,12 @@ class Matchmaker:
 		if effective_pop <= 0:
 			return 0.0
 
-		if effective_pop <= 25:
-			scale = 1.2  # amplify impact in small populations
-		elif effective_pop <= 100:
-			scale = 1.0  # balanced default
+		if effective_pop <= config.MM_POPULATION_THRESHOLD_LOW:
+			scale = config.MM_PRESSURE_SCALE_LOW_POP  # amplify impact in small populations
+		elif effective_pop <= config.MM_POPULATION_THRESHOLD_MID:
+			scale = config.MM_PRESSURE_SCALE_MID_POP  # balanced default
 		else:
-			scale = 0.8  # dampen for large populations
+			scale = config.MM_PRESSURE_SCALE_HIGH_POP  # dampen for large populations
 
 		return min(1.0, (scale * queue_size) / effective_pop)
 
@@ -444,7 +444,7 @@ class Matchmaker:
 		for player in lead_side:
 			mmr = player.get_effective_mmr(is_bw_match) or 0
 			distance_from_mean = abs(mmr - lead_mean)
-			priority = distance_from_mean + (10 * player.wait_cycles)
+			priority = distance_from_mean + (config.MM_WAIT_CYCLE_PRIORITY_BONUS * player.wait_cycles)
 			lead_side_with_priority.append((priority, player))
 		
 		# Sort by priority (highest first) - do this once outside the loop
@@ -502,9 +502,9 @@ class Matchmaker:
 		Returns:
 			In-game channel name in format scevo##
 		"""
-		ones_digit = match_id % 10
-		channel_number = 10 if ones_digit == 0 else ones_digit
-		return f"scevo{channel_number:02d}"
+		ones_digit = match_id % config.MM_IN_GAME_CHANNEL_BASE_NUMBER
+		channel_number = config.MM_IN_GAME_CHANNEL_BASE_NUMBER if ones_digit == 0 else ones_digit
+		return f"{config.MM_IN_GAME_CHANNEL_PREFIX}{channel_number:02d}"
 
 	def _get_available_maps(self, p1: Player, p2: Player) -> List[str]:
 		"""Get maps that haven't been vetoed by either player using maps service.
@@ -624,8 +624,8 @@ class Matchmaker:
 				p2_race = p2.get_race_for_match(True)  # BW race
 		
 			# Get current MMR values for both players
-			p1_mmr = int(p1.get_effective_mmr(is_bw_match) or 1500)
-			p2_mmr = int(p2.get_effective_mmr(not is_bw_match) or 1500)
+			p1_mmr = int(p1.get_effective_mmr(is_bw_match) or config.MMR_DEFAULT)
+			p2_mmr = int(p2.get_effective_mmr(not is_bw_match) or config.MMR_DEFAULT)
 			
 			flow.checkpoint(f"create_match_db_start_{p1.discord_user_id}_vs_{p2.discord_user_id}")
 			# Create the match record using DataAccessService (writes to memory + DB)
