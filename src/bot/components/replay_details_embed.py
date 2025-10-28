@@ -180,12 +180,56 @@ class ReplayDetailsEmbed:
             observer_names = ", ".join(observers_check['observers_found'])
             lines.append(f"- ❌ **Observers Detected:** Unauthorized observers found: `{observer_names}`.")
         
+        # Game privacy verification
+        privacy_check = results['game_privacy']
+        if privacy_check['success']:
+            lines.append(f"- ✅ **Game Privacy Setting:** `{privacy_check['found']}`")
+        else:
+            lines.append(
+                f"- ❌ **Game Privacy Setting:** Expected `{privacy_check['expected']}`, "
+                f"but found `{privacy_check['found']}`."
+            )
+        
+        # Game speed verification
+        speed_check = results['game_speed']
+        if speed_check['success']:
+            lines.append(f"- ✅ **Game Speed Setting:** `{speed_check['found']}`")
+        else:
+            lines.append(
+                f"- ❌ **Game Speed Setting:** Expected `{speed_check['expected']}`, "
+                f"but found `{speed_check['found']}`."
+            )
+        
+        # Game duration verification
+        duration_check = results['game_duration']
+        if duration_check['success']:
+            lines.append(f"- ✅ **Game Duration Setting:** `{duration_check['found']}`")
+        else:
+            lines.append(
+                f"- ❌ **Game Duration Setting:** Expected `{duration_check['expected']}`, "
+                f"but found `{duration_check['found']}`."
+            )
+        
+        # Locked alliances verification
+        alliances_check = results['locked_alliances']
+        if alliances_check['success']:
+            lines.append(f"- ✅ **Locked Alliances Setting:** `{alliances_check['found']}`")
+        else:
+            lines.append(
+                f"- ❌ **Locked Alliances Setting:** Expected `{alliances_check['expected']}`, "
+                f"but found `{alliances_check['found']}`."
+            )
+        
         # Overall status
         all_ok = all([
             races_check['success'],
             map_check['success'],
             timestamp_check['success'],
-            observers_check['success']
+            observers_check['success'],
+            privacy_check['success'],
+            speed_check['success'],
+            duration_check['success'],
+            alliances_check['success']
         ])
         
         lines.append("")  # Empty line for spacing

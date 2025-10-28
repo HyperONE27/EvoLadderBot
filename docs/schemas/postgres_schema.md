@@ -61,6 +61,10 @@ CREATE TABLE replays (
     observers               TEXT NOT NULL,
     map_name                TEXT NOT NULL,
     duration                INTEGER NOT NULL,
+    game_privacy            TEXT NOT NULL,          -- NEW
+    game_speed              TEXT NOT NULL,          -- NEW
+    game_duration_setting   TEXT NOT NULL,          -- NEW
+    locked_alliances        TEXT NOT NULL,          -- NEW
     uploaded_at             TIMESTAMPTZ NOT NULL
 );
 

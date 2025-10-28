@@ -1144,11 +1144,13 @@ class DatabaseWriter:
                 INSERT INTO replays (
                     replay_path, replay_hash, replay_date, player_1_name, player_2_name,
                     player_1_race, player_2_race, result, player_1_handle, player_2_handle,
-                    observers, map_name, duration, uploaded_at
+                    observers, map_name, duration, game_privacy, game_speed, game_duration_setting,
+                    locked_alliances, uploaded_at
                 ) VALUES (
                     :replay_path, :replay_hash, :replay_date, :player_1_name, :player_2_name,
                     :player_1_race, :player_2_race, :result, :player_1_handle, :player_2_handle,
-                    :observers, :map_name, :duration, :uploaded_at
+                    :observers, :map_name, :duration, :game_privacy, :game_speed, :game_duration_setting,
+                    :locked_alliances, :uploaded_at
                 )
                 """,
                 replay_data

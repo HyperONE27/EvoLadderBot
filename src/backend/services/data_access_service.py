@@ -285,6 +285,23 @@ class DataAccessService:
             self._replays_df = pl.DataFrame({
                 "id": pl.Series([], dtype=pl.Int64),
                 "replay_path": pl.Series([], dtype=pl.Utf8),
+                "replay_hash": pl.Series([], dtype=pl.Utf8),
+                "replay_date": pl.Series([], dtype=pl.Utf8),
+                "player_1_name": pl.Series([], dtype=pl.Utf8),
+                "player_2_name": pl.Series([], dtype=pl.Utf8),
+                "player_1_race": pl.Series([], dtype=pl.Utf8),
+                "player_2_race": pl.Series([], dtype=pl.Utf8),
+                "result": pl.Series([], dtype=pl.Int64),
+                "player_1_handle": pl.Series([], dtype=pl.Utf8),
+                "player_2_handle": pl.Series([], dtype=pl.Utf8),
+                "observers": pl.Series([], dtype=pl.Utf8),
+                "map_name": pl.Series([], dtype=pl.Utf8),
+                "duration": pl.Series([], dtype=pl.Int64),
+                "game_privacy": pl.Series([], dtype=pl.Utf8),
+                "game_speed": pl.Series([], dtype=pl.Utf8),
+                "game_duration_setting": pl.Series([], dtype=pl.Utf8),
+                "locked_alliances": pl.Series([], dtype=pl.Utf8),
+                "uploaded_at": pl.Series([], dtype=pl.Utf8),
             })
         print(f"[DataAccessService]   Replays loaded: {len(self._replays_df)} rows, size: {self._replays_df.estimated_size('mb'):.2f} MB")
     

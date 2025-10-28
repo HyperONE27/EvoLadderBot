@@ -17,9 +17,16 @@ from src.backend.core.types import (
     RaceVerificationDetail,
     MapVerificationDetail,
     TimestampVerificationDetail,
-    ObserverVerificationDetail
+    ObserverVerificationDetail,
+    GameSettingVerificationDetail
 )
-from src.backend.core.config import REPLAY_TIMESTAMP_WINDOW_MINUTES
+from src.backend.core.config import (
+    REPLAY_TIMESTAMP_WINDOW_MINUTES,
+    EXPECTED_GAME_PRIVACY,
+    EXPECTED_GAME_SPEED,
+    EXPECTED_GAME_DURATION,
+    EXPECTED_LOCKED_ALLIANCES
+)
 from src.backend.services.leaderboard_service import LeaderboardService
 
 
@@ -723,24 +730,40 @@ class MatchCompletionService:
         timestamp_detail = self._verify_timestamp(match_details, replay_data)
         observers_detail = self._verify_observers(replay_data)
         
+        # Verify game settings
+        privacy_detail = self._verify_game_setting(replay_data, "game_privacy", EXPECTED_GAME_PRIVACY)
+        speed_detail = self._verify_game_setting(replay_data, "game_speed", EXPECTED_GAME_SPEED)
+        duration_detail = self._verify_game_setting(replay_data, "game_duration_setting", EXPECTED_GAME_DURATION)
+        alliances_detail = self._verify_game_setting(replay_data, "locked_alliances", EXPECTED_LOCKED_ALLIANCES)
+        
         result = VerificationResult(
             races=races_detail,
             map=map_detail,
             timestamp=timestamp_detail,
-            observers=observers_detail
+            observers=observers_detail,
+            game_privacy=privacy_detail,
+            game_speed=speed_detail,
+            game_duration=duration_detail,
+            locked_alliances=alliances_detail
         )
         
         all_passed = all([
             races_detail['success'],
             map_detail['success'],
             timestamp_detail['success'],
-            observers_detail['success']
+            observers_detail['success'],
+            privacy_detail['success'],
+            speed_detail['success'],
+            duration_detail['success'],
+            alliances_detail['success']
         ])
         status_icon = "✅" if all_passed else "⚠️"
         self.logger.info(
             f"{status_icon} Verification for match {match_id}: "
             f"races={races_detail['success']}, map={map_detail['success']}, "
-            f"timestamp={timestamp_detail['success']}, observers={observers_detail['success']}"
+            f"timestamp={timestamp_detail['success']}, observers={observers_detail['success']}, "
+            f"privacy={privacy_detail['success']}, speed={speed_detail['success']}, "
+            f"duration={duration_detail['success']}, alliances={alliances_detail['success']}"
         )
         
         return result
@@ -914,6 +937,29 @@ class MatchCompletionService:
         return ObserverVerificationDetail(
             success=(len(observers_list) == 0),
             observers_found=observers_list
+        )
+
+    def _verify_game_setting(self, replay_details: Dict[str, any], field_name: str, expected_value: any) -> GameSettingVerificationDetail:
+        """
+        Verifies a specific game setting (privacy, speed, duration, locked alliances)
+        against an expected value.
+        
+        Args:
+            replay_details: Replay data from _replays_df
+            field_name: The name of the field to verify (e.g., "game_privacy", "game_speed")
+            expected_value: The expected value for the field
+            
+        Returns:
+            GameSettingVerificationDetail with success status and game settings
+        """
+        actual_value = replay_details.get(field_name)
+
+        is_valid = actual_value == expected_value
+
+        return GameSettingVerificationDetail(
+            success=is_valid,
+            expected=expected_value,
+            found=actual_value
         )
     
     # REMOVED FOR DECOUPLING

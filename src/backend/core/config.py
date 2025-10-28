@@ -63,6 +63,12 @@ WAL_PATH = get_wal_path()
 # Used to verify that replays are from the correct match window.
 REPLAY_TIMESTAMP_WINDOW_MINUTES = 20
 
+# Expected game settings for replay verification
+EXPECTED_GAME_PRIVACY = "Normal"
+EXPECTED_GAME_SPEED = "Faster"
+EXPECTED_GAME_DURATION = "Infinite"
+EXPECTED_LOCKED_ALLIANCES = "Yes"
+
 # --- Matchmaking Configuration ---
 # Time window in seconds to consider a player "active"
 MM_ACTIVITY_WINDOW_SECONDS = 15 * 60
@@ -71,7 +77,7 @@ MM_ACTIVITY_WINDOW_SECONDS = 15 * 60
 MM_PRUNE_INTERVAL_SECONDS = 60
 
 # Global matchmaking interval (matchwave) in seconds
-MM_MATCH_INTERVAL_SECONDS = 45
+MM_MATCH_INTERVAL_SECONDS = 5
 
 # Time window in seconds for players to abort a match after it's found
 MM_ABORT_TIMER_SECONDS = 180

@@ -194,7 +194,11 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
             "player_2_handle": player_2_handle,
             "observers": observers,  # Keep as list, will be JSON-encoded later
             "map_name": replay.map_name,
-            "duration": duration if duration is not None else 0
+            "duration": duration if duration is not None else 0,
+            "game_privacy": replay.attributes[16]["Game Privacy"],
+            "game_speed": replay.attributes[16]["Game Speed"],
+            "game_duration_setting": replay.attributes[16]["Game Duration"],
+            "locked_alliances": replay.attributes[16]["Locked Alliances"]
         }
         
     except Exception as e:
@@ -230,6 +234,10 @@ class ReplayParsed:
     observers: list[str]
     map_name: str
     duration: int
+    game_privacy: str
+    game_speed: str
+    game_duration_setting: str
+    locked_alliances: str
 
 class ReplayService:
     """
@@ -362,6 +370,10 @@ class ReplayService:
                 "observers": json.dumps(parsed_dict["observers"]),  # Convert list to JSON
                 "map_name": parsed_dict["map_name"],
                 "duration": parsed_dict["duration"],
+                "game_privacy": parsed_dict["game_privacy"],
+                "game_speed": parsed_dict["game_speed"],
+                "game_duration_setting": parsed_dict["game_duration_setting"],
+                "locked_alliances": parsed_dict["locked_alliances"],
                 "replay_path": replay_url,  # Store URL (Supabase) or path (local fallback)
                 "uploaded_at": get_timestamp()  # Add uploaded_at timestamp (new column)
             }

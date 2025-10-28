@@ -35,6 +35,13 @@ class ObserverVerificationDetail(TypedDict):
     observers_found: List[str]
 
 
+class GameSettingVerificationDetail(TypedDict):
+    """Detailed result of a single game setting verification check."""
+    success: bool
+    expected: str
+    found: str
+
+
 class VerificationResult(TypedDict):
     """
     Standardized result of all replay verification checks with rich context.
@@ -44,9 +51,17 @@ class VerificationResult(TypedDict):
         map: Detailed map verification result
         timestamp: Detailed timestamp verification result
         observers: Detailed observer verification result
+        game_privacy: Detailed game privacy verification result
+        game_speed: Detailed game speed verification result
+        game_duration: Detailed game duration verification result
+        locked_alliances: Detailed locked alliances verification result
     """
     races: RaceVerificationDetail
     map: MapVerificationDetail
     timestamp: TimestampVerificationDetail
     observers: ObserverVerificationDetail
+    game_privacy: GameSettingVerificationDetail
+    game_speed: GameSettingVerificationDetail
+    game_duration: GameSettingVerificationDetail
+    locked_alliances: GameSettingVerificationDetail
 
