@@ -59,18 +59,14 @@
 - ✅ De-activate the outdated /activation command
 
 ### Matchmaking & Match Flow
-- ⏰ Fill out the full cross-table for 16 regions
-- ⏰ Get the matchmaker to correctly assign server based on the cross-table
+- ✅ Fill out the full cross-table for 16 regions
+- ✅ Get the matchmaker to correctly assign server based on the cross-table
 - ✅ Add more information/clean up existing information on the match found embed
 - ✅ Matchmaker now assigns matches in waves occurring every 45 seconds, up from 5, trading time for fairer matches
 - ✅ Expanding MMR window for matchmaking scales dynamically with active player count and proportion of active player count 
 - ✅ 99 race conditions on the wall, 99 race conditions, take one down, pass it around, 157 race conditions on the wall...
 - ✅ Forbid queueing while a match is active, or queueing again while already queueing.
 - ✅ Consolidated management of QueueSearchingView locks into a single class
-- ⏰ FIGURE OUT HOW TO BALANCE LOW PING MATCHING WITH FAIREST MMR MATCHING
-  - High MMR/top competitive players are used to playing across oceans and continents
-  - Low MMR players just want to not fight the game
-  - Tune the matchmaker to prefer low ping at lower MMR at expense of MMR fairness? Default to strict MMR fairness higher up??? Is this fair?
 
 ### Match Reporting & Completion
 - ✅ Make the match reporting pipeline more robust
@@ -100,9 +96,9 @@
 - ✅ Send a message to the user with this information when they upload a replay
 - ❌ Update the MatchFoundViewEmbed with this information
   - ✅ Send a new embed message with this information
-- ⏰ Check that uploaded replays comply with the match parameters
-  - ⏰ Throw a warning if the map link do not match exactly
-  - ❓ Reject the replay outright if the wrong races are present
+- ✅ Check that uploaded replays comply with the match parameters
+  - ✅ Throw a warning if the map link do not match exactly
+  - ❌ Reject the replay outright if the wrong races are present
 
 ### System Hardening & Optimization
 - ✅ No 60-second leaderboard refresh loop, invalidate cache specifically only when services modify MMR
@@ -134,7 +130,12 @@
   - ⏰ Add support for koKR and other languages
   - ⏰ Replace 1 million hardcoded formatted strings...sobbing
 - Matchmaking:
+  - ⏰ Add relative ping weights for each matchup in the cross-table
   - ⏰ More ping-aware algorithm to reduce bad matches at lower MMRs
+  - ⏰ FIGURE OUT HOW TO BALANCE LOW PING MATCHING WITH FAIREST MMR MATCHING
+    - ⏰ High MMR/top competitive players are used to playing across oceans and continents
+    - ⏰ Low MMR players just want to not fight the game
+    - ⏰ Tune the matchmaker to prefer low ping at lower MMR at expense of MMR fairness? Default to strict MMR fairness higher up??? Is this fair?
 
 ## PRE-RELEASE
 

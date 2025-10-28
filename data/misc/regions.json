@@ -18,19 +18,19 @@
         {"code": "FER", "name": "Far East Russia",                  "globe_emote": "AS"}
     ],
     "game_servers": [
-        {"code": "USW", "name": "Western United States", "region_code": "AM"},
-        {"code": "USC", "name": "Central United States", "region_code": "AM"},
-        {"code": "USE", "name": "Eastern United States", "region_code": "AM"},
-        {"code": "BRZ", "name": "Brazil",                "region_code": "AM"},
-        {"code": "EUC", "name": "Central Europe",        "region_code": "EU"},
-        {"code": "SNG", "name": "Singapore",             "region_code": "AS"},
-        {"code": "AUS", "name": "Australia",             "region_code": "AM"},
-        {"code": "KOR", "name": "Korea",                 "region_code": "AS"},
-        {"code": "TWN", "name": "Taiwan",                "region_code": "AS"}
+        {"code": "USW", "name": "Western United States","short_name": "US West",               "region_code": "AM"},
+        {"code": "USC", "name": "Central United States","short_name": "US Central",     "region_code": "AM"},
+        {"code": "USE", "name": "Eastern United States","short_name": "US East",        "region_code": "AM"},
+        {"code": "BRZ", "name": "Brazil",               "short_name": "South America",  "region_code": "AM"},
+        {"code": "EUC", "name": "Central Europe",       "short_name": "Central EU",     "region_code": "EU"},
+        {"code": "SNG", "name": "Singapore",            "short_name": "Singapore",      "region_code": "AS"},
+        {"code": "AUS", "name": "Australia",            "short_name": "Australia",      "region_code": "AM"},
+        {"code": "KOR", "name": "Korea",                "short_name": "Korea",          "region_code": "AS"},
+        {"code": "TWN", "name": "Taiwan",               "short_name": "Taiwan",         "region_code": "AS"}
     ],
     "game_regions": [
-        {"code": "AM",  "name": "Americas"},
-        {"code": "EU",  "name": "Europe"},
-        {"code": "AS",  "name": "Asia"}
+        {"code": "AM",  "name": "Americas", "short_name": "Americas"},
+        {"code": "EU",  "name": "Europe", "short_name": "Europe"},
+        {"code": "AS",  "name": "Asia", "short_name": "Asia"}
     ]   
 }

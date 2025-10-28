@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import os
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from src.backend.services.base_config_service import BaseConfigService
+
+
+class RegionMappingNotFoundError(Exception):
+    """Raised when no server mapping exists for a given region pair."""
+    pass
 
 
 class RegionsService(BaseConfigService):
@@ -15,6 +22,14 @@ class RegionsService(BaseConfigService):
         self._residential_regions_cache: Optional[List[Dict[str, Any]]] = None
         self._game_servers_cache: Optional[List[Dict[str, Any]]] = None
         self._game_regions_cache: Optional[List[Dict[str, Any]]] = None
+        
+        self._cross_region_data: List[Dict[str, Any]] = []
+        self._cross_region_map: Dict[frozenset, str] = {}
+        self._short_name_to_name_map: Dict[str, str] = {}
+        self._name_to_short_name_map: Dict[str, str] = {}
+        
+        self._load_cross_region_data()
+        self._build_lookup_maps()
 
     # ------------------------------------------------------------------
     # Base overrides
@@ -55,6 +70,48 @@ class RegionsService(BaseConfigService):
         self._residential_regions_cache = None
         self._game_servers_cache = None
         self._game_regions_cache = None
+    
+    def _load_cross_region_data(self) -> None:
+        """Load cross-region mapping data from cross_table.json."""
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.dirname(__file__)
+        )))
+        cross_table_path = os.path.join(base_dir, "data", "misc", "cross_table.json")
+        
+        if not os.path.exists(cross_table_path):
+            raise FileNotFoundError(f"Cross-region mapping file not found: {cross_table_path}")
+        
+        with open(cross_table_path, 'r', encoding='utf-8') as f:
+            self._cross_region_data = json.load(f)
+        
+        if not isinstance(self._cross_region_data, list):
+            raise ValueError("cross_table.json must contain a list of region mappings")
+    
+    def _build_lookup_maps(self) -> None:
+        """Build efficient lookup maps for O(1) access."""
+        self._cross_region_map = {}
+        for entry in self._cross_region_data:
+            region_1 = entry.get("region_1")
+            region_2 = entry.get("region_2")
+            mapping = entry.get("mapping")
+            
+            if not region_1 or not region_2 or not mapping:
+                continue
+            
+            key = frozenset([region_1, region_2])
+            self._cross_region_map[key] = mapping
+        
+        game_servers = self.get_game_servers()
+        self._short_name_to_name_map = {
+            server['short_name']: server['name'] 
+            for server in game_servers 
+            if 'short_name' in server and 'name' in server
+        }
+        self._name_to_short_name_map = {
+            server['name']: server['short_name'] 
+            for server in game_servers 
+            if 'short_name' in server and 'name' in server
+        }
 
     # ------------------------------------------------------------------
     # Public API
@@ -174,3 +231,83 @@ class RegionsService(BaseConfigService):
 
     def get_all_regions(self) -> List[Dict[str, Any]]:
         return self.get_residential_regions()
+    
+    def get_game_server_name_by_short_name(self, short_name: str) -> str:
+        """
+        Convert a game server short_name to its full name.
+        
+        Args:
+            short_name: The short name of the server (e.g., "US West")
+            
+        Returns:
+            The full server name (e.g., "Western United States")
+            
+        Raises:
+            ValueError: If the short_name is not found
+        """
+        if short_name not in self._short_name_to_name_map:
+            raise ValueError(f"Invalid game server short_name: '{short_name}'")
+        return self._short_name_to_name_map[short_name]
+    
+    def get_game_server_short_name_by_name(self, server_name: str) -> str:
+        """
+        Convert a game server full name to its short_name.
+        
+        Args:
+            server_name: The full name of the server (e.g., "Western United States")
+            
+        Returns:
+            The short server name (e.g., "US West")
+            
+        Raises:
+            ValueError: If the server_name is not found
+        """
+        if server_name not in self._name_to_short_name_map:
+            raise ValueError(f"Invalid game server name: '{server_name}'")
+        return self._name_to_short_name_map[server_name]
+    
+    def get_game_server_code_by_name(self, server_name: str) -> str:
+        """
+        Get the game server code by its full name.
+        
+        Args:
+            server_name: The full name of the server (e.g., "Western United States")
+            
+        Returns:
+            The server code (e.g., "USW")
+            
+        Raises:
+            ValueError: If the server_name is not found
+        """
+        for server in self.get_game_servers():
+            if server.get('name') == server_name:
+                code = server.get('code')
+                if code:
+                    return code
+        raise ValueError(f"Invalid game server name: '{server_name}'")
+    
+    def get_match_server(self, region1: str, region2: str) -> str:
+        """
+        Determine the optimal game server for a match based on player regions.
+        
+        Args:
+            region1: First player's residential region code (e.g., "NAW")
+            region2: Second player's residential region code (e.g., "NAE")
+            
+        Returns:
+            The full server name for the match (e.g., "Central United States")
+            
+        Raises:
+            RegionMappingNotFoundError: If no mapping exists for the region pair
+            ValueError: If the mapped short_name is invalid
+        """
+        lookup_key = frozenset([region1, region2])
+        short_name = self._cross_region_map.get(lookup_key)
+        
+        if short_name is None:
+            raise RegionMappingNotFoundError(
+                f"No server mapping exists for the region pair: ({region1}, {region2})"
+            )
+        
+        server_name = self.get_game_server_name_by_short_name(short_name)
+        return server_name

@@ -1025,6 +1025,8 @@ class MatchFoundView(discord.ui.View):
             description="",  # Empty description as requested
             color=discord.Color.teal()
         )
+
+        embed.add_field(name="\u3164", value="\u3164", inline=False)
         
         # Player Information section
         embed.add_field(
@@ -1161,7 +1163,7 @@ class MatchFoundView(discord.ui.View):
         embed.add_field(name="\u3164", value="\u3164", inline=False)
 
         abort_validity_value = (
-            f"You can use the button below to abort the match if you are unable to play.\n"
+            f"You can use the 🛑 **Abort Match** button if you are unable to play.\n"
             f"Aborting matches has no MMR penalty, but you have a limited number per month.\n" 
             f"**Abusing this feature (e.g., dodging matchups/opponents, repeatedly aborting at "
             f"the last second, wasting the time of others, etc.) will result in a BAN.**\n"
@@ -1172,9 +1174,10 @@ class MatchFoundView(discord.ui.View):
         embed.add_field(name="\u3164", value="\u3164", inline=False)
 
         embed.add_field(
-            name="⚠️ As soon as you see this, press the ✅ Confirm Match button below. ⚠️",
+            name="⚠️ YOU MUST CONFIRM THE MATCH BELOW, BEFORE IT STARTS! ⚠️",
             value=(
-                f"This confirms that you have seen the match and are ready to play. "
+                f"Press ✅ **Confirm Match** as soon as you see this. "
+                f"This tells the system you are here and ready to play. "
                 f"If you do not confirm, you will automatically be dropped from the match by <t:{self.abort_deadline}:T> (<t:{self.abort_deadline}:R>). "
                 f"**Dropping too many matches will result in a BAN.**"
             ),
@@ -1564,17 +1567,6 @@ class MatchConfirmButton(discord.ui.Button):
         # Immediately defer the response
         await interaction.response.defer()
         
-        # Validate that the user is one of the two players
-        if player_discord_uid not in [
-            self.parent_view.match_result.player_1_discord_id,
-            self.parent_view.match_result.player_2_discord_id
-        ]:
-            await interaction.followup.send(
-                "❌ You are not a participant in this match.",
-                ephemeral=True
-            )
-            return
-        
         # Call the backend to record the confirmation
         from src.backend.services.match_completion_service import MatchCompletionService
         match_completion_service = MatchCompletionService()
@@ -1585,6 +1577,7 @@ class MatchConfirmButton(discord.ui.Button):
             # Disable the confirm and abort buttons and update the view
             self.disabled = True
             self.parent_view.abort_button.disabled = True
+            self.style = discord.ButtonStyle.secondary
             async with self.parent_view.edit_lock:
                 await interaction.edit_original_response(view=self.parent_view)
             

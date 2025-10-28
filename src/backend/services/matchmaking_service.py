@@ -50,12 +50,14 @@ class MatchResult:
 
 class Player:
 	def __init__(self, discord_user_id: int, user_id: str, preferences: QueuePreferences, 
-				 bw_mmr: Optional[int] = None, sc2_mmr: Optional[int] = None):
+				 bw_mmr: Optional[int] = None, sc2_mmr: Optional[int] = None, 
+				 residential_region: Optional[str] = None):
 		self.discord_user_id = discord_user_id
 		self.user_id = user_id
 		self.preferences = preferences
 		self.bw_mmr = bw_mmr
 		self.sc2_mmr = sc2_mmr
+		self.residential_region = residential_region
 		self.queue_start_time = time.time()
 		self.wait_cycles = 0
 		
@@ -137,9 +139,13 @@ class Matchmaker:
 		from src.backend.services.data_access_service import DataAccessService
 		flow = FlowTracker(f"matchmaker.add_player", user_id=player.discord_user_id)
 		
-		flow.checkpoint("start_mmr_lookups")
-		# Get MMRs from DataAccessService (in-memory, sub-millisecond)
+		flow.checkpoint("start_data_lookups")
+		# Get MMRs and region from DataAccessService (in-memory, sub-millisecond)
 		data_service = DataAccessService()
+		
+		player_info = data_service.get_player_info(player.discord_user_id)
+		if player_info and player_info.get('region'):
+			player.residential_region = player_info['region']
 		
 		for race in player.preferences.selected_races:
 			# Get MMR from DataAccessService (in-memory, instant)
@@ -171,7 +177,7 @@ class Matchmaker:
 				elif race.startswith("sc2_"):
 					player.sc2_mmr = default_mmr
 
-		flow.checkpoint("mmr_lookups_complete")
+		flow.checkpoint("data_lookups_complete")
 		
 		async with self.lock:
 			flow.checkpoint("acquired_lock")
@@ -581,7 +587,29 @@ class Matchmaker:
 				continue
 					
 			map_choice = random.choice(available_maps)
-			server_choice = self.regions_service.get_random_game_server()
+			
+			# Determine optimal server based on player regions
+			if p1.residential_region and p2.residential_region:
+				try:
+					from src.backend.services.regions_service import RegionMappingNotFoundError
+					server_name = self.regions_service.get_match_server(
+						p1.residential_region, 
+						p2.residential_region
+					)
+					server_choice = self.regions_service.get_game_server_code_by_name(server_name)
+					print(f"   🌍 Server selection: {p1.residential_region} + {p2.residential_region} → {server_choice}")
+				except RegionMappingNotFoundError as e:
+					print(f"   ⚠️  Region mapping not found: {e}")
+					print(f"   🎲 Falling back to random server selection")
+					server_choice = self.regions_service.get_random_game_server()
+				except ValueError as e:
+					print(f"   ⚠️  Server name lookup failed: {e}")
+					print(f"   🎲 Falling back to random server selection")
+					server_choice = self.regions_service.get_random_game_server()
+			else:
+				print(f"   ⚠️  Missing region data for one or both players")
+				print(f"   🎲 Using random server selection")
+				server_choice = self.regions_service.get_random_game_server()
 				
 			# Determine which races to use for the match
 			# p1 is always from the lead side, p2 is always from the follow side
