@@ -133,6 +133,9 @@ class Matchmaker:
 		
 		# Track last matchmaking time for accurate timer display
 		self.last_match_time: float = time.time()
+		
+		# Store the planned next matchmaking time for accurate display
+		self.next_match_time: float = time.time()
 
 	async def add_player(self, player: Player) -> None:
 		"""Add a player to the matchmaking pool with MMR lookup."""
@@ -762,6 +765,10 @@ class Matchmaker:
 			now = time.time()
 			# Use floor division to avoid floating remainder jitter
 			next_tick = math.floor(now / interval + 1.0) * interval
+			
+			# Store the next match time BEFORE sleeping so display is accurate
+			self.next_match_time = next_tick
+			
 			sleep_duration = next_tick - now
 			
 			# Clamp small negatives to zero (clock drift or scheduler delay)
@@ -785,6 +792,12 @@ class Matchmaker:
 			if len(self.players) > 0:
 				print(f"⏰ Checking for matches with {len(self.players)} players in queue...")
 			await self.attempt_match()
+			
+			# After matching, immediately calculate and store the next match time
+			# This ensures the display is accurate even during processing
+			now_after_match = time.time()
+			next_tick_after_match = math.floor(now_after_match / interval + 1.0) * interval
+			self.next_match_time = next_tick_after_match
 
 	def stop(self) -> None:
 		"""Stop matchmaking loop."""
@@ -1097,17 +1110,21 @@ class Matchmaker:
 
 	def get_next_matchmaking_time(self) -> int:
 		"""
-		Get the Unix timestamp of the next matchmaking wave using optimized epoch sync.
+		Get the Unix timestamp of the next matchmaking wave.
+		Uses the pre-calculated next_match_time from the run loop for accurate synchronization.
 		
 		Returns:
 			int: Unix timestamp of the next matchmaking wave
 		"""
 		import math
 		
+		# If matchmaker is running, use the stored next match time for accuracy
+		if self.running and self.next_match_time > time.time():
+			return int(self.next_match_time)
+		
+		# Otherwise, calculate it (fallback for when matchmaker hasn't started)
 		now = time.time()
 		interval = self.MATCH_INTERVAL_SECONDS
-		
-		# Use floor division to avoid floating remainder jitter
 		next_tick = math.floor(now / interval + 1.0) * interval
 		
 		return int(next_tick)
