@@ -1094,11 +1094,14 @@ class DatabaseWriter:
         """
         Insert a new replay record into the replays table.
         
+        This operation is idempotent - if a replay with the same replay_path already exists,
+        the insert will be silently skipped. This makes WAL replay safe during crash recovery.
+        
         Args:
             replay_data: A dictionary containing the replay's parsed data.
             
         Returns:
-            True if the insertion was successful, False otherwise.
+            True if the insertion was successful or the replay already exists, False on other errors.
         """
         try:
             print(f"[DatabaseWriter] Inserting replay: {replay_data.get('replay_hash', 'unknown')}")
@@ -1115,10 +1118,11 @@ class DatabaseWriter:
                     :observers, :map_name, :duration, :game_privacy, :game_speed, :game_duration_setting,
                     :locked_alliances, :uploaded_at
                 )
+                ON CONFLICT (replay_path) DO NOTHING
                 """,
                 replay_data
             )
-            print(f"[DatabaseWriter] Replay inserted successfully: {replay_data.get('replay_hash', 'unknown')}")
+            print(f"[DatabaseWriter] Replay inserted successfully (or already exists): {replay_data.get('replay_hash', 'unknown')}")
             return True
         except Exception as e:
             print(f"Database error in insert_replay: {e}")

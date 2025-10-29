@@ -2,25 +2,39 @@
 Supabase Storage Service for file uploads (primarily replay files).
 
 Handles uploading, downloading, and managing files in Supabase Storage buckets.
+
+NOTE: Uses direct HTTP API instead of supabase-py client to avoid creating
+unnecessary database connections. The supabase-py client creates 10+ connections
+to PostgREST/Realtime even when only using Storage.
 """
 
 from typing import Optional
 import os
 from datetime import datetime
+import httpx
 
 
 class StorageService:
-    """Handle file uploads to Supabase Storage."""
+    """Handle file uploads to Supabase Storage using direct HTTP API."""
     
     def __init__(self):
-        """Initialize Supabase storage client."""
-        from supabase import create_client, Client
+        """Initialize Supabase storage client with HTTP-only approach."""
         from src.bot.config import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_BUCKET_NAME
         
-        # Use service role key for admin operations (can bypass RLS)
-        self.supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        self.supabase_url = SUPABASE_URL
+        self.service_role_key = SUPABASE_SERVICE_ROLE_KEY
         self.bucket_name = SUPABASE_BUCKET_NAME
-        print(f"[Storage] Initialized with bucket: {self.bucket_name}")
+        
+        # Storage API endpoint (no database connections needed)
+        self.storage_url = f"{SUPABASE_URL}/storage/v1"
+        
+        # HTTP headers for authentication
+        self.headers = {
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "apikey": SUPABASE_SERVICE_ROLE_KEY
+        }
+        
+        print(f"[Storage] Initialized with bucket: {self.bucket_name} (HTTP-only, no DB connections)")
     
     def upload_replay(
         self,
@@ -59,37 +73,44 @@ class StorageService:
         file_path = f"{match_id}/{filename}"
         
         try:
-            # Upload to Supabase Storage
+            # Upload to Supabase Storage via direct HTTP API
             print(f"[Storage] Uploading replay to: {file_path}")
             
-            # Attempt upload
-            try:
-                response = self.supabase.storage.from_(self.bucket_name).upload(
-                    path=file_path,
-                    file=file_data,
-                    file_options={"content-type": "application/octet-stream"}
+            upload_url = f"{self.storage_url}/object/{self.bucket_name}/{file_path}"
+            
+            with httpx.Client(timeout=30.0) as client:
+                # Attempt upload
+                response = client.post(
+                    upload_url,
+                    headers={
+                        **self.headers,
+                        "Content-Type": "application/octet-stream"
+                    },
+                    content=file_data
                 )
-            except Exception as upload_error:
+                
                 # If file already exists (409 Duplicate), remove and retry
-                error_str = str(upload_error)
-                if "409" in error_str or "Duplicate" in error_str or "already exists" in error_str:
+                if response.status_code == 409:
                     print(f"[Storage] File exists, removing and re-uploading...")
-                    try:
-                        self.supabase.storage.from_(self.bucket_name).remove([file_path])
-                    except:
-                        pass  # Ignore errors during removal
+                    
+                    delete_url = f"{self.storage_url}/object/{self.bucket_name}/{file_path}"
+                    client.delete(delete_url, headers=self.headers)
                     
                     # Retry upload
-                    response = self.supabase.storage.from_(self.bucket_name).upload(
-                        path=file_path,
-                        file=file_data,
-                        file_options={"content-type": "application/octet-stream"}
+                    response = client.post(
+                        upload_url,
+                        headers={
+                            **self.headers,
+                            "Content-Type": "application/octet-stream"
+                        },
+                        content=file_data
                     )
-                else:
-                    raise  # Re-raise if it's a different error
+                
+                if response.status_code not in (200, 201):
+                    raise Exception(f"Upload failed: {response.status_code} {response.text}")
             
-            # Get public URL
-            public_url = self.supabase.storage.from_(self.bucket_name).get_public_url(file_path)
+            # Construct public URL
+            public_url = f"{self.supabase_url}/storage/v1/object/public/{self.bucket_name}/{file_path}"
             
             print(f"[Storage] Upload successful: {public_url}")
             return public_url
@@ -117,9 +138,19 @@ class StorageService:
         
         try:
             print(f"[Storage] Downloading replay from: {file_path}")
-            response = self.supabase.storage.from_(self.bucket_name).download(file_path)
-            print(f"[Storage] ✓ Download successful: {len(response)} bytes")
-            return response
+            
+            download_url = f"{self.storage_url}/object/{self.bucket_name}/{file_path}"
+            
+            with httpx.Client(timeout=30.0) as client:
+                response = client.get(download_url, headers=self.headers)
+                
+                if response.status_code != 200:
+                    raise Exception(f"Download failed: {response.status_code} {response.text}")
+                
+                file_bytes = response.content
+                print(f"[Storage] ✓ Download successful: {len(file_bytes)} bytes")
+                return file_bytes
+                
         except Exception as e:
             print(f"[Storage] ERROR downloading replay: {e}")
             return None
@@ -140,7 +171,7 @@ class StorageService:
             Public URL to replay file
         """
         file_path = f"{match_id}/player_{player_discord_uid}.SC2Replay"
-        return self.supabase.storage.from_(self.bucket_name).get_public_url(file_path)
+        return f"{self.supabase_url}/storage/v1/object/public/{self.bucket_name}/{file_path}"
     
     def delete_replay(
         self,
@@ -161,9 +192,18 @@ class StorageService:
         
         try:
             print(f"[Storage] Deleting replay: {file_path}")
-            self.supabase.storage.from_(self.bucket_name).remove([file_path])
+            
+            delete_url = f"{self.storage_url}/object/{self.bucket_name}/{file_path}"
+            
+            with httpx.Client(timeout=30.0) as client:
+                response = client.delete(delete_url, headers=self.headers)
+                
+                if response.status_code not in (200, 204):
+                    raise Exception(f"Delete failed: {response.status_code} {response.text}")
+            
             print(f"[Storage] ✓ Deletion successful")
             return True
+            
         except Exception as e:
             print(f"[Storage] ERROR deleting replay: {e}")
             return False
@@ -179,9 +219,26 @@ class StorageService:
             List of file paths
         """
         try:
-            folder_path = f"{match_id}/"
-            response = self.supabase.storage.from_(self.bucket_name).list(folder_path)
-            return [item['name'] for item in response]
+            folder_path = f"{match_id}"
+            list_url = f"{self.storage_url}/object/list/{self.bucket_name}"
+            
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(
+                    list_url,
+                    headers=self.headers,
+                    json={
+                        "prefix": folder_path,
+                        "limit": 100,
+                        "offset": 0
+                    }
+                )
+                
+                if response.status_code != 200:
+                    raise Exception(f"List failed: {response.status_code} {response.text}")
+                
+                items = response.json()
+                return [item['name'] for item in items if 'name' in item]
+                
         except Exception as e:
             print(f"[Storage] ERROR listing replays: {e}")
             return []
@@ -207,16 +264,24 @@ class StorageService:
         """
         try:
             print(f"[Storage] Uploading file to: {file_path}")
-            self.supabase.storage.from_(self.bucket_name).upload(
-                path=file_path,
-                file=file_data,
-                file_options={
-                    "content-type": content_type,
-                    "upsert": upsert
-                }
-            )
             
-            public_url = self.supabase.storage.from_(self.bucket_name).get_public_url(file_path)
+            upload_url = f"{self.storage_url}/object/{self.bucket_name}/{file_path}"
+            
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(
+                    upload_url,
+                    headers={
+                        **self.headers,
+                        "Content-Type": content_type,
+                        "x-upsert": "true" if upsert else "false"
+                    },
+                    content=file_data
+                )
+                
+                if response.status_code not in (200, 201):
+                    raise Exception(f"Upload failed: {response.status_code} {response.text}")
+            
+            public_url = f"{self.supabase_url}/storage/v1/object/public/{self.bucket_name}/{file_path}"
             print(f"[Storage] ✓ Upload successful: {public_url}")
             return public_url
             
@@ -232,9 +297,18 @@ class StorageService:
             Dictionary with bucket information
         """
         try:
-            buckets = self.supabase.storage.list_buckets()
-            bucket = next((b for b in buckets if b['name'] == self.bucket_name), None)
-            return bucket if bucket else {}
+            list_buckets_url = f"{self.storage_url}/bucket"
+            
+            with httpx.Client(timeout=30.0) as client:
+                response = client.get(list_buckets_url, headers=self.headers)
+                
+                if response.status_code != 200:
+                    raise Exception(f"List buckets failed: {response.status_code} {response.text}")
+                
+                buckets = response.json()
+                bucket = next((b for b in buckets if b.get('name') == self.bucket_name), None)
+                return bucket if bucket else {}
+                
         except Exception as e:
             print(f"[Storage] ERROR getting bucket info: {e}")
             return {}
