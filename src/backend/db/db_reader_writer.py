@@ -1089,6 +1089,59 @@ class DatabaseWriter:
         except Exception as e:
             print(f"Database error in insert_command_call: {e}")
             return False
+    
+    def log_admin_action(
+        self,
+        admin_discord_uid: int,
+        admin_username: str,
+        action_type: str,
+        target_player_uid: int,
+        target_match_id: int,
+        action_details: str,
+        reason: str
+    ) -> bool:
+        """
+        Logs an admin action to the admin_actions table.
+        
+        Args:
+            admin_discord_uid: Discord UID of admin performing action
+            admin_username: Display name of admin
+            action_type: Type of action performed
+            target_player_uid: Target player UID (can be None)
+            target_match_id: Target match ID (can be None)
+            action_details: JSON string with action details
+            reason: Human-readable reason for action
+        """
+        try:
+            current_timestamp = get_timestamp()
+            self.adapter.execute_insert(
+                """
+                INSERT INTO admin_actions (
+                    admin_discord_uid, admin_username, action_type,
+                    target_player_uid, target_match_id, action_details,
+                    reason, performed_at
+                )
+                VALUES (
+                    :admin_uid, :admin_name, :action_type,
+                    :target_player, :target_match, :details,
+                    :reason, :performed_at
+                )
+                """,
+                {
+                    'admin_uid': admin_discord_uid,
+                    'admin_name': admin_username,
+                    'action_type': action_type,
+                    'target_player': target_player_uid,
+                    'target_match': target_match_id,
+                    'details': action_details,
+                    'reason': reason,
+                    'performed_at': current_timestamp
+                }
+            )
+            return True
+        except Exception as e:
+            print(f"Database error in log_admin_action: {e}")
+            return False
 
     def insert_replay(self, replay_data: Dict[str, Any]) -> bool:
         """

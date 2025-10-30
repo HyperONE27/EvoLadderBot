@@ -115,6 +115,19 @@ CREATE TABLE preferences_1v1 (
     FOREIGN KEY (discord_uid) REFERENCES players(discord_uid)
 );
 
+CREATE TABLE admin_actions (
+    id                      SERIAL PRIMARY KEY,
+    admin_discord_uid       BIGINT NOT NULL,
+    admin_username          TEXT NOT NULL,
+    action_type             TEXT NOT NULL,
+    target_player_uid       BIGINT,
+    target_match_id         INTEGER,
+    action_details          JSONB NOT NULL,
+    reason                  TEXT,
+    performed_at            TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_discord_uid) REFERENCES players(discord_uid)
+);
+
 -- =============================================
 -- "SET IT AND FORGET IT" ANALYTICS FEATURES
 -- =============================================
@@ -144,3 +157,10 @@ CREATE INDEX idx_replays_date ON replays(replay_date);
 CREATE INDEX idx_command_calls_discord_uid ON command_calls(discord_uid);
 CREATE INDEX idx_command_calls_called_at ON command_calls(called_at);
 CREATE INDEX idx_command_calls_command ON command_calls(command);
+
+-- Admin action audit trail (security, compliance)
+CREATE INDEX idx_admin_actions_performed_at ON admin_actions(performed_at DESC);
+CREATE INDEX idx_admin_actions_admin ON admin_actions(admin_discord_uid);
+CREATE INDEX idx_admin_actions_target_player ON admin_actions(target_player_uid);
+CREATE INDEX idx_admin_actions_target_match ON admin_actions(target_match_id);
+CREATE INDEX idx_admin_actions_type ON admin_actions(action_type);

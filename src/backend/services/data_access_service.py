@@ -50,6 +50,7 @@ class WriteJobType(Enum):
     INSERT_REPLAY = "insert_replay"
     LOG_PLAYER_ACTION = "log_player_action"
     INSERT_COMMAND_CALL = "insert_command_call"
+    LOG_ADMIN_ACTION = "log_admin_action"
     ABORT_MATCH = "abort_match"
     SYSTEM_ABORT_UNCONFIRMED = "system_abort_unconfirmed"
 
@@ -729,6 +730,19 @@ class DataAccessService:
                     job.data['discord_uid'],
                     job.data['player_name'],
                     job.data['command']
+                )
+            
+            elif job.job_type == WriteJobType.LOG_ADMIN_ACTION:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.log_admin_action,
+                    job.data['admin_discord_uid'],
+                    job.data['admin_username'],
+                    job.data['action_type'],
+                    job.data['target_player_uid'],
+                    job.data['target_match_id'],
+                    job.data['action_details'],
+                    job.data['reason']
                 )
             
             elif job.job_type == WriteJobType.UPDATE_MATCH_REPORT:
@@ -1972,6 +1986,47 @@ class DataAccessService:
         job = WriteJob(
             job_type=WriteJobType.INSERT_COMMAND_CALL,
             data=job_data,
+            timestamp=time.time()
+        )
+        
+        await self._queue_write(job)
+    
+    async def log_admin_action(
+        self,
+        admin_discord_uid: int,
+        admin_username: str,
+        action_type: str,
+        target_player_uid: Optional[int] = None,
+        target_match_id: Optional[int] = None,
+        action_details: Optional[Dict[str, Any]] = None,
+        reason: Optional[str] = None
+    ) -> None:
+        """
+        Log an admin action to the admin_actions table.
+        
+        This is write-only (not stored in memory) and processes asynchronously.
+        All admin operations should log through this method for audit trail.
+        
+        Args:
+            admin_discord_uid: Discord user ID of admin performing action
+            admin_username: Display name of admin
+            action_type: Type of action (e.g., 'resolve_conflict', 'adjust_mmr')
+            target_player_uid: Discord UID of target player (if applicable)
+            target_match_id: Match ID being modified (if applicable)
+            action_details: JSON-serializable dict with action details
+            reason: Human-readable reason for the action
+        """
+        job = WriteJob(
+            job_type=WriteJobType.LOG_ADMIN_ACTION,
+            data={
+                'admin_discord_uid': admin_discord_uid,
+                'admin_username': admin_username,
+                'action_type': action_type,
+                'target_player_uid': target_player_uid,
+                'target_match_id': target_match_id,
+                'action_details': json.dumps(action_details or {}),
+                'reason': reason
+            },
             timestamp=time.time()
         )
         

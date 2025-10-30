@@ -1568,8 +1568,7 @@ class MatchConfirmButton(discord.ui.Button):
         await interaction.response.defer()
         
         # Call the backend to record the confirmation
-        from src.backend.services.match_completion_service import MatchCompletionService
-        match_completion_service = MatchCompletionService()
+        from src.backend.services.app_context import match_completion_service
         
         try:
             await match_completion_service.confirm_match(match_id, player_discord_uid)

@@ -10,6 +10,7 @@ from src.backend.services.matchmaking_service import matchmaker
 from src.backend.services.app_context import data_access_service
 from src.bot.bot_setup import EvoLadderBot
 from src.bot.commands.activate_command import register_activate_command  # DISABLED: Obsolete command
+from src.bot.commands.admin_command import register_admin_commands
 from src.bot.commands.help_command import register_help_command
 from src.bot.commands.leaderboard_command import register_leaderboard_command
 from src.bot.commands.profile_command import register_profile_command
@@ -66,6 +67,7 @@ async def on_message(message):
 
 def register_commands(bot: commands.Bot):
     # register_activate_command(bot.tree)  # DISABLED: Obsolete command
+    register_admin_commands(bot.tree)
     register_help_command(bot.tree)
     register_leaderboard_command(bot.tree)
     register_profile_command(bot.tree)

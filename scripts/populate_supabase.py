@@ -174,6 +174,47 @@ def insert_preferences(cursor, preferences):
     return inserted, 0
 
 
+def create_admin_actions_table(cursor):
+    """Create admin_actions table if it doesn't exist"""
+    print(f"\n🔧 Creating admin_actions table (if not exists)...", flush=True)
+    
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS admin_actions (
+                id                  SERIAL PRIMARY KEY,
+                admin_discord_uid   BIGINT NOT NULL,
+                admin_username      TEXT NOT NULL,
+                action_type         TEXT NOT NULL,
+                target_player_uid   BIGINT,
+                target_match_id     INTEGER,
+                action_details      JSONB NOT NULL,
+                reason              TEXT,
+                performed_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                
+                FOREIGN KEY (admin_discord_uid) REFERENCES players(discord_uid)
+            )
+        """)
+        print(f"  ✅ admin_actions table created/verified", flush=True)
+        
+        # Create indexes
+        indexes = [
+            "CREATE INDEX IF NOT EXISTS idx_admin_actions_performed_at ON admin_actions(performed_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_admin_actions_admin ON admin_actions(admin_discord_uid)",
+            "CREATE INDEX IF NOT EXISTS idx_admin_actions_target_player ON admin_actions(target_player_uid)",
+            "CREATE INDEX IF NOT EXISTS idx_admin_actions_target_match ON admin_actions(target_match_id)",
+            "CREATE INDEX IF NOT EXISTS idx_admin_actions_type ON admin_actions(action_type)"
+        ]
+        
+        for index_sql in indexes:
+            cursor.execute(index_sql)
+        
+        print(f"  ✅ Indexes created/verified", flush=True)
+        
+    except Exception as e:
+        print(f"  ⚠️  Error creating admin_actions table: {e}", flush=True)
+        raise
+
+
 def verify_data(cursor):
     """Verify inserted data"""
     print(f"\n🔍 Verifying data...", flush=True)
@@ -193,6 +234,11 @@ def verify_data(cursor):
     pref_count = cursor.fetchone()[0]
     print(f"  Preferences in database: {pref_count}", flush=True)
     
+    # Count admin actions
+    cursor.execute("SELECT COUNT(*) FROM admin_actions")
+    admin_count = cursor.fetchone()[0]
+    print(f"  Admin actions in database: {admin_count}", flush=True)
+    
     # Sample data - get first player
     cursor.execute("""
         SELECT p.player_name, p.country, COUNT(m.id) as mmr_count
@@ -208,7 +254,7 @@ def verify_data(cursor):
         print(f"  Country: {sample[1]}", flush=True)
         print(f"  MMR records: {sample[2]}", flush=True)
     
-    return player_count, mmr_count, pref_count
+    return player_count, mmr_count, pref_count, admin_count
 
 
 def main():
@@ -253,6 +299,10 @@ def main():
             with conn.cursor() as cursor:
                 print(f"✅ Connected to Supabase", flush=True)
                 
+                # Create admin_actions table if needed
+                create_admin_actions_table(cursor)
+                conn.commit()
+                
                 # Insert data
                 print(f"\n📊 Starting data insertion...", flush=True)
                 player_stats = insert_players(cursor, data['players'])
@@ -264,7 +314,7 @@ def main():
                 print(f"\n✅ All changes committed to database", flush=True)
                 
                 # Verify data
-                player_count, mmr_count, pref_count = verify_data(cursor)
+                player_count, mmr_count, pref_count, admin_count = verify_data(cursor)
                 
     except Exception as e:
         print(f"\n❌ Database error: {e}", flush=True)
@@ -283,6 +333,7 @@ def main():
     print(f"  Players: {player_count}", flush=True)
     print(f"  MMR records: {mmr_count}", flush=True)
     print(f"  Preferences: {pref_count}", flush=True)
+    print(f"  Admin actions: {admin_count}", flush=True)
     print("=" * 60, flush=True)
     print("🎉 Population complete!", flush=True)
     print("=" * 60, flush=True)

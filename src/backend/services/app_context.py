@@ -19,6 +19,7 @@ Usage:
 """
 
 # Database imports removed - all services now use DataAccessService
+from src.backend.services.admin_service import admin_service
 from src.backend.services.command_guard_service import CommandGuardService
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.leaderboard_service import LeaderboardService
@@ -146,5 +147,7 @@ __all__ = [
     "match_completion_service",
     "notification_service",
     "queue_service",
+    # Admin services
+    "admin_service",
 ]
 
