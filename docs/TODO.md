@@ -118,6 +118,46 @@
 ### MORE RANDOM BUGS???
 - ✅ Accepting ToS does not properly record having accepted (FIXED)
 
+### Admin Commands
+- Adjust MMR: ⚠️ Seems functional
+  - ✅ MMR successfully updated
+  - ⚠️ Player does not get a notification ([AdminCommand] Cannot send notification: bot instance not available)
+- Clear Queue: ⚠️ Incomplete
+  - ✅ Players are removed from the queue
+  - ⚠️ Player does not get a notification ([AdminCommand] Cannot send notification: bot instance not available)
+  - ❌ Player remains in queue-locked state, cannot queue again
+- Player: ⚠️ Mostly functional
+  - ✅ All information technically present and accounted for
+  - ⚠️ Active Matches list needs to be pruned down
+  - ⚠️ To be honest, this should just follow the formatting for the user /profile command, but with extra sections
+- Snapshot: ⚠️ Functional
+  - ✅ Info technically all present
+  - ⚠️ Could/should include more detail about
+    - Players in queue and their races
+    - Ongoing matches and their IDs and players
+    - A couple other metrics
+- Match: ⚠️ Functional, but could use improvement
+  - ✅ JSON payload is complete
+  - ⚠️ Could use a guide for admins on how to interpret values
+- Reset Aborts:
+  - ✅ Abort count successfully updated
+  - ⚠️ Player does not get a notification ([AdminCommand] Cannot send notification: bot instance not available)
+  - ⚠️ Confirm embed does not show the old amount, only the complete embed does
+- Resolve Match: ❌ Broken
+  - ❌ Never recognizes a conflicted state
+  - ❌ Should be able to resolve the match no matter what
+- Remove Queue: ⚠️ Incomplete
+  - ✅ Players are removed from the queue
+  - ⚠️ Player does not get a notification ([AdminCommand] Cannot send notification: bot instance not available)
+  - ❌ Player remains in queue-locked state, cannot queue again
+- Needed additional features:
+  - ⏰ Match resolution must remove queue-locked state mid-match
+  - 
+
+### Other Last Minute Stuff
+- ⏰ Improve the matchmaking algorithm
+- ⏰ Send a follow-up message to players who do not confirm match in half the abort countdown timer after match assignment
+
 ## PRE-BETA
 
 - Command timeouts:

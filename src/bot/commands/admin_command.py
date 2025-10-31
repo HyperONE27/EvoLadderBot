@@ -23,6 +23,7 @@ import time
 from src.backend.services.app_context import admin_service
 from src.backend.services.process_pool_health import _bot_instance
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
+from src.bot.config import GLOBAL_TIMEOUT
 
 
 # ========== NOTIFICATION HELPER ==========
@@ -141,8 +142,13 @@ def format_conflict_match(conflict: dict) -> str:
     return "\n".join(lines)
 
 
-def format_player_state(state: dict) -> str:
-    """Format player state for human reading."""
+def format_player_state(state: dict) -> dict:
+    """
+    Format player state into embed fields (each under 4096 chars).
+    
+    Returns:
+        Dict with 'fields' (list of dicts with name/value) and 'title'
+    """
     
     def format_report(report):
         if report is None:
@@ -152,38 +158,123 @@ def format_player_state(state: dict) -> str:
     
     info = state['player_info']
     if not info:
-        return "Player not found"
+        return {
+            'title': 'Player Not Found',
+            'fields': []
+        }
     
-    lines = [
-        f"=== PLAYER STATE: {info.get('player_name', 'Unknown')} ===",
-        f"Discord ID: {info['discord_uid']}",
-        f"Country: {info.get('country', 'None')}",
-        f"Region: {info.get('region', 'None')}",
-        f"Remaining Aborts: {info.get('remaining_aborts', 0)}",
-        "",
-        "**MMRs:**"
-    ]
+    fields = []
     
+    # Basic info
+    basic_info = (
+        f"**Discord ID:** {info['discord_uid']}\n"
+        f"**Country:** {info.get('country', 'None')}\n"
+        f"**Region:** {info.get('region', 'None')}\n"
+        f"**Remaining Aborts:** {info.get('remaining_aborts', 0)}"
+    )
+    fields.append({
+        'name': 'Basic Info',
+        'value': basic_info,
+        'inline': True
+    })
+    
+    # MMRs
+    mmr_lines = []
     for race, mmr_data in state['mmrs'].items():
-        lines.append(f"  {race}: {mmr_data['mmr']} ({mmr_data['games_played']} games)")
+        mmr_lines.append(f"{race}: {mmr_data['mmr']} ({mmr_data['games_played']} games)")
     
-    lines.append("")
-    lines.append(f"**Queue Status:** {'✅ IN QUEUE' if state['queue_status']['in_queue'] else '❌ Not in queue'}")
+    if mmr_lines:
+        mmr_value = "\n".join(mmr_lines)
+        # Keep under 1024 chars per field (safe margin from 4096 limit)
+        if len(mmr_value) > 1024:
+            # Split into chunks if needed
+            chunks = []
+            current_chunk = []
+            for line in mmr_lines:
+                test_chunk = "\n".join(current_chunk + [line])
+                if len(test_chunk) > 1024:
+                    if current_chunk:
+                        chunks.append("\n".join(current_chunk))
+                    current_chunk = [line]
+                else:
+                    current_chunk.append(line)
+            if current_chunk:
+                chunks.append("\n".join(current_chunk))
+            
+            for i, chunk in enumerate(chunks):
+                fields.append({
+                    'name': f'MMRs (Part {i+1})' if len(chunks) > 1 else 'MMRs',
+                    'value': chunk,
+                    'inline': True
+                })
+        else:
+            fields.append({
+                'name': 'MMRs',
+                'value': mmr_value,
+                'inline': True
+            })
     
+    # Queue Status
+    queue_status = f"**In Queue:** {'✅ Yes' if state['queue_status']['in_queue'] else '❌ No'}"
     if state['queue_status']['details']:
         details = state['queue_status']['details']
-        lines.append(f"  Wait time: {details['wait_time']:.0f}s")
-        lines.append(f"  Races: {', '.join(details['races'])}")
+        queue_status += f"\n**Wait Time:** {details['wait_time']:.0f}s\n**Races:** {', '.join(details['races'])}"
     
-    lines.append("")
-    lines.append(f"**Active Matches:** {len(state['active_matches'])}")
+    fields.append({
+        'name': 'Queue Status',
+        'value': queue_status,
+        'inline': True
+    })
     
-    for match in state['active_matches']:
-        lines.append(f"  Match #{match['match_id']} ({match['status']})")
-        lines.append(f"    My report: {format_report(match['my_report'])}")
-        lines.append(f"    Their report: {format_report(match['their_report'])}")
+    # Active Matches
+    if state['active_matches']:
+        match_lines = []
+        for match in state['active_matches']:
+            match_lines.append(
+                f"**Match #{match['match_id']}** ({match['status']})\n"
+                f"  My Report: {format_report(match['my_report'])}\n"
+                f"  Their Report: {format_report(match['their_report'])}"
+            )
+        
+        matches_value = "\n".join(match_lines)
+        # Keep under 1024 chars per field
+        if len(matches_value) > 1024:
+            chunks = []
+            current_chunk = []
+            for line in match_lines:
+                test_chunk = "\n".join(current_chunk + [line])
+                if len(test_chunk) > 1024:
+                    if current_chunk:
+                        chunks.append("\n".join(current_chunk))
+                    current_chunk = [line]
+                else:
+                    current_chunk.append(line)
+            if current_chunk:
+                chunks.append("\n".join(current_chunk))
+            
+            for i, chunk in enumerate(chunks):
+                fields.append({
+                    'name': f'Active Matches (Part {i+1})',
+                    'value': chunk,
+                    'inline': False
+                })
+        else:
+            fields.append({
+                'name': 'Active Matches',
+                'value': matches_value,
+                'inline': False
+            })
+    else:
+        fields.append({
+            'name': 'Active Matches',
+            'value': 'None',
+            'inline': False
+        })
     
-    return "\n".join(lines)
+    return {
+        'title': f"Player State: {info.get('player_name', 'Unknown')}",
+        'fields': fields
+    }
 
 
 # Load admin IDs from admins.json
@@ -249,10 +340,19 @@ class AdminConfirmationView(View):
     
     Buttons can only be interacted with by the specific admin who initiated the command,
     even if other admins are present. This prevents accidental or unauthorized interactions.
+    
+    IMPORTANT: interaction_check properly handles unauthorized clicks WITHOUT consuming
+    the view's interaction lifecycle, so the authorized admin can still interact later.
     """
     
-    def __init__(self, timeout: int = 60):
-        super().__init__(timeout=timeout)
+    def __init__(self, timeout: int = None):
+        """
+        Initialize admin confirmation view.
+        
+        Args:
+            timeout: View timeout in seconds (default: GLOBAL_TIMEOUT from config)
+        """
+        super().__init__(timeout=timeout or GLOBAL_TIMEOUT)
         self._original_admin_id: Optional[int] = None
     
     def set_admin(self, admin_id: int):
@@ -260,18 +360,51 @@ class AdminConfirmationView(View):
         self._original_admin_id = admin_id
     
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Ensure only the original admin who initiated the command can interact with buttons."""
+        """
+        Ensure only the original admin who initiated the command can interact with buttons.
+        
+        This method handles unauthorized interactions by:
+        1. Deferring the interaction (prevents "interaction failed" error)
+        2. Sending an ephemeral followup (shows helpful message to unauthorized user)
+        3. Returning False (prevents button callback from running)
+        4. Keeping the view alive (authorized admin can still interact)
+        """
         if interaction.user.id != self._original_admin_id:
-            await interaction.response.send_message(
-                embed=discord.Embed(
-                    title="🚫 Admin Button Restricted",
-                    description=f"Only <@{self._original_admin_id}> can interact with these buttons.",
-                    color=discord.Color.red()
-                ),
-                ephemeral=True
-            )
+            # Defer first to acknowledge the interaction without consuming response
+            try:
+                await interaction.response.defer(ephemeral=True)
+            except discord.errors.NotFound:
+                # Interaction already acknowledged (shouldn't happen, but handle gracefully)
+                pass
+            
+            # Send ephemeral followup instead of response to avoid consuming interaction
+            try:
+                await interaction.followup.send(
+                    embed=discord.Embed(
+                        title="🚫 Admin Button Restricted",
+                        description=f"Only <@{self._original_admin_id}> can interact with these buttons.",
+                        color=discord.Color.red()
+                    ),
+                    ephemeral=True
+                )
+            except Exception as e:
+                print(f"[AdminConfirmationView] Failed to send rejection message: {e}")
+            
+            # Return False to prevent callback execution
+            # The view remains active for the authorized admin
             return False
+        
         return True
+    
+    async def on_timeout(self):
+        """
+        Handle view timeout - disable all buttons and provide feedback.
+        
+        This is called when the view times out (default 5 minutes).
+        Note: We can't edit the message here as we don't have a reference to it,
+        but the buttons will automatically be disabled by Discord.
+        """
+        print(f"[AdminConfirmationView] View timed out for admin {self._original_admin_id}")
 
 
 def register_admin_commands(tree: app_commands.CommandTree):
@@ -328,11 +461,19 @@ def register_admin_commands(tree: app_commands.CommandTree):
         state = await admin_service.get_player_full_state(uid)
         formatted = format_player_state(state)
         
+        # Build embed with multiple fields instead of long description
         embed = discord.Embed(
-            title="Admin Player State",
-            description=formatted,
+            title=formatted['title'],
             color=discord.Color.blue()
         )
+        
+        # Add all fields to embed
+        for field in formatted['fields']:
+            embed.add_field(
+                name=field['name'],
+                value=field['value'],
+                inline=field.get('inline', False)
+            )
         
         await interaction.followup.send(embed=embed)
     
@@ -390,7 +531,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
             color=color
         )
         
-        view = AdminConfirmationView(timeout=60)
+        view = AdminConfirmationView()
         view.set_admin(interaction.user.id)
         
         confirm_btn = ConfirmButton(confirm_callback, label="Admin Confirm", row=0)
