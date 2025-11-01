@@ -16,9 +16,16 @@ _bot_instance: Optional[object] = None
 
 
 def set_bot_instance(bot):
-    """Set the bot instance for health checking."""
+    """Set the bot instance for health checking and notifications."""
     global _bot_instance
     _bot_instance = bot
+    print(f"[BotInstance] ✅ Bot instance set successfully: {bot is not None}")
+    print(f"[BotInstance] Bot user: {getattr(bot, 'user', 'Not logged in yet')}")
+
+
+def get_bot_instance():
+    """Get the global bot instance (access dynamically, not at import time)."""
+    return _bot_instance
 
 
 async def ensure_process_pool_healthy() -> bool:

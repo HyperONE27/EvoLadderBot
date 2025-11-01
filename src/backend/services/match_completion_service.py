@@ -215,20 +215,16 @@ class MatchCompletionService:
             if not match_data:
                 raise ValueError(f"[MatchCompletion] Match {match_id} not found in DataAccessService memory")
             
-            # Check current status - if already processed, skip
-            current_status = match_data.get('status', 'IN_PROGRESS')
+            # Check current state - if already processed, skip
             p1_report = match_data.get('player_1_report')
             p2_report = match_data.get('player_2_report')
-
             match_result = match_data.get('match_result')
             
-            print(f"🔍 CHECK: Match {match_id} status={current_status}, reports: p1={p1_report}, p2={p2_report}, result={match_result}")
+            print(f"🔍 CHECK: Match {match_id} reports: p1={p1_report}, p2={p2_report}, result={match_result}")
             
             # Abort if any report indicates an abort, or if the match_result is definitively -1
             if p1_report in [-3, -4] or p2_report in [-3, -4] or match_result == -1:
-                print(f"🚫 Match {match_id} was aborted")
-                # Atomically transition to ABORTED state
-                data_service.update_match_status(match_id, 'ABORTED')
+                print(f"🚫 Match {match_id} was aborted (result={match_result})")
                 self.processed_matches.add(match_id)  # Mark as processed
                 await self._handle_match_abort(match_id, match_data)
                 

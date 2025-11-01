@@ -16,6 +16,7 @@ from typing import Optional, List, Dict, Any
 import polars as pl
 
 from src.backend.services.data_access_service import DataAccessService
+from src.backend.services.app_context import mmr_service
 
 
 class AdminService:
@@ -34,6 +35,51 @@ class AdminService:
     def __init__(self):
         self.data_service = DataAccessService()
         self.action_log = []
+    
+    async def _clear_player_queue_lock(self, discord_uid: int) -> None:
+        """
+        Clear all queue-lock states for a player.
+        
+        This removes the player from:
+        - queue_searching_view_manager (active queue views)
+        - match_results (active match results)
+        - channel_to_match_view_map (active match views)
+        
+        Args:
+            discord_uid: Player's Discord ID
+        """
+        try:
+            from src.bot.commands.queue_command import (
+                queue_searching_view_manager,
+                match_results,
+                channel_to_match_view_map
+            )
+            
+            # Clear from queue searching view manager
+            await queue_searching_view_manager.unregister(discord_uid, deactivate=True)
+            print(f"[AdminService] Cleared queue view for player {discord_uid}")
+            
+            # Clear from match_results
+            if discord_uid in match_results:
+                del match_results[discord_uid]
+                print(f"[AdminService] Cleared match result for player {discord_uid}")
+            
+            # Clear from channel_to_match_view_map (find channels associated with this player)
+            channels_to_remove = []
+            for channel_id, view in channel_to_match_view_map.items():
+                if hasattr(view, 'match_result'):
+                    match_result = view.match_result
+                    if (match_result.player_1_discord_id == discord_uid or 
+                        match_result.player_2_discord_id == discord_uid):
+                        channels_to_remove.append(channel_id)
+            
+            for channel_id in channels_to_remove:
+                del channel_to_match_view_map[channel_id]
+                print(f"[AdminService] Cleared match view for player {discord_uid} in channel {channel_id}")
+            
+        except Exception as e:
+            print(f"[AdminService] WARNING: Error clearing queue lock for {discord_uid}: {e}")
+            # Don't fail the whole operation if queue lock clearing fails
     
     async def resolve_user(self, user_input: str) -> Optional[Dict[str, Any]]:
         """
@@ -84,10 +130,10 @@ class AdminService:
         if player_info:
             return {
                 'discord_uid': discord_uid,
-                'player_name': player_info.get('player_name', 'Unknown')
+                'player_name': player_info.get('player_name')
             }
         
-        return {'discord_uid': discord_uid, 'player_name': 'Unknown'}
+        return {'discord_uid': discord_uid, 'player_name': None}
     
     # ========== LAYER 1: READ-ONLY INSPECTION ==========
     
@@ -106,17 +152,37 @@ class AdminService:
         
         queue_service = get_queue_service()
         
+        # Get queue player details for display
+        queue_players_raw = self._get_queue_snapshot(queue_service) if queue_service else []
+        queue_player_strings = [
+            f"<@{p['discord_id']}> ({', '.join(p['races'])}) - {p['wait_time']:.0f}s"
+            for p in queue_players_raw[:10]  # Limit to 10 for display
+        ]
+        
+        # Get active match details for display
+        active_matches = list(match_completion_service.monitored_matches) if match_completion_service else []
+        match_strings = []
+        for match_id in active_matches[:10]:  # Limit to 10 for display
+            match_data = self.data_service.get_match(match_id)
+            if match_data:
+                status = match_data.get('status')
+                p1_name = self.data_service.get_player_info(match_data['player_1_discord_uid'])
+                p2_name = self.data_service.get_player_info(match_data['player_2_discord_uid'])
+                p1_display = p1_name.get('player_name', 'Player1') if p1_name else 'Player1'
+                p2_display = p2_name.get('player_name', 'Player2') if p2_name else 'Player2'
+                match_strings.append(f"Match #{match_id}: {p1_display} vs {p2_display} ({status})")
+        
         return {
             'timestamp': datetime.now(timezone.utc).isoformat(),
             'memory': self._get_memory_stats(),
             'data_frames': self._get_dataframe_stats(),
             'queue': {
                 'size': queue_service.get_queue_size() if queue_service else 0,
-                'players': self._get_queue_snapshot(queue_service) if queue_service else []
+                'players': queue_player_strings
             },
             'matches': {
-                'active': len(match_completion_service.monitored_matches),
-                'list': list(match_completion_service.monitored_matches)
+                'active': len(active_matches),
+                'match_list': match_strings
             },
             'write_queue': {
                 'depth': self.data_service._write_queue.qsize(),
@@ -239,14 +305,14 @@ class AdminService:
                 'match_id': row['id'],
                 'player_1': {
                     'discord_uid': row['player_1_discord_uid'],
-                    'name': p1_info.get('player_name') if p1_info else 'Unknown',
+                    'name': p1_info.get('player_name'),
                     'race': row['player_1_race'],
                     'report': row.get('player_1_report'),
                     'replay': p1_replay
                 },
                 'player_2': {
                     'discord_uid': row['player_2_discord_uid'],
-                    'name': p2_info.get('player_name') if p2_info else 'Unknown',
+                    'name': p2_info.get('player_name'),
                     'race': row['player_2_race'],
                     'report': row.get('player_2_report'),
                     'replay': p2_replay
@@ -254,40 +320,84 @@ class AdminService:
                 'map': row['map_played'],
                 'server': row['server_used'],
                 'played_at': row['played_at'],
-                'status': row.get('status', 'UNKNOWN')
+                'status': row.get('status')
             })
         
         return result
     
     async def get_player_full_state(self, discord_uid: int) -> dict:
         """
-        Get complete state for a player (for debugging stuck states).
+        Get complete state for a player with all display data pre-calculated.
         
         Args:
             discord_uid: Player's Discord ID
             
         Returns:
-            Dict with all player state information including basic info, MMRs,
-            queue status, active matches, and recent match history.
+            Dict with all player state information including basic info, enriched MMRs,
+            queue status, active matches, and recent match history. All data is ready
+            for display (names resolved, ranks calculated, etc.).
         """
         from src.backend.services.queue_service import get_queue_service
+        from src.backend.services.app_context import (
+            countries_service, regions_service, races_service, ranking_service
+        )
         
         queue_service = get_queue_service()
         
         player_info = self.data_service.get_player_info(discord_uid)
         
+        # Enrich player_info with display-ready data
+        if player_info:
+            # Add country name
+            if player_info.get('country'):
+                country = countries_service.get_country_by_code(player_info['country'])
+                player_info['country_name'] = country.get('name') if country else player_info['country']
+            
+            # Add region name
+            if player_info.get('region'):
+                region_name = regions_service.get_region_name(player_info['region'])
+                player_info['region_name'] = region_name if region_name else player_info['region']
+                
+                # Add globe emoji code for region
+                region_data = regions_service.get_region_by_code(player_info['region'])
+                if region_data and region_data.get('globe_emote'):
+                    player_info['region_globe_emote'] = region_data.get('globe_emote')
+        
+        # Enrich MMR data with ranks, race names, and race order
         mmrs = {}
+        race_order = races_service.get_race_order()
+        
         if self.data_service._mmrs_1v1_df is not None:
             player_mmrs = self.data_service._mmrs_1v1_df.filter(
                 pl.col('discord_uid') == discord_uid
             )
             for row in player_mmrs.iter_rows(named=True):
-                mmrs[row['race']] = {
+                race_code = row['race']
+                
+                # Calculate rank for this race
+                rank = ranking_service.get_letter_rank(discord_uid, race_code)
+                
+                # Get race name
+                race_name = races_service.get_race_name(race_code)
+                
+                # Determine sort order
+                try:
+                    sort_order = race_order.index(race_code)
+                except ValueError:
+                    sort_order = len(race_order)
+                
+                mmrs[race_code] = {
                     'mmr': row['mmr'],
                     'games_played': row['games_played'],
                     'games_won': row['games_won'],
                     'games_lost': row['games_lost'],
-                    'games_drawn': row['games_drawn']
+                    'games_drawn': row['games_drawn'],
+                    'last_played': row.get('last_played'),
+                    'rank': rank,
+                    'race_name': race_name,
+                    'sort_order': sort_order,
+                    'is_bw': race_code.startswith('bw_'),
+                    'is_sc2': race_code.startswith('sc2_')
                 }
         
         in_queue = False
@@ -303,21 +413,27 @@ class AdminService:
                         'wait_cycles': player_obj.wait_cycles
                     }
         
+        # Active matches - check by match_result instead of status
         active_matches = []
         if self.data_service._matches_1v1_df is not None:
             player_matches = self.data_service._matches_1v1_df.filter(
                 (pl.col('player_1_discord_uid') == discord_uid) |
                 (pl.col('player_2_discord_uid') == discord_uid)
             ).filter(
-                pl.col('status').is_in(['IN_PROGRESS', 'PROCESSING_COMPLETION'])
+                pl.col('match_result').is_null() |  # Match not finished
+                (pl.col('match_result') == 0)        # Or match_result is 0 (in progress)
             )
             
             for row in player_matches.iter_rows(named=True):
+                opponent_uid = row['player_2_discord_uid'] if row['player_1_discord_uid'] == discord_uid else row['player_1_discord_uid']
+                opponent_info = self.data_service.get_player_info(opponent_uid)
+                opponent_name = opponent_info.get('player_name', 'Unknown') if opponent_info else 'Unknown'
+                
                 active_matches.append({
                     'match_id': row['id'],
-                    'status': row.get('status'),
                     'is_player_1': row['player_1_discord_uid'] == discord_uid,
-                    'opponent_id': row['player_2_discord_uid'] if row['player_1_discord_uid'] == discord_uid else row['player_1_discord_uid'],
+                    'opponent_discord_uid': opponent_uid,
+                    'opponent_name': opponent_name,
                     'my_report': row.get('player_1_report') if row['player_1_discord_uid'] == discord_uid else row.get('player_2_report'),
                     'their_report': row.get('player_2_report') if row['player_1_discord_uid'] == discord_uid else row.get('player_1_report'),
                     'match_result': row.get('match_result')
@@ -334,7 +450,6 @@ class AdminService:
                 recent_matches.append({
                     'match_id': row['id'],
                     'result': row.get('match_result'),
-                    'status': row.get('status'),
                     'played_at': row['played_at']
                 })
         
@@ -390,8 +505,7 @@ class AdminService:
             'reports': {
                 'player_1': match_data.get('player_1_report'),
                 'player_2': match_data.get('player_2_report'),
-                'match_result': match_data.get('match_result'),
-                'status': match_data.get('status')
+                'match_result': match_data.get('match_result')
             },
             'replays': {
                 'player_1': match_data.get('player_1_replay_path'),
@@ -410,17 +524,14 @@ class AdminService:
         reason: str = ""
     ) -> dict:
         """
-        Resolve a match conflict by admin decision.
+        Resolve a match by admin decision.
         
-        This method:
-        1. Updates database
-        2. Updates in-memory DataFrame
-        3. Triggers MMR calculation (if applicable)
-        4. Notifies players
-        5. Logs admin action
+        Uses two different approaches depending on match state:
+        1. Fresh/in-progress matches: Simulates both players reporting (normal flow)
+        2. Terminal matches (CONFLICT/COMPLETE): Direct manipulation and manual completion
         
         Args:
-            match_id: Match ID with conflict
+            match_id: Match ID
             resolution: How to resolve ('player_1_win', 'player_2_win', 'draw', 'invalidate')
             admin_discord_id: Admin performing action
             reason: Explanation for audit log
@@ -435,8 +546,11 @@ class AdminService:
         if not match_data:
             return {'success': False, 'error': 'Match not found'}
         
-        if match_data.get('match_result') != -2:
-            return {'success': False, 'error': 'Match is not in conflict state'}
+        p1_uid = match_data['player_1_discord_uid']
+        p2_uid = match_data['player_2_discord_uid']
+        p1_report = match_data.get('player_1_report')
+        p2_report = match_data.get('player_2_report')
+        match_result = match_data.get('match_result')
         
         resolution_map = {
             'player_1_win': 1,
@@ -450,61 +564,374 @@ class AdminService:
         
         new_result = resolution_map[resolution]
         
+        # CRITICAL: Don't rely on status field - check if players have actually reported
+        # If BOTH reports are filled, match has been through player reporting → use terminal path
+        # If reports are NULL, match is fresh/abandoned → use fresh path
+        has_reports = (p1_report is not None and p2_report is not None)
+        
+        # Also check if match has a result (might have been admin-resolved before)
+        has_result = match_result is not None and match_result != 0
+        
+        # Use terminal path if match has been processed by players OR already has a result
+        is_terminal = has_reports or has_result
+        
         try:
-            # Use DataAccessService facade for proper memory + DB update
-            await self.data_service.update_match(
-                match_id=match_id,
-                match_result=new_result,
-                status='PROCESSING_COMPLETION'
-            )
-            print(f"[AdminService] Updated match {match_id} via DataAccessService: result={new_result}")
-            
-            mmr_change = 0
-            if resolution != 'invalidate':
-                print(f"[AdminService] Triggering MMR calculation for match {match_id}")
-                mmr_change = await matchmaker._calculate_and_write_mmr(match_id, match_data)
-                print(f"[AdminService] MMR calculated: {mmr_change:+} (player 1 perspective)")
+            if is_terminal:
+                reason_text = "has player reports" if has_reports else "has existing result"
+                print(f"[AdminService] Match {match_id} is TERMINAL ({reason_text}: p1={p1_report}, p2={p2_report}, result={match_result}) - using direct manipulation")
+                return await self._resolve_terminal_match(
+                    match_id, new_result, resolution, admin_discord_id, reason, 
+                    match_data, p1_uid, p2_uid
+                )
             else:
-                print(f"[AdminService] Match invalidated, no MMR change")
+                print(f"[AdminService] Match {match_id} is FRESH (no reports: p1={p1_report}, p2={p2_report}) - using simulated reports")
+                return await self._resolve_fresh_match(
+                    match_id, new_result, resolution, admin_discord_id, reason,
+                    match_data, p1_uid, p2_uid
+                )
             
-            print(f"[AdminService] Triggering completion notification for match {match_id}")
-            asyncio.create_task(match_completion_service.check_match_completion(match_id))
+        except Exception as e:
+            print(f"[AdminService] ERROR resolving match {match_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'success': False, 'error': str(e)}
+    
+    async def _resolve_fresh_match(
+        self,
+        match_id: int,
+        new_result: int,
+        resolution: str,
+        admin_discord_id: int,
+        reason: str,
+        match_data: dict,
+        p1_uid: int,
+        p2_uid: int
+    ) -> dict:
+        """
+        Resolve a fresh/in-progress match by simulating both players reporting.
+        This triggers the normal match completion flow.
+        """
+        from src.backend.services.match_completion_service import match_completion_service
+        
+        # Step 1: Update match_result in memory
+        await self.data_service.update_match(
+            match_id=match_id,
+            match_result=new_result
+        )
+        print(f"[AdminService] Set match_result={new_result} for match {match_id}")
+        
+        # Step 2: Simulate both players reporting with matching results
+        # This directly updates the DataFrame, bypassing record_match_result's validation
+        await self._update_player_reports_directly(match_id, p1_uid, p2_uid, new_result)
+        print(f"[AdminService] Simulated both players reporting result={new_result}")
+        
+        # Step 3: Trigger normal completion flow
+        # This will detect both reports match and call _handle_match_completion
+        # which handles: MMR calc, notifications, queue locks, cleanup
+        print(f"[AdminService] Triggering normal completion flow for match {match_id}")
+        
+        # CRITICAL: Call check_match_completion synchronously and await it
+        # If we use asyncio.create_task(), there's a race condition where the match
+        # gets marked as processed before the completion logic runs
+        await match_completion_service.check_match_completion(match_id)
+        
+        # Step 4: Get MMR change from completed match
+        final_match_data = self.data_service.get_match(match_id)
+        mmr_change = final_match_data.get('mmr_change', 0) if final_match_data else 0
+        
+        # Step 6: Log admin action
+        await self._log_admin_action(
+            admin_discord_id=admin_discord_id,
+            action_type='resolve_match',
+            target_match_id=match_id,
+            details={
+                'resolution': resolution,
+                'new_result': new_result,
+                'method': 'simulated_reports',
+                'mmr_change': mmr_change,
+                'reason': reason
+            }
+        )
+        
+        # Return success with calculated MMR
+        admin_info = self.data_service.get_player_info(admin_discord_id)
+        return {
+            'success': True,
+            'match_id': match_id,
+            'resolution': resolution,
+            'method': 'simulated_reports',
+            'mmr_change': mmr_change,
+            'notification_data': {
+                'players': [p1_uid, p2_uid],
+                'admin_name': admin_info.get('player_name', 'Admin') if admin_info else 'Admin',
+                'reason': reason,
+                'match_id': match_id,
+                'resolution': resolution,
+                'mmr_change': mmr_change
+            }
+        }
+    
+    async def _resolve_terminal_match(
+        self,
+        match_id: int,
+        new_result: int,
+        resolution: str,
+        admin_discord_id: int,
+        reason: str,
+        match_data: dict,
+        p1_uid: int,
+        p2_uid: int
+    ) -> dict:
+        """
+        Resolve a terminal match (CONFLICT/COMPLETE) by direct manipulation.
+        This bypasses normal flow and manually triggers completion.
+        """
+        from src.backend.services.matchmaking_service import matchmaker
+        from src.backend.services.match_completion_service import match_completion_service
+        
+        print(f"[AdminService] Resolving terminal match {match_id} (was {match_data.get('status')})")
+        
+        # Step 1: Get original MMRs from match table (player_1_mmr and player_2_mmr store the initial MMRs)
+        # These are the baseline MMRs we'll use for idempotent calculations
+        p1_mmr_before = match_data.get('player_1_mmr')
+        p2_mmr_before = match_data.get('player_2_mmr')
+        
+        # Sanity check: if these are None, something is very wrong
+        if p1_mmr_before is None or p2_mmr_before is None:
+            raise ValueError(f"Match {match_id} missing player_1_mmr or player_2_mmr - cannot resolve")
+        
+        print(f"[AdminService] Using initial MMRs from match table: P1={p1_mmr_before}, P2={p2_mmr_before}")
+        
+        existing_mmr_change = match_data.get('mmr_change', 0)
+        
+        if p1_mmr_before is not None and p2_mmr_before is not None and existing_mmr_change != 0:
+            print(f"[AdminService] Match {match_id} was already resolved (mmr_change={existing_mmr_change})")
+            print(f"[AdminService] Restoring original MMRs: P1={p1_mmr_before}, P2={p2_mmr_before}")
             
-            await self._log_admin_action(
-                admin_discord_id=admin_discord_id,
-                action_type='resolve_conflict',
-                target_match_id=match_id,
-                details={
-                    'resolution': resolution,
-                    'new_result': new_result,
-                    'mmr_change': mmr_change,
-                    'reason': reason
-                }
+            # Restore both players to their original MMRs before this match
+            p1_race = match_data.get('player_1_race')
+            p2_race = match_data.get('player_2_race')
+            
+            await self.data_service.update_player_mmr(p1_uid, p1_race, p1_mmr_before)
+            await self.data_service.update_player_mmr(p2_uid, p2_race, p2_mmr_before)
+            print(f"[AdminService] Restored MMRs for re-resolution")
+        
+        # Step 2: Remove from processed_matches so we can re-process
+        if match_id in match_completion_service.processed_matches:
+            match_completion_service.processed_matches.remove(match_id)
+            print(f"[AdminService] Removed match {match_id} from processed_matches")
+        
+        # Step 3: Update match state (result + reset mmr_change)
+        await self.data_service.update_match(
+            match_id=match_id,
+            match_result=new_result
+        )
+        # Reset mmr_change to 0 so it gets recalculated
+        await self.data_service.update_match_mmr_change(match_id, 0)
+        
+        # Step 4: Update both player reports directly
+        await self._update_player_reports_directly(match_id, p1_uid, p2_uid, new_result)
+        print(f"[AdminService] Updated match {match_id} state: result={new_result}, reports={new_result}")
+        
+        # Step 5: Get fresh match data with restored originals
+        updated_match_data = self.data_service.get_match(match_id)
+        if not updated_match_data:
+            raise ValueError(f"Could not retrieve match {match_id} after update")
+        
+        # Step 6: Calculate MMR change from ORIGINAL MMRs (for idempotency)
+        # Skip MMR calculation for invalidated matches (result=-1)
+        p1_race = updated_match_data.get('player_1_race')
+        p2_race = updated_match_data.get('player_2_race')
+        
+        if resolution != 'invalidate':
+            # Calculate MMR change based on original MMRs and new result
+            # This ensures: new_mmr = original_mmr + calculated_change
+            # No matter how many times we resolve, it's always from the same baseline
+            
+            mmr_change = mmr_service.calculate_mmr_change(
+                p1_mmr_before,  # Use restored/original MMR
+                p2_mmr_before,  # Use restored/original MMR
+                new_result
             )
             
-            # Return notification data for frontend to handle
-            admin_info = self.data_service.get_player_info(admin_discord_id)
-            p1_uid = match_data['player_1_discord_uid']
-            p2_uid = match_data['player_2_discord_uid']
+            print(f"[AdminService] Calculated MMR change from originals: {mmr_change} (P1={p1_mmr_before}, P2={p2_mmr_before}, result={new_result})")
             
-            return {
-                'success': True,
+            # Step 7: Apply MMR change to ORIGINAL MMRs (idempotent!)
+            p1_new_mmr = int(p1_mmr_before + mmr_change)
+            p2_new_mmr = int(p2_mmr_before - mmr_change)
+            
+            # Apply new MMRs ONLY (don't update game stats - admin is overriding)
+            # Game stats should only be updated by the normal match flow, not admin resolutions
+            await self.data_service.update_player_mmr(
+                p1_uid, p1_race, p1_new_mmr,
+                games_played=None,  # Don't change game stats
+                games_won=None,
+                games_lost=None,
+                games_drawn=None
+            )
+            
+            await self.data_service.update_player_mmr(
+                p2_uid, p2_race, p2_new_mmr,
+                games_played=None,  # Don't change game stats
+                games_won=None,
+                games_lost=None,
+                games_drawn=None
+            )
+            
+            print(f"[AdminService] Applied idempotent MMR: P1 {p1_mmr_before} → {p1_new_mmr}, P2 {p2_mmr_before} → {p2_new_mmr}")
+        else:
+            # Match invalidated - no MMR changes
+            mmr_change = 0
+            print(f"[AdminService] Match invalidated (result={new_result}), no MMR changes")
+        
+        # Step 8: Update match with final values
+        await self.data_service.update_match(match_id, match_result=new_result)
+        await self.data_service.update_match_mmr_change(match_id, mmr_change)
+        
+        # Step 9: Clear queue locks
+        await self._clear_player_queue_lock(p1_uid)
+        await self._clear_player_queue_lock(p2_uid)
+        print(f"[AdminService] Cleared queue locks for both players")
+        
+        # Step 10: Get final match data
+        final_match_data = self.data_service.get_match(match_id)
+        
+        # Step 11: Log admin action
+        await self._log_admin_action(
+            admin_discord_id=admin_discord_id,
+            action_type='resolve_conflict',
+            target_match_id=match_id,
+            details={
+                'resolution': resolution,
+                'new_result': new_result,
+                'method': 'direct_manipulation',
+                'mmr_change': mmr_change,
+                'reason': reason
+            }
+        )
+        
+        # Return complete data for frontend (no logic needed in frontend)
+        admin_info = self.data_service.get_player_info(admin_discord_id)
+        p1_info = self.data_service.get_player_info(p1_uid)
+        p2_info = self.data_service.get_player_info(p2_uid)
+        
+        # Get player details
+        p1_name = p1_info.get('player_name')
+        p2_name = p2_info.get('player_name')
+        p1_country = p1_info.get('country')
+        p2_country = p2_info.get('country')
+        p1_race = final_match_data.get('player_1_race')
+        p2_race = final_match_data.get('player_2_race')
+        map_name = final_match_data.get('map_name')
+        
+        # Get MMR details - use match table's stored initial MMRs as source of truth
+        # player_1_mmr and player_2_mmr store the initial MMRs when the match started
+        p1_mmr_initial = final_match_data.get('player_1_mmr')
+        p2_mmr_initial = final_match_data.get('player_2_mmr')
+        
+        # Calculate "after" MMRs based on initial + change
+        # This ensures idempotency: initial + change = after (always the same)
+        p1_mmr_after = p1_mmr_initial + mmr_change
+        p2_mmr_after = p2_mmr_initial - mmr_change
+        
+        # Get ranks
+        from src.backend.services.app_context import ranking_service
+        p1_rank = ranking_service.get_letter_rank(p1_uid, p1_race)
+        p2_rank = ranking_service.get_letter_rank(p2_uid, p2_race)
+        
+        return {
+            'success': True,
+            'match_id': match_id,
+            'resolution': resolution,
+            'method': 'direct_manipulation',
+            'mmr_change': mmr_change,
+            'match_data': {
+                'player_1_uid': p1_uid,
+                'player_2_uid': p2_uid,
+                'player_1_name': p1_name,
+                'player_2_name': p2_name,
+                'player_1_country': p1_country,
+                'player_2_country': p2_country,
+                'player_1_race': p1_race,
+                'player_2_race': p2_race,
+                'map_name': map_name or 'Unknown',
+                'player_1_mmr_before': p1_mmr_initial or 0,  # Use initial MMR from match table
+                'player_2_mmr_before': p2_mmr_initial or 0,  # Use initial MMR from match table
+                'player_1_mmr_after': p1_mmr_after or 0,     # Calculated: initial + change
+                'player_2_mmr_after': p2_mmr_after or 0,     # Calculated: initial - change
+                'player_1_rank': p1_rank,
+                'player_2_rank': p2_rank
+            },
+            'notification_data': {
+                'players': [p1_uid, p2_uid],
+                'admin_name': admin_info.get('player_name') if admin_info else 'Admin',
+                'reason': reason,
                 'match_id': match_id,
                 'resolution': resolution,
                 'mmr_change': mmr_change,
-                'notification_data': {
-                    'players': [p1_uid, p2_uid],
-                    'admin_name': admin_info.get('player_name', 'Admin') if admin_info else 'Admin',
-                    'reason': reason,
-                    'match_id': match_id,
-                    'resolution': resolution,
-                    'mmr_change': mmr_change
-                }
+                'player_1_name': p1_name,
+                'player_2_name': p2_name,
+                'player_1_country': p1_country,
+                'player_2_country': p2_country,
+                'player_1_race': p1_race,
+                'player_2_race': p2_race,
+                'map_name': map_name or 'Unknown',
+                'player_1_mmr_before': p1_mmr_before or 0,
+                'player_2_mmr_before': p2_mmr_before or 0,
+                'player_1_mmr_after': p1_mmr_after or 0,
+                'player_2_mmr_after': p2_mmr_after or 0,
+                'player_1_rank': p1_rank,
+                'player_2_rank': p2_rank
             }
-            
-        except Exception as e:
-            print(f"[AdminService] ERROR resolving conflict for match {match_id}: {e}")
-            return {'success': False, 'error': str(e)}
+        }
+    
+    async def _update_player_reports_directly(
+        self,
+        match_id: int,
+        p1_uid: int,
+        p2_uid: int,
+        report_value: int
+    ) -> None:
+        """
+        Directly update both player reports in the DataFrame.
+        Bypasses record_match_result's terminal state guard.
+        """
+        if self.data_service._matches_1v1_df is None:
+            raise ValueError("Matches DataFrame not initialized")
+        
+        import polars as pl
+        
+        # Update both reports directly in memory
+        self.data_service._matches_1v1_df = self.data_service._matches_1v1_df.with_columns([
+            pl.when(pl.col("id") == match_id)
+              .then(pl.lit(report_value))
+              .otherwise(pl.col("player_1_report"))
+              .alias("player_1_report"),
+            pl.when(pl.col("id") == match_id)
+              .then(pl.lit(report_value))
+              .otherwise(pl.col("player_2_report"))
+              .alias("player_2_report")
+        ])
+        
+        print(f"[AdminService] Updated player_1_report and player_2_report to {report_value} for match {match_id}")
+        
+        # Queue database writes for both reports
+        from src.backend.services.data_access_service import WriteJob, WriteJobType
+        import time
+        
+        for player_uid in [p1_uid, p2_uid]:
+            job = WriteJob(
+                job_type=WriteJobType.UPDATE_MATCH_REPORT,
+                data={
+                    "match_id": match_id,
+                    "player_discord_uid": player_uid,
+                    "report_value": report_value
+                },
+                timestamp=time.time()
+            )
+            await self.data_service._queue_write(job)
+        
+        print(f"[AdminService] Queued database writes for both player reports")
     
     async def adjust_player_mmr(
         self,
@@ -644,6 +1071,9 @@ class AdminService:
                 await matchmaker.remove_player(discord_uid)
                 print(f"[AdminService] Removed player {discord_uid} from matchmaking queue")
                 
+                # Clear queue-locked state so player can re-queue
+                await self._clear_player_queue_lock(discord_uid)
+                
                 await self._log_admin_action(
                     admin_discord_id=admin_discord_id,
                     action_type='force_remove_queue',
@@ -769,6 +1199,10 @@ class AdminService:
                 await queue_service.clear_queue()
                 print(f"[AdminService] EMERGENCY: Cleared QueueService")
             
+            # Clear queue-locked state for all removed players
+            for player_id in player_ids:
+                await self._clear_player_queue_lock(player_id)
+            
             await self._log_admin_action(
                 admin_discord_id=admin_discord_id,
                 action_type='emergency_clear_queue',
@@ -815,7 +1249,7 @@ class AdminService:
             details: JSON-serializable dict with action details
         """
         admin_info = self.data_service.get_player_info(admin_discord_id)
-        admin_name = admin_info.get('player_name', 'Unknown') if admin_info else 'Unknown'
+        admin_name = admin_info.get('player_name')
         
         # Use DataAccessService facade for proper async write queuing
         await self.data_service.log_admin_action(

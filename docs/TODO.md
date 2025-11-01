@@ -124,7 +124,7 @@
   - ⚠️ Player does not get a notification ([AdminCommand] Cannot send notification: bot instance not available)
 - Clear Queue: ⚠️ Incomplete
   - ✅ Players are removed from the queue
-  - ⚠️ Player does not get a notification ([AdminCommand] Cannot send notification: bot instance not available)
+  - ✅ Player does not get a notification ([AdminCommand] Cannot send notification: bot instance not available)
   - ❌ Player remains in queue-locked state, cannot queue again
 - Player: ⚠️ Mostly functional
   - ✅ All information technically present and accounted for
@@ -141,7 +141,7 @@
   - ⚠️ Could use a guide for admins on how to interpret values
 - Reset Aborts:
   - ✅ Abort count successfully updated
-  - ⚠️ Player does not get a notification ([AdminCommand] Cannot send notification: bot instance not available)
+  - ✅ Player does not get a notification ([AdminCommand] Cannot send notification: bot instance not available)
   - ⚠️ Confirm embed does not show the old amount, only the complete embed does
 - Resolve Match: ❌ Broken
   - ❌ Never recognizes a conflicted state
@@ -152,11 +152,12 @@
   - ❌ Player remains in queue-locked state, cannot queue again
 - Needed additional features:
   - ⏰ Match resolution must remove queue-locked state mid-match
-  - 
 
 ### Other Last Minute Stuff
 - ⏰ Improve the matchmaking algorithm
 - ⏰ Send a follow-up message to players who do not confirm match in half the abort countdown timer after match assignment
+- ⏰ Send a dismissable message to players who enter a match involving BW Protoss about how to avoid Shield Battery lag
+- ⏰ I already updated admins.json with "owner" and "admin" roles, add an owner-only command to adjust admins while the bot is up
 
 ## PRE-BETA
 

@@ -842,15 +842,26 @@ class Matchmaker:
 		# Acquire lock to prevent race conditions with abort/complete operations
 		lock = match_completion_service._get_lock(match_id)
 		async with lock:
-			# Check current match status - if already terminal, reject the report
+			# Check if match is already in a terminal state by inspecting database columns
 			match_data = data_service.get_match(match_id)
 			if not match_data:
 				print(f"[Matchmaker] Cannot record result for match {match_id}: match not found in memory")
 				return False
 			
-			current_status = match_data.get('status', 'IN_PROGRESS')
-			if current_status in ('COMPLETE', 'ABORTED', 'CONFLICT', 'PROCESSING_COMPLETION'):
-				print(f"[Matchmaker] Cannot record result for match {match_id}: already in terminal/processing state {current_status}")
+			# Determine if match is terminal based on ACTUAL database columns
+			match_result = match_data.get('match_result')
+			p1_report = match_data.get('player_1_report')
+			p2_report = match_data.get('player_2_report')
+			
+			# Terminal conditions:
+			# 1. match_result is set to a definitive value (-1=abort, -2=conflict, 0/1/2=result)
+			# 2. Both players reported and agree (match should be processed)
+			is_terminal = (
+				match_result is not None and match_result in (-1, -2, 0, 1, 2)
+			)
+			
+			if is_terminal:
+				print(f"[Matchmaker] Cannot record result for match {match_id}: already terminal (result={match_result}, reports: p1={p1_report}, p2={p2_report})")
 				return False
 			
 			# Update in-memory match data immediately
@@ -889,24 +900,25 @@ class Matchmaker:
 		# Acquire the same lock used by check_match_completion to prevent race conditions
 		lock = match_completion_service._get_lock(match_id)
 		async with lock:
-			# Check current match status - if already terminal, reject the abort
+			# Check if match is already terminal by inspecting database columns
 			match_data = data_service.get_match(match_id)
 			if not match_data:
 				print(f"[Matchmaker] Cannot abort match {match_id}: match not found in memory")
 				return False
 			
-			current_status = match_data.get('status', 'IN_PROGRESS')
-			if current_status in ('COMPLETE', 'ABORTED', 'CONFLICT'):
-				print(f"[Matchmaker] Cannot abort match {match_id}: already in terminal state {current_status}")
+			# Check if match is already terminal based on match_result
+			match_result = match_data.get('match_result')
+			is_terminal = match_result is not None and match_result in (-1, -2, 0, 1, 2)
+			
+			if is_terminal:
+				print(f"[Matchmaker] Cannot abort match {match_id}: already terminal (result={match_result})")
 				return False
 			
 			# Abort the match in memory and queue DB write
 			success = await data_service.abort_match(match_id, player_discord_uid)
 			
 			if success:
-				# Atomically transition to ABORTED state
-				data_service.update_match_status(match_id, 'ABORTED')
-				print(f"[Matchmaker] Match {match_id} aborted by player {player_discord_uid}, status updated to ABORTED")
+				print(f"[Matchmaker] Match {match_id} aborted by player {player_discord_uid}")
 				
 				# Trigger immediate completion check to notify all players
 				# This ensures both players receive the abort notification
@@ -916,16 +928,24 @@ class Matchmaker:
 			
 			return success
 	
-	async def _calculate_and_write_mmr(self, match_id: int, match_data: dict) -> bool:
-		"""Helper to calculate and write MMR changes using DataAccessService."""
-		# Get match details from DataAccessService (in-memory, instant)
+	async def _calculate_and_write_mmr(self, match_id: int, match_data: dict) -> int:
+		"""
+		Helper to calculate and write MMR changes using DataAccessService.
+		
+		Args:
+			match_id: Match ID
+			match_data: Fresh match data (use the provided data, don't refetch!)
+			
+		Returns:
+			MMR change amount (positive = player 1 gained)
+		"""
 		from src.backend.services.data_access_service import DataAccessService
 		data_service = DataAccessService()
 		
-		match_data = data_service.get_match(match_id)
+		# Use the provided match_data (don't overwrite with potentially stale data!)
 		if not match_data:
-			print(f"[Matchmaker] Could not find match {match_id} in memory")
-			return False
+			print(f"[Matchmaker] No match data provided for match {match_id}")
+			return 0
 		
 		# Guard: Check if MMR has already been calculated for this match
 		# Only skip if both in-memory and database are consistent
@@ -971,10 +991,10 @@ class Matchmaker:
 						print(f"[Matchmaker] Database and memory MMR values don't match for match {match_id}. Recalculating.")
 					else:
 						print(f"[Matchmaker] MMR for match {match_id} has already been calculated. Skipping.")
-						return True
+						return match_data.get('mmr_change', 0)
 				else:
 					print(f"[Matchmaker] MMR for match {match_id} has already been calculated. Skipping.")
-					return True
+					return match_data.get('mmr_change', 0)
 			except Exception as e:
 				print(f"[Matchmaker] Error checking MMR consistency for match {match_id}: {e}")
 				# If we can't verify, proceed with calculation
@@ -986,7 +1006,7 @@ class Matchmaker:
 		
 		if p1_report is None or p2_report is None:
 			print(f"[Matchmaker] Player report recorded for match {match_id}, waiting for other player")
-			return True
+			return 0
 		
 		# Determine match result from player reports
 		# Reports: 0=draw, 1=player 1 wins, 2=player 2 wins, -1=aborted, -3=aborted by this player
@@ -1025,11 +1045,11 @@ class Matchmaker:
 		
 		if match_result == -1:
 			print(f"[Matchmaker] Match {match_id} was aborted. Skipping MMR calculation.")
-			return True
+			return 0
 
 		if match_result == -2:
 			print(f"[Matchmaker] Conflicting reports for match {match_id}, manual resolution required")
-			return True
+			return 0
 		
 		# Both players have reported and reports match - process MMR
 		print(f"[Matchmaker] Both players reported for match {match_id}, processing MMR changes")
@@ -1125,7 +1145,7 @@ class Matchmaker:
 			return p1_mmr_change
 		else:
 			print(f"[Matchmaker] Could not get MMR data for players in match {match_id}")
-			return 0.0
+			return 0
 
 	async def is_player_in_queue(self, discord_user_id: int) -> bool:
 		"""Check if a player is in the queue."""

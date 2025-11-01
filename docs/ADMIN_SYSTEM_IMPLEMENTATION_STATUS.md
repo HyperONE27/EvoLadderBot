@@ -79,9 +79,9 @@ notification_embed = discord.Embed(
 notification_embed.add_field(name="Race", value=race, inline=True)
 notification_embed.add_field(name="Old MMR", value=str(int(current_mmr)), inline=True)
 notification_embed.add_field(name="New MMR", value=str(int(new_mmr)), inline=True)
-notification_embed.add_field(name="Change", value=f"{new_mmr - current_mmr:+}", inline=False)
-notification_embed.add_field(name="Reason", value=reason, inline=False)
-notification_embed.add_field(name="Admin", value=admin_name, inline=False)
+notification_embed.add_field(name="Change", value=f"{new_mmr - current_mmr:+}", inline=True)
+notification_embed.add_field(name="Reason", value=reason, inline=True)
+notification_embed.add_field(name="Admin", value=admin_name, inline=True)
 
 await self._send_player_notification(discord_uid, notification_embed)
 ```

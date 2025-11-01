@@ -232,20 +232,6 @@ class DataAccessService:
         )
         if matches_data:
             self._matches_1v1_df = pl.DataFrame(matches_data, infer_schema_length=None)
-            # Add status column if not present (for backward compatibility with existing data)
-            if "status" not in self._matches_1v1_df.columns:
-                # Infer status from existing data:
-                # - If match_result is not None/0 and both reports are present, mark as COMPLETE
-                # - If match_result == -1, mark as ABORTED
-                # - Otherwise, mark as IN_PROGRESS
-                self._matches_1v1_df = self._matches_1v1_df.with_columns([
-                    pl.when(pl.col("match_result") == -1)
-                      .then(pl.lit("ABORTED"))
-                      .when((pl.col("match_result").is_not_null()) & (pl.col("match_result") != 0))
-                      .then(pl.lit("COMPLETE"))
-                      .otherwise(pl.lit("IN_PROGRESS"))
-                      .alias("status")
-                ])
         else:
             # Create empty DataFrame with complete schema matching matches_1v1 table
             self._matches_1v1_df = pl.DataFrame({
@@ -267,8 +253,7 @@ class DataAccessService:
                 "player_1_replay_path": pl.Series([], dtype=pl.Utf8),
                 "player_2_replay_path": pl.Series([], dtype=pl.Utf8),
                 "player_1_replay_time": pl.Series([], dtype=pl.Utf8),
-                "player_2_replay_time": pl.Series([], dtype=pl.Utf8),
-                "status": pl.Series([], dtype=pl.Utf8),  # New field: IN_PROGRESS, PROCESSING_COMPLETION, COMPLETE, ABORTED, CONFLICT
+                "player_2_replay_time": pl.Series([], dtype=pl.Utf8)
             })
         print(f"[DataAccessService]   Matches loaded: {len(self._matches_1v1_df)} rows, size: {self._matches_1v1_df.estimated_size('mb'):.2f} MB")
         
@@ -1712,38 +1697,6 @@ class DataAccessService:
         result = self._matches_1v1_df.filter(pl.col("id") == match_id)
         return result.to_dicts()[0] if len(result) > 0 else None
     
-    def update_match_status(self, match_id: int, new_status: str) -> bool:
-        """
-        Update the status of a match in memory.
-        
-        This is an atomic operation used by match_completion_service to manage
-        state transitions and prevent race conditions.
-        
-        Args:
-            match_id: Match ID to update
-            new_status: New status (IN_PROGRESS, PROCESSING_COMPLETION, COMPLETE, ABORTED, CONFLICT)
-            
-        Returns:
-            True if updated successfully, False if match not found
-        """
-        if self._matches_1v1_df is None:
-            return False
-        
-        # Check if match exists
-        if len(self._matches_1v1_df.filter(pl.col("id") == match_id)) == 0:
-            return False
-        
-        # Update status
-        self._matches_1v1_df = self._matches_1v1_df.with_columns([
-            pl.when(pl.col("id") == match_id)
-              .then(pl.lit(new_status))
-              .otherwise(pl.col("status"))
-              .alias("status")
-        ])
-        
-        print(f"[DataAccessService] Updated match {match_id} status to {new_status}")
-        return True
-    
     def get_match_mmrs(self, match_id: int) -> tuple[int, int]:
         """
         Get player MMRs for a match (optimized for match embed).
@@ -1820,9 +1773,6 @@ class DataAccessService:
         if match_id:
             match = await loop.run_in_executor(None, self._db_reader.get_match_1v1, match_id)
             if match:
-                # Add status field to new match (initialized to IN_PROGRESS)
-                match['status'] = 'IN_PROGRESS'
-                
                 # Create new row with explicit schema alignment
                 new_row = pl.DataFrame([match], infer_schema_length=None)
                 # Use diagonal concat to handle any missing columns gracefully
@@ -1836,7 +1786,7 @@ class DataAccessService:
                 if len(self._matches_1v1_df) > 1000:
                     self._matches_1v1_df = self._matches_1v1_df.head(1000)
                 
-                print(f"[DataAccessService] Created match {match_id} with status IN_PROGRESS")
+                print(f"[DataAccessService] Created match {match_id}")
         
         return match_id
     
@@ -2064,13 +2014,9 @@ class DataAccessService:
                 pl.when(pl.col("id") == match_id)
                   .then(pl.lit(-1))  # match_result: -1 for aborted
                   .otherwise(pl.col("match_result"))
-                  .alias("match_result"),
-                pl.when(pl.col("id") == match_id)
-                  .then(pl.lit("ABORTED"))
-                  .otherwise(pl.col("status"))
-                  .alias("status")
+                  .alias("match_result")
             ])
-            print(f"[DataAccessService] Updated match {match_id} state to ABORTED in memory (unconfirmed)")
+            print(f"[DataAccessService] Updated match {match_id} reports and result to ABORTED in memory (unconfirmed)")
 
         job = WriteJob(
             job_type=WriteJobType.SYSTEM_ABORT_UNCONFIRMED,

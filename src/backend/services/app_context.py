@@ -19,7 +19,7 @@ Usage:
 """
 
 # Database imports removed - all services now use DataAccessService
-from src.backend.services.admin_service import admin_service
+# NOTE: admin_service import moved below to avoid circular dependency
 from src.backend.services.command_guard_service import CommandGuardService
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.leaderboard_service import LeaderboardService
@@ -67,6 +67,9 @@ validation_service = ValidationService()
 
 # Storage service (uses config only)
 storage_service = StorageService()
+
+# Admin service (depends on mmr_service, so imported after mmr_service is created)
+from src.backend.services.admin_service import admin_service
 
 # Replay service (creates its own DatabaseWriter internally - legacy pattern)
 replay_service = ReplayService()

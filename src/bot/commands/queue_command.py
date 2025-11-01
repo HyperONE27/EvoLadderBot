@@ -1411,15 +1411,99 @@ class MatchFoundView(discord.ui.View):
             print(f"Error sending final notification for match {self.match_result.match_id}: {e}")
 
     async def _send_conflict_notification_embed(self):
-        """Sends a new follow-up message indicating a match conflict."""
+        """Sends a rich follow-up message indicating a match conflict with full details."""
         if not self.channel:
             return
-            
+        
+        # Get match data from DataAccessService (in-memory, instant)
+        from src.backend.services.data_access_service import DataAccessService
+        data_service = DataAccessService()
+        match_data = data_service.get_match(self.match_result.match_id)
+        if not match_data:
+            print(f"❌ [DEBUG] Match {self.match_result.match_id} not found in DataAccessService for conflict notification")
+            return
+        
+        p1_uid = match_data['player_1_discord_uid']
+        p2_uid = match_data['player_2_discord_uid']
+        p1_info = data_service.get_player_info(p1_uid)
+        p2_info = data_service.get_player_info(p2_uid)
+        
+        p1_name = p1_info.get('player_name') if p1_info else str(p1_uid)
+        p2_name = p2_info.get('player_name') if p2_info else str(p2_uid)
+        
+        p1_report = match_data.get("player_1_report")
+        p2_report = match_data.get("player_2_report")
+        
+        # Get visual elements
+        p1_flag = get_flag_emote(p1_info['country']) if p1_info else '🏳️'
+        p2_flag = get_flag_emote(p2_info['country']) if p2_info else '🏳️'
+        p1_race = match_data.get('player_1_race')
+        p2_race = match_data.get('player_2_race')
+        p1_race_emote = get_race_emote(p1_race)
+        p2_race_emote = get_race_emote(p2_race)
+        
+        # Get rank emotes for both players
+        from src.backend.services.app_context import ranking_service
+        
+        p1_rank = ranking_service.get_letter_rank(p1_uid, p1_race)
+        p2_rank = ranking_service.get_letter_rank(p2_uid, p2_race)
+        
+        p1_rank_emote = get_rank_emote(p1_rank)
+        p2_rank_emote = get_rank_emote(p2_rank)
+        
+        p1_current_mmr = match_data['player_1_mmr']
+        p2_current_mmr = match_data['player_2_mmr']
+        map_name = match_data.get('map_name', 'Unknown')
+        
+        # Decode what each player reported
+        # Report codes: 1 = Player 1 won, 2 = Player 2 won, 0 = Draw, -3 = Abort, -4 = No response
+        def decode_report(report_code: int, p1_name: str, p2_name: str) -> str:
+            if report_code == 1:
+                return f"{p1_name} won"
+            elif report_code == 2:
+                return f"{p2_name} won"
+            elif report_code == 0:
+                return "Draw"
+            elif report_code == -3:
+                return "Abort"
+            elif report_code == -4:
+                return "No response"
+            else:
+                return f"Unknown ({report_code})"
+        
+        p1_reported = decode_report(p1_report, p1_name, p2_name) if p1_report is not None else "No response"
+        p2_reported = decode_report(p2_report, p1_name, p2_name) if p2_report is not None else "No response"
+        
         conflict_embed = discord.Embed(
-            title="⚠️ Match Result Conflict",
-            description="The reported results for this match do not agree. Please contact an administrator to resolve this dispute.",
-            color=discord.Color.red()
+            title=f"⚠️ Match #{self.match_result.match_id} Result Conflict",
+            description=f"**{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_name} ({int(p1_current_mmr)})** vs **{p2_rank_emote} {p2_flag} {p2_race_emote} {p2_name} ({int(p2_current_mmr)})**",
+            color=discord.Color.orange()
         )
+        
+        conflict_embed.add_field(
+            name="**Map:**",
+            value=map_name,
+            inline=False
+        )
+        
+        conflict_embed.add_field(
+            name="**Reported Results:**",
+            value=f"- {p1_name}: **{p1_reported}**\n- {p2_name}: **{p2_reported}**",
+            inline=False
+        )
+        
+        conflict_embed.add_field(
+            name="**MMR Changes:**",
+            value=f"- {p1_name}: `+0 ({int(p1_current_mmr)})`\n- {p2_name}: `+0 ({int(p2_current_mmr)})`",
+            inline=False
+        )
+        
+        conflict_embed.add_field(
+            name="**Status:**",
+            value="⚠️ The reported results do not agree. **No MMR changes have been applied.**\n\nPlease contact an administrator to resolve this dispute.",
+            inline=False
+        )
+        
         try:
             await self.channel.send(embed=conflict_embed)
         except discord.HTTPException as e:
