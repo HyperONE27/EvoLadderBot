@@ -11,6 +11,7 @@ This module centralizes all environment variable loading to ensure:
 
 import os
 from dotenv import load_dotenv
+from src.backend.core.config import MM_MATCH_INTERVAL_SECONDS
 
 # Load environment variables FIRST
 load_dotenv()
@@ -105,7 +106,7 @@ SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "replays")  # Default b
 CURRENT_SEASON = "season_alpha"
 
 # Queue searching view heartbeat timer (seconds) - how often to update the searching view
-QUEUE_SEARCHING_HEARTBEAT_SECONDS = 10
+QUEUE_SEARCHING_HEARTBEAT_SECONDS = MM_MATCH_INTERVAL_SECONDS / 2
 
 # =============================================================================
 # PRUNE COMMAND PROTECTION TIMERS
