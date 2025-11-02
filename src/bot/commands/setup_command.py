@@ -18,6 +18,7 @@ from src.bot.components.command_guard_embeds import create_command_guard_error_e
 from src.bot.utils.command_decorators import dm_only
 from src.bot.config import GLOBAL_TIMEOUT
 from src.backend.services.performance_service import FlowTracker
+from src.bot.utils.message_helpers import queue_interaction_edit, queue_interaction_modal
 
 
 # API Call / Data Handling
@@ -46,7 +47,7 @@ async def setup_command(interaction: discord.Interaction):
     # Send the modal with existing data as presets
     flow.checkpoint("send_modal_start")
     modal = SetupModal(existing_data=existing_data)
-    await interaction.response.send_modal(modal)
+    await queue_interaction_modal(interaction, modal)
     flow.checkpoint("send_modal_complete")
     
     flow.complete("success")
@@ -477,7 +478,8 @@ class UnifiedSetupView(discord.ui.View):
             country_page2_selection=self.country_page2_selection
         )
         
-        await interaction.response.edit_message(
+        await queue_interaction_edit(
+            interaction,
             embed=new_view.get_status_embed(),
             view=new_view
         )
@@ -532,7 +534,7 @@ class UnifiedSetupView(discord.ui.View):
                 async def restart(self, interaction: discord.Interaction, button: discord.ui.Button):
                     # Go back to the country/region selection view
                     embed = self.original_view.get_embed()
-                    await interaction.response.edit_message(embed=embed, view=self.original_view)
+                    await queue_interaction_edit(interaction, embed=embed, view=self.original_view)
                 
                 @discord.ui.button(emote="❌", label="Cancel", style=discord.ButtonStyle.danger)
                 async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -559,7 +561,8 @@ class UnifiedSetupView(discord.ui.View):
             region=self.selected_region
         )
         
-        await interaction.response.edit_message(
+        await queue_interaction_edit(
+            interaction,
             content="",
             embed=view.embed,
             view=view

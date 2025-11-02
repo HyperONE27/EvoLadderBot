@@ -22,6 +22,13 @@ from src.bot.config import GLOBAL_TIMEOUT, RECENT_MESSAGE_PROTECTION_MINUTES, QU
 from src.backend.services.performance_service import FlowTracker
 from src.bot.utils.command_decorators import dm_only
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
+from src.bot.utils.message_helpers import (
+    queue_interaction_defer,
+    queue_followup,
+    queue_message_edit,
+    queue_edit_original,
+    queue_message_delete
+)
 
 
 # Track active queue message IDs to avoid deleting them
@@ -226,35 +233,10 @@ async def prune_command(interaction: discord.Interaction):
         return
     
     # Defer immediately to acknowledge within 3 seconds
+    # The deferral will hang until we send the confirmation embed
     flow.checkpoint("defer_start")
-    await interaction.response.defer(ephemeral=False)
+    await queue_interaction_defer(interaction, ephemeral=False)
     flow.checkpoint("defer_complete")
-    
-    # Now send the analyzing message (this can take time but we're already deferred)
-    flow.checkpoint("send_analyzing_start")
-    analyzing_embed = discord.Embed(
-        title="🗑️ Analyzing Messages...",
-        description="Scanning your message history for old bot messages that can be safely deleted.",
-        color=discord.Color.blue()
-    )
-    
-    # Create a view with disabled buttons as a placeholder
-    placeholder_view = discord.ui.View(timeout=GLOBAL_TIMEOUT)
-    confirm_button_placeholder = discord.ui.Button(
-        label="Confirm Deletion",
-        style=discord.ButtonStyle.danger,
-        disabled=True
-    )
-    cancel_button_placeholder = discord.ui.Button(
-        label="Cancel",
-        style=discord.ButtonStyle.secondary,
-        disabled=True
-    )
-    placeholder_view.add_item(confirm_button_placeholder)
-    placeholder_view.add_item(cancel_button_placeholder)
-    
-    initial_message = await interaction.followup.send(embed=analyzing_embed, view=placeholder_view, ephemeral=False, wait=True)
-    flow.checkpoint("send_analyzing_complete")
     
     # Get the channel (DM-only enforced by centralized system)
     channel = interaction.channel
@@ -352,7 +334,7 @@ async def prune_command(interaction: discord.Interaction):
             description="I don't have permission to read message history in this channel.",
             color=discord.Color.red()
         )
-        await initial_message.edit(embed=error_embed, view=None)
+        await queue_edit_original(interaction, embed=error_embed, view=None)
         flow.complete("permission_error")
         return
     except discord.HTTPException as e:
@@ -361,7 +343,7 @@ async def prune_command(interaction: discord.Interaction):
             description=f"Failed to fetch messages: {str(e)}",
             color=discord.Color.red()
         )
-        await initial_message.edit(embed=error_embed, view=None)
+        await queue_edit_original(interaction, embed=error_embed, view=None)
         flow.complete("fetch_error")
         return
     
@@ -374,7 +356,7 @@ async def prune_command(interaction: discord.Interaction):
             description="No bot messages found that can be safely deleted.\n\nQueue-related messages less than a week old are automatically protected.",
             color=discord.Color.blue()
         )
-        await initial_message.edit(embed=info_embed, view=None)
+        await queue_edit_original(interaction, embed=info_embed, view=None)
         flow.complete("no_messages")
         return
     
@@ -419,7 +401,7 @@ async def prune_command(interaction: discord.Interaction):
     # Define the confirm callback
     async def confirm_deletion(confirm_interaction: discord.Interaction):
         # Acknowledge the button click
-        await confirm_interaction.response.defer()
+        await queue_interaction_defer(confirm_interaction)
         
         # Show progress embed immediately
         progress_embed = discord.Embed(
@@ -429,7 +411,7 @@ async def prune_command(interaction: discord.Interaction):
                        f"to avoid Discord rate limits.*",
             color=discord.Color.blue()
         )
-        await confirm_interaction.edit_original_response(embed=progress_embed, view=None)
+        await queue_edit_original(confirm_interaction, embed=progress_embed, view=None)
         
         # Delete messages with rate limit handling
         flow.checkpoint("delete_messages_start")
@@ -438,7 +420,7 @@ async def prune_command(interaction: discord.Interaction):
         
         for i, message in enumerate(messages_to_delete):
             try:
-                await message.delete()
+                await queue_message_delete(message)
                 deleted_count += 1
                 
                 # Add delay between deletions (except after the last one)
@@ -460,7 +442,7 @@ async def prune_command(interaction: discord.Interaction):
                     await asyncio.sleep(retry_after)
                     # Retry this message
                     try:
-                        await message.delete()
+                        await queue_message_delete(message)
                         deleted_count += 1
                     except Exception:
                         failed_count += 1
@@ -503,7 +485,7 @@ async def prune_command(interaction: discord.Interaction):
                     value=f"{failed_count} message(s) could not be deleted.",
                     inline=False
                 )
-            await confirm_interaction.edit_original_response(embed=success_embed, view=None)
+            await queue_edit_original(confirm_interaction, embed=success_embed, view=None)
             flow.complete("success")
         else:
             error_embed = discord.Embed(
@@ -511,7 +493,7 @@ async def prune_command(interaction: discord.Interaction):
                 description=f"Could not delete any messages. {failed_count} deletion(s) failed.",
                 color=discord.Color.red()
             )
-            await confirm_interaction.edit_original_response(embed=error_embed, view=None)
+            await queue_edit_original(confirm_interaction, embed=error_embed, view=None)
             flow.complete("all_failed")
     
     # Create a dummy view for cancel button (required by ConfirmRestartCancelButtons)
@@ -533,7 +515,7 @@ async def prune_command(interaction: discord.Interaction):
     for button in buttons:
         confirm_view.add_item(button)
     
-    # Update the message with the actual confirmation prompt and enabled buttons
-    await initial_message.edit(embed=confirm_embed, view=confirm_view)
+    # Send the confirmation prompt as the first response to the deferred interaction
+    await queue_edit_original(interaction, embed=confirm_embed, view=confirm_view)
     flow.complete("awaiting_confirmation")
 

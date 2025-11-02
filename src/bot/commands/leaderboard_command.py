@@ -12,8 +12,9 @@ from src.backend.services.leaderboard_service import LeaderboardService  # For t
 from src.backend.services.performance_service import FlowTracker
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import GLOBAL_TIMEOUT
-from src.bot.utils.discord_utils import get_flag_emote, get_race_emote, send_ephemeral_response
+from src.bot.utils.discord_utils import get_flag_emote, get_race_emote, get_rank_emote, send_ephemeral_response
 from src.bot.utils.command_decorators import auto_apply_dm_guard
+from src.bot.utils.message_helpers import queue_interaction_edit
 
 
 # Register Command
@@ -340,7 +341,7 @@ class LeaderboardView(discord.ui.View):
         
         # Discord API call - this is where the lag might be
         discord_api_start = time.perf_counter()
-        await interaction.response.edit_message(embed=embed, view=new_view)
+        await queue_interaction_edit(interaction, embed=embed, view=new_view)
         discord_api_end = time.perf_counter()
         
         discord_api_time = (discord_api_end - discord_api_start) * 1000
@@ -556,17 +557,14 @@ class LeaderboardView(discord.ui.View):
 
     def _get_race_emote(self, race_code: str) -> str:
         """Get the Discord emote for a race code."""
-        from src.bot.utils.discord_utils import get_race_emote
         return get_race_emote(race_code)
     
     def _get_flag_emote(self, country_code: str) -> str:
         """Get the Discord flag emote for a country code."""
-        from src.bot.utils.discord_utils import get_flag_emote
         return get_flag_emote(country_code)
     
     def _get_rank_emote(self, rank: str) -> str:
         """Get the Discord rank emote for a rank code."""
-        from src.bot.utils.discord_utils import get_rank_emote
         return get_rank_emote(rank)
 
 
@@ -612,8 +610,7 @@ class RankFilterButton(discord.ui.Button):
     RANK_CYCLE = [None, "s_rank", "a_rank", "b_rank", "c_rank", "d_rank", "e_rank", "f_rank"]
     
     def __init__(self, disabled=False, rank_filter=None):
-        from src.bot.utils.discord_utils import get_rank_emote
-        
+                
         # Determine current state
         if rank_filter is None:
             label = "All Ranks"

@@ -2,6 +2,7 @@ import discord
 from typing import Optional, Union, Callable
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.components.cancel_embed import create_cancel_embed
+from src.bot.utils.message_helpers import queue_edit_original
 
 
 class ConfirmButton(discord.ui.Button):
@@ -47,13 +48,15 @@ class RestartButton(discord.ui.Button):
             # Check if the view has a get_embed method to get the proper embed
             if hasattr(self.reset_target, 'get_embed'):
                 embed = self.reset_target.get_embed()
-                await interaction.edit_original_response(
+                await queue_edit_original(
+                    interaction,
                     content="",
                     embed=embed,
                     view=self.reset_target
                 )
             else:
-                await interaction.edit_original_response(
+                await queue_edit_original(
+                    interaction,
                     content="",
                     embed=None,
                     view=self.reset_target
@@ -89,7 +92,8 @@ class CancelButton(discord.ui.Button):
         # Always use the cancel embed for consistency
         cancel_view = create_cancel_embed()
         
-        await interaction.edit_original_response(
+        await queue_edit_original(
+            interaction,
             content="",
             embed=cancel_view.embed,
             view=cancel_view

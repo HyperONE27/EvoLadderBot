@@ -7,6 +7,12 @@ import json
 import os
 import time
 
+from src.bot.utils.message_helpers import (
+    queue_interaction_response,
+    queue_interaction_edit,
+    queue_followup
+)
+
 
 def should_be_ephemeral(interaction: discord.Interaction) -> bool:
     """
@@ -39,15 +45,17 @@ def get_ephemeral_kwargs(interaction: discord.Interaction) -> dict:
     return {"ephemeral": should_be_ephemeral(interaction)}
 
 
-def send_ephemeral_response(
+async def send_ephemeral_response(
     interaction: discord.Interaction,
     content: Optional[str] = None,
     embed: Optional[discord.Embed] = None,
     view: Optional[discord.ui.View] = None,
     **kwargs
-) -> Union[discord.InteractionResponse, discord.WebhookMessage]:
+):
     """
     Send a response with centralized ephemerality control.
+    
+    Routes through the message queue for rate limiting and prioritization.
     
     Args:
         interaction: The Discord interaction object
@@ -57,34 +65,32 @@ def send_ephemeral_response(
         **kwargs: Additional arguments for send_message
         
     Returns:
-        The response object
+        None (interaction responses don't return message objects)
     """
     ephemeral_kwargs = get_ephemeral_kwargs(interaction)
     
-    # Build the message parameters, only including view if it's not None
-    message_params = {
-        "content": content,
-        "embed": embed,
-        "ephemeral": ephemeral_kwargs["ephemeral"],
+    # Route through message queue
+    return await queue_interaction_response(
+        interaction=interaction,
+        content=content,
+        embed=embed,
+        view=view,
+        ephemeral=ephemeral_kwargs["ephemeral"],
         **kwargs
-    }
-    
-    # Only add view parameter if it's not None
-    if view is not None:
-        message_params["view"] = view
-    
-    return interaction.response.send_message(**message_params)
+    )
 
 
-def edit_ephemeral_response(
+async def edit_ephemeral_response(
     interaction: discord.Interaction,
     content: Optional[str] = None,
     embed: Optional[discord.Embed] = None,
     view: Optional[discord.ui.View] = None,
     **kwargs
-) -> Union[discord.InteractionResponse, discord.WebhookMessage]:
+):
     """
     Edit a response with centralized ephemerality control.
+    
+    Routes through the message queue for rate limiting and prioritization.
     
     Args:
         interaction: The Discord interaction object
@@ -94,10 +100,11 @@ def edit_ephemeral_response(
         **kwargs: Additional arguments for edit_message
         
     Returns:
-        The response object
+        None
     """
-    ephemeral_kwargs = get_ephemeral_kwargs(interaction)
-    return interaction.response.edit_message(
+    # Route through message queue
+    return await queue_interaction_edit(
+        interaction=interaction,
         content=content,
         embed=embed,
         view=view,
@@ -105,7 +112,7 @@ def edit_ephemeral_response(
     )
 
 
-def followup_ephemeral_response(
+async def followup_ephemeral_response(
     interaction: discord.Interaction,
     content: Optional[str] = None,
     embed: Optional[discord.Embed] = None,
@@ -114,6 +121,8 @@ def followup_ephemeral_response(
 ) -> discord.WebhookMessage:
     """
     Send a followup response with centralized ephemerality control.
+    
+    Routes through the message queue for rate limiting and prioritization.
     
     Args:
         interaction: The Discord interaction object
@@ -126,7 +135,10 @@ def followup_ephemeral_response(
         The followup message object
     """
     ephemeral_kwargs = get_ephemeral_kwargs(interaction)
-    return interaction.followup.send(
+    
+    # Route through message queue
+    return await queue_followup(
+        interaction=interaction,
         content=content,
         embed=embed,
         view=view,

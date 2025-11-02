@@ -28,6 +28,14 @@ from src.backend.services.user_info_service import get_user_info
 from src.bot.components.cancel_embed import create_cancel_embed
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
+from src.bot.utils.message_helpers import (
+    queue_interaction_defer,
+    queue_interaction_edit,
+    queue_followup,
+    queue_channel_send,
+    queue_message_edit,
+    queue_edit_original
+)
 from src.bot.components.error_embed import ErrorEmbedException, create_error_view_from_exception
 from src.bot.utils.command_decorators import dm_only, auto_apply_dm_guard
 from src.bot.utils.discord_utils import (
@@ -273,7 +281,7 @@ class JoinQueueButton(discord.ui.Button):
         
         flow.checkpoint("defer_interaction_start")
         # Defer the interaction immediately to prevent timeouts
-        await interaction.response.defer()
+        await queue_interaction_defer(interaction)
         flow.checkpoint("defer_interaction_complete")
 
         flow.checkpoint("validate_race_selection")
@@ -367,7 +375,8 @@ class JoinQueueButton(discord.ui.Button):
         searching_view.start_status_updates()
         
         flow.checkpoint("build_and_send_embed_start")
-        await interaction.edit_original_response(
+        await queue_edit_original(
+            interaction,
             embed=searching_view.build_searching_embed(),
             view=searching_view
         )
@@ -422,7 +431,8 @@ class CancelQueueSetupButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         # Create and show the cancel embed
         cancel_view = create_cancel_embed()
-        await interaction.response.edit_message(
+        await queue_interaction_edit(
+            interaction,
             content="",
             embed=cancel_view.embed,
             view=cancel_view
@@ -556,7 +566,7 @@ class QueueView(discord.ui.View):
             default_races=self.get_selected_race_codes(),
             default_maps=self.vetoed_maps,
         )
-        await interaction.response.edit_message(embed=embed, view=new_view)
+        await queue_interaction_edit(interaction, embed=embed, view=new_view)
 
 
 class QueueSearchingView(discord.ui.View):
@@ -598,7 +608,8 @@ class QueueSearchingView(discord.ui.View):
                 if not self.is_active:
                     continue
                 try:
-                    await self.last_interaction.edit_original_response(
+                    await queue_edit_original(
+                        self.last_interaction,
                         embed=self.build_searching_embed(),
                         view=self
                     )
@@ -662,7 +673,8 @@ class QueueSearchingView(discord.ui.View):
                 color=discord.Color.green()
             )
             
-            await self.last_interaction.edit_original_response(
+            await queue_edit_original(
+                self.last_interaction,
                 content=None,
                 embed=confirmation_embed,
                 view=None
@@ -680,7 +692,7 @@ class QueueSearchingView(discord.ui.View):
             
             # Step 4: Send a new message with the match view
             flow.checkpoint("send_new_match_message")
-            new_match_message = await self.channel.send(embed=embed, view=match_view)
+            new_match_message = await queue_channel_send(self.channel, embed=embed, view=match_view)
             flow.checkpoint("new_match_message_sent")
             
             # Step 5: Update the match view with the new message's ID and channel
@@ -768,7 +780,8 @@ class CancelQueueButton(discord.ui.Button):
         await queue_searching_view_manager.unregister(self.player.discord_user_id, view=parent_view)
         
         # Return to the original queue view with its embed
-        await interaction.response.edit_message(
+        await queue_interaction_edit(
+            interaction,
             embed=self.original_view.get_embed(),
             view=self.original_view
         )
@@ -883,7 +896,7 @@ class MatchFoundView(discord.ui.View):
             message = await self.channel.fetch_message(self.original_message_id)
             
             # Edit it using the bot's permanent token (never expires!)
-            await message.edit(embed=embed, view=view or self)
+            await queue_message_edit(message, embed=embed, view=view or self)
             return True
         except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
             print(f"Failed to edit original message: {e}")
@@ -1406,7 +1419,7 @@ class MatchFoundView(discord.ui.View):
         )
         
         try:
-            await self.channel.send(embed=notification_embed)
+            await queue_channel_send(self.channel, embed=notification_embed)
         except discord.HTTPException as e:
             print(f"Error sending final notification for match {self.match_result.match_id}: {e}")
 
@@ -1505,7 +1518,7 @@ class MatchFoundView(discord.ui.View):
         )
         
         try:
-            await self.channel.send(embed=conflict_embed)
+            await queue_channel_send(self.channel, embed=conflict_embed)
         except discord.HTTPException as e:
             print(f"Error sending conflict notification for match {self.match_result.match_id}: {e}")
 
@@ -1613,7 +1626,7 @@ class MatchFoundView(discord.ui.View):
 
         try:
             print(f"📨 [DEBUG] Sending abort embed to channel for match {self.match_result.match_id}")
-            await self.channel.send(embed=abort_embed)
+            await queue_channel_send(self.channel, embed=abort_embed)
             print(f"✅ [DEBUG] Abort notification embed successfully sent for match {self.match_result.match_id}")
         except discord.HTTPException as e:
             print(f"❌ [DEBUG] Error sending abort notification for match {self.match_result.match_id}: {e}")
@@ -1649,7 +1662,7 @@ class MatchConfirmButton(discord.ui.Button):
         match_id = self.parent_view.match_result.match_id
         
         # Immediately defer the response
-        await interaction.response.defer()
+        await queue_interaction_defer(interaction)
         
         # Call the backend to record the confirmation
         from src.backend.services.app_context import match_completion_service
@@ -1662,17 +1675,21 @@ class MatchConfirmButton(discord.ui.Button):
             self.parent_view.abort_button.disabled = True
             self.style = discord.ButtonStyle.secondary
             async with self.parent_view.edit_lock:
-                await interaction.edit_original_response(view=self.parent_view)
+                # We must re-supply the embed, otherwise it will be removed
+                current_embed = self.parent_view.get_embed()
+                await queue_edit_original(interaction, embed=current_embed, view=self.parent_view)
             
             # Provide feedback to the user
-            await interaction.followup.send(
-                "✅ You have confirmed the match! Waiting for your opponent.",
+            await queue_followup(
+                interaction,
+                content="✅ You have confirmed the match! Waiting for your opponent.",
                 ephemeral=True
             )
         except Exception as e:
             print(f"Error confirming match {match_id} for player {player_discord_uid}: {e}")
-            await interaction.followup.send(
-                "❌ An error occurred while confirming the match. Please try again.",
+            await queue_followup(
+                interaction,
+                content="❌ An error occurred while confirming the match. Please try again.",
                 ephemeral=True
             )
 
@@ -1719,7 +1736,8 @@ class MatchAbortButton(discord.ui.Button):
             flow.checkpoint("update_button_ui_start")
             # Update the view to show the confirmation button
             async with self.parent_view.edit_lock:
-                await interaction.response.edit_message(
+                await queue_interaction_edit(
+                    interaction,
                     embed=self.parent_view.get_embed(),
                     view=self.parent_view
                 )
@@ -1756,7 +1774,8 @@ class MatchAbortButton(discord.ui.Button):
             # Update the embed to show abort status temporarily
             # The backend will send the final authoritative state
             async with self.parent_view.edit_lock:
-                await interaction.response.edit_message(
+                await queue_interaction_edit(
+                    interaction,
                     embed=self.parent_view.get_embed(), 
                     view=self.parent_view
                 )
@@ -1764,7 +1783,7 @@ class MatchAbortButton(discord.ui.Button):
             flow.complete("success")
         else:
             flow.complete("abort_failed")
-            await interaction.response.send_message("❌ Failed to abort match. It might have been already completed or aborted by the other player.")
+            await queue_interaction_response(interaction, content="❌ Failed to abort match. It might have been already completed or aborted by the other player.")
 
 
 class MatchResultConfirmSelect(discord.ui.Select):
@@ -1811,7 +1830,8 @@ class MatchResultConfirmSelect(discord.ui.Select):
         flow.checkpoint("update_discord_message_start")
         # Update the message to show the final state before backend processing
         async with self.parent_view.edit_lock:
-            await interaction.response.edit_message(
+            await queue_interaction_edit(
+                interaction,
                 embed=self.parent_view.get_embed(), view=self.parent_view
             )
         flow.checkpoint("update_discord_message_complete")
@@ -1875,7 +1895,7 @@ class MatchResultSelect(discord.ui.Select):
         # Check if replay is uploaded before allowing result selection
         if self.parent_view.match_result.replay_uploaded != "Yes":
             flow.complete("no_replay_uploaded")
-            await interaction.response.send_message("❌ Please upload a replay file before reporting match results.")
+            await queue_interaction_response(interaction, content="❌ Please upload a replay file before reporting match results.")
             return
         
         flow.checkpoint("store_selected_result")
@@ -1910,7 +1930,8 @@ class MatchResultSelect(discord.ui.Select):
         # Update the message (DO NOT call _update_dropdown_states() as it would reset our changes)
         self.parent_view.last_interaction = interaction
         async with self.parent_view.edit_lock:
-            await interaction.response.edit_message(
+            await queue_interaction_edit(
+                interaction,
                 embed=self.parent_view.get_embed(), view=self.parent_view
             )
         flow.checkpoint("update_message_complete")
@@ -1957,7 +1978,8 @@ class MatchResultSelect(discord.ui.Select):
             # Update the original message with new embed
             if hasattr(self.parent_view, 'last_interaction') and self.parent_view.last_interaction:
                 embed = self.parent_view.get_embed()
-                await self.parent_view.last_interaction.edit_original_response(
+                await queue_edit_original(
+                    self.parent_view.last_interaction,
                     embed=embed,
                     view=self.parent_view
                 )
@@ -1990,7 +2012,8 @@ class MatchResultSelect(discord.ui.Select):
                                 item.placeholder = f"Selected: {item.get_selected_label()}"
                         
                         # Update the other player's message
-                        await other_view.last_interaction.edit_original_response(
+                        await queue_edit_original(
+                            other_view.last_interaction,
                             embeds=[original_embed, result_embed],
                             view=other_view
                         )
@@ -2011,7 +2034,8 @@ class MatchResultSelect(discord.ui.Select):
                                 item.placeholder = f"Selected: {item.get_selected_label()}"
                         
                         # Update the other player's message
-                        await other_view.last_interaction.edit_original_response(
+                        await queue_edit_original(
+                            other_view.last_interaction,
                             embeds=[original_embed, disagreement_embed],
                             view=other_view
                         )
@@ -2045,7 +2069,8 @@ class MatchResultSelect(discord.ui.Select):
             # Update the original message with new embed
             if hasattr(self.parent_view, 'last_interaction') and self.parent_view.last_interaction:
                 embed = self.parent_view.get_embed()
-                await self.parent_view.last_interaction.edit_original_response(
+                await queue_edit_original(
+                    self.parent_view.last_interaction,
                     embed=embed,
                     view=self.parent_view
                 )
@@ -2136,7 +2161,7 @@ async def store_replay_background(match_id: int, player_id: int, replay_bytes: b
                         replay_data=replay_data,
                         verification_results=verification_results
                     )
-                    await channel.send(embed=final_embed)
+                    await queue_channel_send(channel, embed=final_embed)
                     
                 except ValueError as e:
                     # Match not found in database
@@ -2145,7 +2170,7 @@ async def store_replay_background(match_id: int, player_id: int, replay_bytes: b
                         description=f"Could not verify replay: {str(e)}",
                         color=discord.Color.red()
                     )
-                    await channel.send(embed=error_embed)
+                    await queue_channel_send(channel, embed=error_embed)
                     print(f"❌ Verification error for match {stored_match_id}: {e}")
                     
                 except Exception as e:
@@ -2155,7 +2180,7 @@ async def store_replay_background(match_id: int, player_id: int, replay_bytes: b
                         description="An error occurred while verifying the replay.",
                         color=discord.Color.red()
                     )
-                    await channel.send(embed=error_embed)
+                    await queue_channel_send(channel, embed=error_embed)
                     print(f"❌ Unexpected verification error for match {stored_match_id}: {e}")
                     import traceback
                     traceback.print_exc()
@@ -2285,7 +2310,7 @@ async def on_message(message: discord.Message, bot=None):
                 "A critical error occurred while parsing the replay. "
                 "The file may be corrupted. Please notify an admin."
             )
-            await message.channel.send(embed=error_embed)
+            await queue_channel_send(message.channel, embed=error_embed)
             return
         
         flow.checkpoint("parse_replay_complete")
@@ -2300,7 +2325,7 @@ async def on_message(message: discord.Message, bot=None):
             flow.complete("validation_failed")
             # Send the red error embed
             error_embed = ReplayDetailsEmbed.get_error_embed(error_message)
-            await message.channel.send(embed=error_embed)
+            await queue_channel_send(message.channel, embed=error_embed)
             
             # Update the match view to show "Replay Invalid"
             match_view.match_result.replay_uploaded = "Replay Invalid"

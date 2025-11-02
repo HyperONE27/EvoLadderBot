@@ -12,6 +12,7 @@ from src.bot.components.command_guard_embeds import create_command_guard_error_e
 from src.bot.utils.command_decorators import dm_only
 from src.bot.config import GLOBAL_TIMEOUT
 from src.backend.services.performance_service import FlowTracker
+from src.bot.utils.message_helpers import queue_interaction_edit
 
 
 # API Call / Data Handling
@@ -121,7 +122,7 @@ async def termsofservice_command(interaction: discord.Interaction):
                     description="An error occurred while confirming your acceptance. Please try again.",
                     color=discord.Color.red()
                 )
-                await interaction.response.edit_message(embed=error_embed, view=None)
+                await queue_interaction_edit(interaction, embed=error_embed, view=None)
                 return
 
             # Log the confirmation
@@ -138,7 +139,7 @@ async def termsofservice_command(interaction: discord.Interaction):
                 text="You may now use all EvoLadderBot features.",
                 icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
             )
-            await interaction.response.edit_message(embed=post_confirm_view.embed, view=post_confirm_view)
+            await queue_interaction_edit(interaction, embed=post_confirm_view.embed, view=post_confirm_view)
 
         @discord.ui.button(label="I Decline These Terms", emoji="✖️", style=discord.ButtonStyle.danger)
         async def decline_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -156,7 +157,7 @@ async def termsofservice_command(interaction: discord.Interaction):
                 icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"
             )
 
-            await interaction.response.edit_message(embed=decline_embed, view=None)
+            await queue_interaction_edit(interaction, embed=decline_embed, view=None)
 
     confirm_view = TOSConfirmView()
 

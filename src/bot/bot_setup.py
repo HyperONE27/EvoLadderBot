@@ -27,6 +27,7 @@ from src.backend.services.performance_service import FlowTracker, performance_mo
 from src.backend.services.process_pool_health import set_bot_instance
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.config import DATABASE_URL, DB_POOL_MAX_CONNECTIONS, DB_POOL_MIN_CONNECTIONS, WORKER_PROCESSES
+from src.bot.message_queue import get_message_queue
 
 # Add app_context import
 from src.backend.services import app_context
@@ -311,20 +312,34 @@ class EvoLadderBot(commands.Bot):
         the bot's event loop is shut down.
         
         Critical shutdown order:
-        1. Stop background tasks (memory monitoring, etc.)
-        2. Shutdown process pool (wait for replay parsing jobs to finish)
-        3. Shutdown DataAccessService (flush writes and close WAL)
-        4. Close database connection pool
+        1. Stop message queue (drain pending Discord API calls)
+        2. Stop background tasks (memory monitoring, etc.)
+        3. Shutdown process pool (wait for replay parsing jobs to finish)
+        4. Shutdown DataAccessService (flush writes and close WAL)
+        5. Close database connection pool
         
-        This order is essential because replay parsing jobs write to the WAL,
-        so the process pool must shut down before the WAL is closed.
+        This order is essential because:
+        - Message queue must drain first to send all pending notifications
+        - Replay parsing jobs write to the WAL, so process pool shuts down before WAL closes
         """
         print("[Shutdown] Closing application resources...")
         
-        # 1. Stop Background Tasks
+        # 1. Stop Message Queue
+        # Must be stopped first to ensure all pending Discord API calls are sent
+        # before we shut down other services
+        try:
+            message_queue = get_message_queue()
+            if message_queue:
+                print("[Shutdown] Stopping message queue...")
+                await message_queue.stop()
+                print("[Shutdown] Message queue stopped.")
+        except Exception as e:
+            print(f"[Shutdown] Error stopping message queue: {e}")
+        
+        # 2. Stop Background Tasks
         self.stop_background_tasks()
         
-        # 2. Shutdown Process Pool - MUST happen before DataAccessService
+        # 3. Shutdown Process Pool - MUST happen before DataAccessService
         # This ensures all replay parsing jobs finish and write their results
         # to the WAL before we close the database connections
         if self.process_pool:
@@ -333,7 +348,7 @@ class EvoLadderBot(commands.Bot):
             self.process_pool.shutdown(wait=True)
             print("[Shutdown] Process pool shutdown complete.")
         
-        # 3. Shutdown DataAccessService - Now safe to close WAL
+        # 4. Shutdown DataAccessService - Now safe to close WAL
         # All external processes that might write to the WAL have finished
         try:
             data_access_service = DataAccessService()
@@ -343,12 +358,12 @@ class EvoLadderBot(commands.Bot):
         except Exception as e:
             print(f"[Shutdown] Error shutting down DataAccessService: {e}")
         
-        # 4. Close Database Connection Pool
+        # 5. Close Database Connection Pool
         close_pool()
         
         print("[Shutdown] All resources closed.")
         
-        # 5. Call the parent class close() to handle discord.py cleanup
+        # 6. Call the parent class close() to handle discord.py cleanup
         await super().close()
 
 
@@ -440,4 +455,20 @@ async def initialize_backend_services(bot: EvoLadderBot) -> None:
     
     # 9. Performance monitoring is active
     print("[INFO] Performance monitoring ACTIVE")
+    
+    # 10. Start Message Queue
+    print("[Startup] Starting message queue...")
+    try:
+        message_queue = get_message_queue()
+        if message_queue:
+            await message_queue.start()
+            print("[INFO] Message queue started successfully")
+        else:
+            print("[FATAL] Message queue not initialized")
+            sys.exit(1)
+    except Exception as e:
+        print(f"\n[FATAL] Failed to start message queue: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 

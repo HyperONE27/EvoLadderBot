@@ -24,6 +24,15 @@ from src.backend.services.app_context import admin_service, data_access_service,
 from src.backend.services.process_pool_health import get_bot_instance
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
 from src.bot.config import GLOBAL_TIMEOUT
+from src.bot.utils.message_helpers import queue_user_send
+from src.bot.utils.discord_utils import (
+    format_discord_timestamp,
+    get_current_unix_timestamp,
+    get_flag_emote,
+    get_race_emote,
+    get_rank_emote,
+    send_ephemeral_response
+)
 
 
 # ========== NOTIFICATION HELPER ==========
@@ -50,7 +59,7 @@ async def send_player_notification(discord_uid: int, embed: discord.Embed) -> bo
     try:
         user = await bot_instance.fetch_user(discord_uid)
         if user:
-            await user.send(embed=embed)
+            await queue_user_send(user, embed=embed)
             print(f"[AdminCommand] Sent notification to user {discord_uid}")
             return True
         else:
@@ -170,10 +179,6 @@ def format_player_state(state: dict, discord_user: discord.User = None) -> disco
     Returns:
         discord.Embed with formatted player state
     """
-    from src.bot.utils.discord_utils import (
-        get_flag_emote, get_globe_emote, get_race_emote, 
-        get_rank_emote, get_game_emote
-    )
     from datetime import timezone
     
     def format_report(report):
@@ -629,9 +634,6 @@ def register_admin_commands(tree: app_commands.CommandTree):
         p2_country = p2_info.get('country', 'unknown') if p2_info else 'unknown'
         
         # Get emojis
-        from src.bot.utils.discord_utils import get_flag_emote, get_race_emote, get_rank_emote
-        from src.backend.services.app_context import ranking_service
-        
         p1_flag = get_flag_emote(p1_country)
         p2_flag = get_flag_emote(p2_country)
         p1_race_emote = get_race_emote(p1_race)
@@ -861,8 +863,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
             
             if result['success']:
                 # Backend provides ALL data - frontend just displays it
-                from src.bot.utils.discord_utils import get_flag_emote, get_rank_emote, get_race_emote
-                
+                                
                 md = result.get('match_data', {})
                 notif = result.get('notification_data', {})
                 
@@ -1077,8 +1078,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
                         'subtract': f"decreased by {notif['value']}"
                     }.get(notif['operation'], f"adjusted (operation: {notif['operation']})")
                     
-                    from src.bot.utils.discord_utils import get_race_emote
-                    
+                                        
                     race_name = races_service.get_race_name(race)
                     race_emote = get_race_emote(race)
                     
@@ -1127,8 +1127,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
                     await send_player_notification(notif['player_uid'], player_embed)
                 
                 # Get race details for better display
-                from src.bot.utils.discord_utils import get_race_emote
-                
+                                
                 race_name = races_service.get_race_name(race)
                 race_emote = get_race_emote(race)
                 

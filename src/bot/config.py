@@ -122,3 +122,11 @@ QUEUE_MESSAGE_PROTECTION_DAYS = 7
 
 # Prune command delay (seconds) - delay between message deletions to avoid rate limits
 PRUNE_DELETE_DELAY_SECONDS = 1
+
+# =============================================================================
+# MESSAGE QUEUE CONFIGURATION
+# =============================================================================
+
+# Discord message queue rate limit (messages per second)
+# This controls the global throughput of all outbound Discord API calls
+DISCORD_MESSAGE_RATE_LIMIT = 40

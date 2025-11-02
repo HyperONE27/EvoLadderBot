@@ -121,6 +121,10 @@ match_completion_service = MatchCompletionService()
 notification_service = initialize_notification_service()
 queue_service = initialize_queue_service()
 
+# Message queue for Discord API calls (frontend service)
+from src.bot.message_queue import initialize_message_queue
+message_queue = initialize_message_queue()
+
 
 # =============================================================================
 # EXPORTS - All services available for import
@@ -152,5 +156,7 @@ __all__ = [
     "queue_service",
     # Admin services
     "admin_service",
+    # Message queue (frontend service)
+    "message_queue",
 ]
 

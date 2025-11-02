@@ -1,6 +1,7 @@
 import discord
 from typing import Optional, Union, Callable, Any
 from src.bot.utils.discord_utils import send_ephemeral_response
+from src.bot.utils.message_helpers import queue_interaction_edit
 
 
 class ErrorEmbedException(Exception):
@@ -90,7 +91,8 @@ class RetryTargetButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         if isinstance(self.reset_target, discord.ui.View):
-            await interaction.response.edit_message(
+            await queue_interaction_edit(
+                interaction,
                 content="🔄 Retrying...",
                 embed=None,
                 view=self.reset_target
@@ -111,7 +113,8 @@ class DismissButton(discord.ui.Button):
         super().__init__(emoji="✖️", label=label, style=discord.ButtonStyle.danger)
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(
+        await queue_interaction_edit(
+            interaction,
             content="❌ Error dismissed.",
             embed=None,
             view=None
