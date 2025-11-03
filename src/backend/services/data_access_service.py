@@ -53,6 +53,7 @@ class WriteJobType(Enum):
     LOG_ADMIN_ACTION = "log_admin_action"
     ABORT_MATCH = "abort_match"
     SYSTEM_ABORT_UNCONFIRMED = "system_abort_unconfirmed"
+    UPDATE_PLAYER_STATE = "update_player_state"
 
 
 @dataclass
@@ -164,13 +165,26 @@ class DataAccessService:
         if players_data:
             self._players_df = pl.DataFrame(players_data, infer_schema_length=None)
         else:
-            # Create empty DataFrame with schema
+            # Create empty DataFrame with schema matching PostgreSQL players table
             self._players_df = pl.DataFrame({
+                "id": pl.Series([], dtype=pl.Int64),
                 "discord_uid": pl.Series([], dtype=pl.Int64),
                 "discord_username": pl.Series([], dtype=pl.Utf8),
                 "player_name": pl.Series([], dtype=pl.Utf8),
+                "battletag": pl.Series([], dtype=pl.Utf8),
+                "alt_player_name_1": pl.Series([], dtype=pl.Utf8),
+                "alt_player_name_2": pl.Series([], dtype=pl.Utf8),
                 "country": pl.Series([], dtype=pl.Utf8),
+                "region": pl.Series([], dtype=pl.Utf8),
+                "accepted_tos": pl.Series([], dtype=pl.Boolean),
+                "accepted_tos_date": pl.Series([], dtype=pl.Utf8),
+                "completed_setup": pl.Series([], dtype=pl.Boolean),
+                "completed_setup_date": pl.Series([], dtype=pl.Utf8),
+                "activation_code": pl.Series([], dtype=pl.Utf8),
+                "created_at": pl.Series([], dtype=pl.Utf8),
+                "updated_at": pl.Series([], dtype=pl.Utf8),
                 "remaining_aborts": pl.Series([], dtype=pl.Int32),
+                "player_state": pl.Series([], dtype=pl.Utf8),
             })
         print(f"[DataAccessService]   Players loaded: {len(self._players_df)} rows, size: {self._players_df.estimated_size('mb'):.2f} MB")
         
@@ -189,11 +203,13 @@ class DataAccessService:
             print(f"[DataAccessService]   MMRs schema: {self._mmrs_1v1_df.schema}")
             print(f"[DataAccessService]   MMRs columns: {self._mmrs_1v1_df.columns}")
         else:
+            # Create empty DataFrame with schema matching PostgreSQL mmrs_1v1 table
             self._mmrs_1v1_df = pl.DataFrame({
+                "id": pl.Series([], dtype=pl.Int64),
                 "discord_uid": pl.Series([], dtype=pl.Int64),
+                "player_name": pl.Series([], dtype=pl.Utf8),
                 "race": pl.Series([], dtype=pl.Utf8),
                 "mmr": pl.Series([], dtype=pl.Int64),
-                "player_name": pl.Series([], dtype=pl.Utf8),
                 "games_played": pl.Series([], dtype=pl.Int64),
                 "games_won": pl.Series([], dtype=pl.Int64),
                 "games_lost": pl.Series([], dtype=pl.Int64),
@@ -214,7 +230,9 @@ class DataAccessService:
         if prefs_data:
             self._preferences_1v1_df = pl.DataFrame(prefs_data, infer_schema_length=None)
         else:
+            # Create empty DataFrame with schema matching PostgreSQL preferences_1v1 table
             self._preferences_1v1_df = pl.DataFrame({
+                "id": pl.Series([], dtype=pl.Int64),
                 "discord_uid": pl.Series([], dtype=pl.Int64),
                 "last_chosen_races": pl.Series([], dtype=pl.Utf8),
                 "last_chosen_vetoes": pl.Series([], dtype=pl.Utf8),
@@ -761,6 +779,14 @@ class DataAccessService:
                     -1  # match_result: -1 for aborted
                 )
             
+            elif job.job_type == WriteJobType.UPDATE_PLAYER_STATE:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.update_player_state,
+                    job.data['discord_uid'],
+                    job.data['state']
+                )
+            
             # Add other job types as we implement them
             else:
                 print(f"[DataAccessService] WARNING: Unknown job type: {job.job_type}")
@@ -928,6 +954,106 @@ class DataAccessService:
         
         result = self._players_df.filter(pl.col("discord_uid") == discord_uid)
         return len(result) > 0
+    
+    def get_player_state(self, discord_uid: int) -> str:
+        """
+        Get player's current state.
+        
+        Args:
+            discord_uid: Player's Discord ID
+        
+        Returns:
+            Player state string: "idle", "queueing", or "in_match:{match_id}"
+            Returns "idle" if player not found or state is None
+        """
+        if self._players_df is None:
+            return "idle"
+        
+        result = self._players_df.filter(pl.col("discord_uid") == discord_uid)
+        
+        if len(result) == 0:
+            return "idle"
+        
+        state = result['player_state'][0]
+        return state if state is not None else "idle"
+    
+    async def set_player_state(self, discord_uid: int, state: str) -> bool:
+        """
+        Set player's state atomically.
+        
+        Args:
+            discord_uid: Player's Discord ID
+            state: New state ("idle", "queueing", "in_match:{match_id}")
+        
+        Returns:
+            True if successful, False if player not found
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if self._players_df is None:
+            return False
+        
+        mask = pl.col("discord_uid") == discord_uid
+        if len(self._players_df.filter(mask)) == 0:
+            return False
+        
+        # Log every state transition for debugging
+        logger.info(f"[STATE] {discord_uid} -> {state}")
+        
+        self._players_df = self._players_df.with_columns(
+            pl.when(mask).then(pl.lit(state)).otherwise(pl.col("player_state")).alias("player_state")
+        )
+        
+        job = WriteJob(
+            job_type=WriteJobType.UPDATE_PLAYER_STATE,
+            data={'discord_uid': discord_uid, 'state': state},
+            timestamp=time.time()
+        )
+        await self._queue_write(job)
+        return True
+    
+    async def reset_all_player_states_to_idle(self) -> int:
+        """
+        Reset all non-idle player states to idle. Used on startup for crash recovery.
+        
+        This method finds all players with non-idle states and resets them to "idle",
+        both in memory and in the database. This is necessary when the bot restarts
+        after a crash, as players who were in "queueing" or "in_match:X" states
+        should be reset to allow them to queue again.
+        
+        Returns:
+            Number of players whose state was reset
+        """
+        if self._players_df is None or len(self._players_df) == 0:
+            return 0
+        
+        # Find all players with non-idle states
+        non_idle_players = self._players_df.filter(
+            (pl.col("player_state") != "idle") & 
+            (pl.col("player_state").is_not_null())
+        )
+        
+        reset_count = len(non_idle_players)
+        
+        if reset_count == 0:
+            return 0
+        
+        # Reset all non-idle states to idle in memory
+        self._players_df = self._players_df.with_columns(
+            pl.lit("idle").alias("player_state")
+        )
+        
+        # Queue database writes for each affected player
+        for discord_uid in non_idle_players['discord_uid'].to_list():
+            job = WriteJob(
+                job_type=WriteJobType.UPDATE_PLAYER_STATE,
+                data={'discord_uid': discord_uid, 'state': 'idle'},
+                timestamp=time.time()
+            )
+            await self._queue_write(job)
+        
+        return reset_count
     
     # ========== Read Methods (MMRs Table) ==========
     
@@ -1276,6 +1402,7 @@ class DataAccessService:
             "battletag": [battletag],
             "region": [region],
             "remaining_aborts": [3],  # Default value
+            "player_state": ["idle"],  # Default state
         })
         
         # Append to existing DataFrame

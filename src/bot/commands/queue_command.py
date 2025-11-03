@@ -170,15 +170,11 @@ async def queue_command(interaction: discord.Interaction):
         await send_ephemeral_response(interaction, embed=error_embed)
         return
 
-    # Check for existing queue/match
-    flow.checkpoint("check_existing_queue_start")
-    is_in_match_view = any(
-        v.match_result.player_1_discord_id == interaction.user.id or v.match_result.player_2_discord_id == interaction.user.id
-        for v in channel_to_match_view_map.values()
-    )
-
-    # Prevent multiple queue attempts or queuing while a match is active
-    if await queue_searching_view_manager.has_view(interaction.user.id) or is_in_match_view:
+    # Check player state atomically (single source of truth)
+    flow.checkpoint("check_player_state_start")
+    from src.backend.services.app_context import data_access_service
+    player_state = data_access_service.get_player_state(interaction.user.id)
+    if player_state != "idle":
         flow.complete("already_queued")
         error = ErrorEmbedException(
             title="Queueing Not Allowed",
@@ -188,7 +184,7 @@ async def queue_command(interaction: discord.Interaction):
         await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
         return
     
-    flow.checkpoint("check_existing_queue_complete")
+    flow.checkpoint("check_player_state_complete")
     
     # Get user's saved preferences from DataAccessService (in-memory, instant)
     flow.checkpoint("load_preferences_start")
@@ -321,8 +317,10 @@ class JoinQueueButton(discord.ui.Button):
         user_id = user_info["id"]
 
         flow.checkpoint("check_duplicate_queue")
-        # Prevent multiple queue attempts or queuing while a match is active
-        if await queue_searching_view_manager.has_view(user_id) or interaction.user.id in match_results:
+        # Check player state atomically (single source of truth)
+        from src.backend.services.app_context import data_access_service
+        player_state = data_access_service.get_player_state(user_id)
+        if player_state != "idle":
             flow.complete("already_queued")
             error = ErrorEmbedException(
                 title="Queueing Not Allowed",
@@ -353,11 +351,24 @@ class JoinQueueButton(discord.ui.Button):
             preferences=preferences
         )
         
+        flow.checkpoint("set_queueing_state")
+        # Optimistically set player state to queueing BEFORE adding to matchmaker
+        # This provides more durable queue protection
+        from src.backend.services.app_context import data_access_service
+        await data_access_service.set_player_state(user_id, "queueing")
+        
         flow.checkpoint("add_player_to_matchmaker_start")
-        # Add player to matchmaker
-        print(f"🎮 Adding player to matchmaker: {player.user_id}")
-        await matchmaker.add_player(player)
-        flow.checkpoint("add_player_to_matchmaker_complete")
+        # Try to add player to matchmaker
+        try:
+            print(f"🎮 Adding player to matchmaker: {player.user_id}")
+            await matchmaker.add_player(player)
+            flow.checkpoint("add_player_to_matchmaker_complete")
+        except Exception as e:
+            # Rollback state change on failure
+            flow.checkpoint("add_player_failed_rollback")
+            await data_access_service.set_player_state(user_id, "idle")
+            print(f"❌ Failed to add player to matchmaker: {e}")
+            raise
         
         flow.checkpoint("create_searching_view")
         # Show searching state
@@ -718,6 +729,16 @@ class QueueSearchingView(discord.ui.View):
 
     async def on_timeout(self):
         """Handle view timeout"""
+        # Reset player state when queue times out
+        # BUT: Don't clobber match states if player already got matched
+        from src.backend.services.app_context import data_access_service
+        current_state = data_access_service.get_player_state(self.player.discord_user_id)
+        if not current_state.startswith("in_match:"):
+            await data_access_service.set_player_state(self.player.discord_user_id, "idle")
+        
+        # Also remove from matchmaker
+        await matchmaker.remove_player(self.player.discord_user_id)
+        
         # Clean up notification subscription
         await notification_service.unsubscribe(self.player.discord_user_id)
         
@@ -768,6 +789,13 @@ class CancelQueueButton(discord.ui.Button):
         # Proceed with cancelling the queue entry
         print(f"🚪 Removing player from matchmaker: {self.player.user_id}")
         await matchmaker.remove_player(self.player.discord_user_id)
+        
+        # Reset player state to idle
+        # BUT: Don't clobber match states if player already got matched
+        from src.backend.services.app_context import data_access_service
+        current_state = data_access_service.get_player_state(self.player.discord_user_id)
+        if not current_state.startswith("in_match:"):
+            await data_access_service.set_player_state(self.player.discord_user_id, "idle")
         
         # Clean up the notification subscription and cancel the listener task
         await notification_service.unsubscribe(self.player.discord_user_id)

@@ -50,7 +50,9 @@ def create_database(db_path: str = "evoladder.db") -> None:
             completed_setup_date    TIMESTAMP,
             activation_code         TEXT,
             created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            remaining_aborts        INTEGER DEFAULT 3,
+            player_state            TEXT DEFAULT 'idle'
         )
     """)
     

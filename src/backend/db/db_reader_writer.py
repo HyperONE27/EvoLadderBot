@@ -442,6 +442,18 @@ class DatabaseWriter:
             print(f"Error updating remaining aborts for player {discord_uid}: {e}")
             return False
     
+    def update_player_state(self, discord_uid: int, player_state: str) -> bool:
+        """Update player state."""
+        try:
+            rowcount = self.adapter.execute_write(
+                "UPDATE players SET player_state = :player_state WHERE discord_uid = :discord_uid",
+                {"player_state": player_state, "discord_uid": discord_uid}
+            )
+            return rowcount > 0
+        except Exception as e:
+            print(f"Error updating player state for {discord_uid}: {e}")
+            return False
+    
     def accept_terms_of_service(self, discord_uid: int) -> bool:
         """Mark player as having accepted terms of service."""
         return self.update_player(discord_uid, accepted_tos=True)

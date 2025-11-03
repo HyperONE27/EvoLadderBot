@@ -1313,6 +1313,75 @@ def register_admin_commands(tree: app_commands.CommandTree):
         
         await interaction.response.send_message(embed=embed, view=view)
     
+    @admin_group.command(name="unblock_queue", description="[Admin] Reset player state to idle (fixes stuck players)")
+    @app_commands.describe(
+        user="Player's @username, username, or Discord ID",
+        reason="Reason for unblocking"
+    )
+    @admin_only()
+    async def admin_unblock_queue(
+        interaction: discord.Interaction,
+        user: str,
+        reason: str
+    ):
+        """Reset a player's state to idle with confirmation."""
+        # Resolve user input to Discord ID
+        user_info = await admin_service.resolve_user(user)
+        
+        if user_info is None:
+            await interaction.response.send_message(
+                f"❌ Could not find user: {user}",
+                ephemeral=True
+            )
+            return
+        
+        uid = user_info['discord_uid']
+        player_name = user_info['player_name']
+        
+        async def confirm_callback(button_interaction: discord.Interaction):
+            await button_interaction.response.defer()
+            
+            result = await admin_service.unblock_player_state(
+                discord_uid=uid,
+                admin_discord_id=interaction.user.id,
+                reason=reason
+            )
+            
+            if result['success']:
+                result_embed = discord.Embed(
+                    title="✅ Admin: Player Unblocked",
+                    description=f"**Player:** <@{uid}> ({player_name})\n**Status:** State reset to idle\n**Previous State:** {result.get('old_state', 'unknown')}",
+                    color=discord.Color.green()
+                )
+                
+                result_embed.add_field(
+                    name="👤 Admin",
+                    value=interaction.user.name,
+                    inline=True
+                )
+                result_embed.add_field(
+                    name="📝 Reason",
+                    value=reason,
+                    inline=False
+                )
+            else:
+                result_embed = discord.Embed(
+                    title="❌ Admin: Unblock Failed",
+                    description=f"Error: {result.get('error')}",
+                    color=discord.Color.red()
+                )
+            
+            await button_interaction.edit_original_response(embed=result_embed, view=None)
+        
+        embed, view = _create_admin_confirmation(
+            interaction,
+            "⚠️ Admin: Confirm Player Unblock",
+            f"**Player:** <@{uid}>\n**Reason:** {reason}\n\nThis will reset the player's state to 'idle', allowing them to queue again. Confirm?",
+            confirm_callback
+        )
+        
+        await interaction.response.send_message(embed=embed, view=view)
+    
     @admin_group.command(name="reset_aborts", description="[Admin] Reset player's abort count")
     @app_commands.describe(
         user="Player's @username, username, or Discord ID",

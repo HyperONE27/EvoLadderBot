@@ -264,6 +264,11 @@ class Matchmaker:
 		# can be used to trigger the release process
 		print(f"🔓 Releasing queue lock for {len(discord_user_ids)} players after match resolution")
 		
+		# Reset player states to idle
+		from src.backend.services.app_context import data_access_service
+		for discord_user_id in discord_user_ids:
+			await data_access_service.set_player_state(discord_user_id, "idle")
+		
 		# Import here to avoid circular imports
 		from src.bot.commands.queue_command import queue_searching_view_manager, match_results, channel_to_match_view_map
 		
@@ -672,6 +677,10 @@ class Matchmaker:
 			}
 			
 			match_id = await data_service.create_match(match_data)
+			
+			# Set both players to in-match state
+			await data_service.set_player_state(p1.discord_user_id, f"in_match:{match_id}")
+			await data_service.set_player_state(p2.discord_user_id, f"in_match:{match_id}")
 			
 			# Generate in-game channel based on match_id
 			in_game_channel = self.generate_in_game_channel(match_id)

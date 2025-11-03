@@ -1071,6 +1071,9 @@ class AdminService:
                 await matchmaker.remove_player(discord_uid)
                 print(f"[AdminService] Removed player {discord_uid} from matchmaking queue")
                 
+                # Reset player state to idle
+                await self.data_service.set_player_state(discord_uid, "idle")
+                
                 # Clear queue-locked state so player can re-queue
                 await self._clear_player_queue_lock(discord_uid)
                 
@@ -1160,6 +1163,44 @@ class AdminService:
             
         except Exception as e:
             print(f"[AdminService] ERROR resetting aborts: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def unblock_player_state(
+        self,
+        discord_uid: int,
+        admin_discord_id: int,
+        reason: str
+    ) -> dict:
+        """
+        Reset player state to idle. Use this to fix stuck players.
+        
+        Args:
+            discord_uid: Player to unblock
+            admin_discord_id: Admin performing action
+            reason: Explanation for audit log
+        
+        Returns:
+            Dict with success status
+        """
+        try:
+            current_state = self.data_service.get_player_state(discord_uid)
+            success = await self.data_service.set_player_state(discord_uid, "idle")
+            
+            if success:
+                await self._log_admin_action(
+                    admin_discord_id=admin_discord_id,
+                    action_type='unblock_player_state',
+                    target_player_uid=discord_uid,
+                    details={'reason': reason, 'old_state': current_state}
+                )
+                return {
+                    'success': True,
+                    'discord_uid': discord_uid,
+                    'old_state': current_state
+                }
+            else:
+                return {'success': False, 'error': 'Player not found'}
+        except Exception as e:
             return {'success': False, 'error': str(e)}
     
     # ========== LAYER 3: EMERGENCY CONTROLS ==========

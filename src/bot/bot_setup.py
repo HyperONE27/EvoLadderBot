@@ -439,6 +439,19 @@ async def initialize_backend_services(bot: EvoLadderBot) -> None:
         import traceback
         traceback.print_exc()
         sys.exit(1)
+    
+    # 7.5. Reset all player states to idle (crash recovery)
+    print("[Startup] Resetting non-idle player states (crash recovery)...")
+    try:
+        reset_count = await data_service.reset_all_player_states_to_idle()
+        if reset_count > 0:
+            print(f"[INFO] Reset {reset_count} player(s) from non-idle states to idle")
+        else:
+            print("[INFO] No players needed state reset")
+    except Exception as e:
+        print(f"\n[WARNING] Failed to reset player states: {e}")
+        import traceback
+        traceback.print_exc()
         
     # 8. Refresh Ranking Service (depends on DataAccessService)
     print("[Startup] Performing initial rank calculation...")
