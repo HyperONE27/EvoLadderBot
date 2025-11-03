@@ -68,10 +68,11 @@ def register_setup_command(tree: app_commands.CommandTree):
 
 # UI Elements
 class SetupModal(discord.ui.Modal, title="Player Setup"):
-    def __init__(self, error_message: Optional[str] = None, existing_data: Optional[dict] = None) -> None:
+    def __init__(self, error_message: Optional[str] = None, existing_data: Optional[dict] = None, is_editing: bool = False) -> None:
         super().__init__(timeout=GLOBAL_TIMEOUT)
         self.error_message = error_message
         self.existing_data = existing_data or {}
+        self.is_editing = is_editing  # True if modal was triggered from restart button
         
         # Create TextInput fields with existing data as defaults
         self.user_id = discord.ui.TextInput(
@@ -128,6 +129,9 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
             'region': self.existing_data['region']
         }
         
+        # Choose send or edit based on whether we're editing an existing message
+        respond_func = edit_ephemeral_response if self.is_editing else send_ephemeral_response
+        
         # Validate user ID
         is_valid, error = validation_service.validate_user_id(self.user_id.value)
         if not is_valid:
@@ -136,10 +140,10 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
                 description=f"**Error:** {error}\n\nPlease try again with a valid User ID.",
                 color=discord.Color.red()
             )
-            await send_ephemeral_response(
+            await respond_func(
                 interaction,
                 embed=error_embed,
-                view=ErrorView(error, current_input)
+                view=ErrorView(error, current_input, is_editing=self.is_editing)
             )
             return
 
@@ -151,10 +155,10 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
                 description=f"**Error:** {error}\n\nPlease try again with a valid BattleTag.",
                 color=discord.Color.red()
             )
-            await send_ephemeral_response(
+            await respond_func(
                 interaction,
                 embed=error_embed,
-                view=ErrorView(error, current_input)
+                view=ErrorView(error, current_input, is_editing=self.is_editing)
             )
             return
 
@@ -173,10 +177,10 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
                     description=f"**Error:** {error}\n\nPlease try again with a valid Alternative ID.",
                     color=discord.Color.red()
                 )
-                await send_ephemeral_response(
+                await respond_func(
                     interaction,
                     embed=error_embed,
-                    view=ErrorView(error, current_input)
+                    view=ErrorView(error, current_input, is_editing=self.is_editing)
                 )
                 return
             alt_ids_list.append(self.alt_id_1.value.strip())
@@ -193,10 +197,10 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
                     description=f"**Error:** {error}\n\nPlease try again with a valid Alternative ID.",
                     color=discord.Color.red()
                 )
-                await send_ephemeral_response(
+                await respond_func(
                     interaction,
                     embed=error_embed,
-                    view=ErrorView(error, current_input)
+                    view=ErrorView(error, current_input, is_editing=self.is_editing)
                 )
                 return
             alt_ids_list.append(self.alt_id_2.value.strip())
@@ -209,10 +213,10 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
                 description="**Error:** All IDs must be unique.\n\nPlease ensure each ID is different from the others.",
                 color=discord.Color.red()
             )
-            await send_ephemeral_response(
+            await respond_func(
                 interaction,
                 embed=error_embed,
-                view=ErrorView("Duplicate IDs detected", current_input)
+                view=ErrorView("Duplicate IDs detected", current_input, is_editing=self.is_editing)
             )
             return
 
@@ -281,21 +285,22 @@ class SetupModal(discord.ui.Modal, title="Player Setup"):
             color=discord.Color.blue()
         )
         
-        await send_ephemeral_response(
+        await respond_func(
             interaction,
             embed=initial_embed,
             view=view
         )
 
 class ErrorView(discord.ui.View):
-    def __init__(self, error_message: str, existing_data: Optional[dict] = None) -> None:
+    def __init__(self, error_message: str, existing_data: Optional[dict] = None, is_editing: bool = False) -> None:
         super().__init__(timeout=GLOBAL_TIMEOUT)
         self.error_message = error_message
         self.existing_data = existing_data or {}
         
         # Add restart and cancel buttons only
+        # Note: Restart button sends a modal, so next submission will be editing
         buttons = ConfirmRestartCancelButtons.create_buttons(
-            reset_target=SetupModal(existing_data=self.existing_data),
+            reset_target=SetupModal(existing_data=self.existing_data, is_editing=True),
             restart_label="Try Again",
             cancel_label="Cancel",
             show_cancel_fields=False,
@@ -449,9 +454,10 @@ class UnifiedSetupView(discord.ui.View):
         }
         
         # Add action buttons using the unified approach
+        # Note: Restart button sends a modal, so next submission will be editing
         buttons = ConfirmRestartCancelButtons.create_buttons(
             confirm_callback=self.confirm_callback,
-            reset_target=SetupModal(existing_data=existing_data),
+            reset_target=SetupModal(existing_data=existing_data, is_editing=True),
             confirm_label="Confirm",
             restart_label="Restart", 
             cancel_label="Cancel",
@@ -533,19 +539,21 @@ class UnifiedSetupView(discord.ui.View):
                 @discord.ui.button(emote="🔄", label="Try Again", style=discord.ButtonStyle.secondary)
                 async def restart(self, interaction: discord.Interaction, button: discord.ui.Button):
                     # Go back to the country/region selection view
-                    embed = self.original_view.get_embed()
+                    embed = self.original_view.get_status_embed()
                     await queue_interaction_edit(interaction, embed=embed, view=self.original_view)
                 
                 @discord.ui.button(emote="❌", label="Cancel", style=discord.ButtonStyle.danger)
                 async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-                    await send_ephemeral_response(
+                    await queue_interaction_edit(
                         interaction,
-                        content="Setup cancelled. You can use `/setup` again when ready."
+                        content="Setup cancelled. You can use `/setup` again when ready.",
+                        embed=None,
+                        view=None
                     )
             
             error_view = SetupErrorView(self)
             
-            await send_ephemeral_response(
+            await edit_ephemeral_response(
                 interaction,
                 embed=error_embed,
                 view=error_view
@@ -630,12 +638,13 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
                        f"User ID: {user_id}, Country: {country['name']}, Region: {region['name']}")
         
         # Show post-confirmation view
+        # Note: Restart button sends a modal, so next submission will be editing
         post_confirm_view = ConfirmEmbedView(
             title="Setup Complete!",
             description="Your player profile has been successfully configured:",
             fields=fields,
             mode="post_confirmation",
-            reset_target=SetupModal(existing_data=user_info_service.get_player(user_info["id"])),
+            reset_target=SetupModal(existing_data=user_info_service.get_player(user_info["id"]), is_editing=True),
             restart_label="🔄 Setup Again"
         )
         
@@ -647,11 +656,12 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
             view=post_confirm_view,
         )
     
+    # Note: Restart button sends a modal, so next submission will be editing
     return ConfirmEmbedView(
         title="Preview Setup Information",
         description="Please review your setup information before confirming:",
         fields=fields,
         mode="preview",
         confirm_callback=confirm_callback,
-        reset_target=SetupModal(existing_data=existing_data)
+        reset_target=SetupModal(existing_data=existing_data, is_editing=True)
     )

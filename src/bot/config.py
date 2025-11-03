@@ -68,9 +68,6 @@ def _get_required_int_env(key: str) -> int:
 # Discord Bot Configuration
 EVOLADDERBOT_TOKEN = _get_required_env("EVOLADDERBOT_TOKEN")
 
-# Global timeout for Discord interactions (in seconds)
-GLOBAL_TIMEOUT = _get_required_int_env("GLOBAL_TIMEOUT")
-
 # Worker processes for multiprocessing (replay parsing)
 WORKER_PROCESSES = _get_required_int_env("WORKER_PROCESSES")
 
@@ -102,6 +99,10 @@ SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "replays")  # Default b
 # APPLICATION CONSTANTS
 # =============================================================================
 
+# Timeout configurations (in seconds)
+GLOBAL_TIMEOUT = 900  # 15 minutes - for most Discord interaction Views
+QUEUE_TIMEOUT = 9000  # 2.5 hours - for queue-related Views in queue_command
+
 # The current map pool season to be used by the matchmaking service
 CURRENT_SEASON = "season_alpha"
 
@@ -118,7 +119,7 @@ RECENT_MESSAGE_PROTECTION_MINUTES = 5
 
 # Queue message protection (days) - protects queue messages from deletion
 # Only queue messages less than this age are protected from pruning
-QUEUE_MESSAGE_PROTECTION_DAYS = 7
+QUEUE_MESSAGE_PROTECTION_DAYS = 3
 
 # Prune command delay (seconds) - delay between message deletions to avoid rate limits
 PRUNE_DELETE_DELAY_SECONDS = 1

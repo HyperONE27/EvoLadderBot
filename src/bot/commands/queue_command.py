@@ -53,7 +53,7 @@ from contextlib import suppress
 
 from src.backend.services.performance_service import FlowTracker
 from src.bot.components.replay_details_embed import ReplayDetailsEmbed
-from src.bot.config import GLOBAL_TIMEOUT
+from src.bot.config import QUEUE_TIMEOUT
 from src.backend.core.config import EXPECTED_GAME_PRIVACY, EXPECTED_GAME_SPEED, EXPECTED_GAME_DURATION, EXPECTED_LOCKED_ALLIANCES
 
 
@@ -454,7 +454,7 @@ class QueueView(discord.ui.View):
     """Main queue view with race and map veto selections"""
     
     def __init__(self, discord_user_id: int, default_races=None, default_maps=None):
-        super().__init__(timeout=GLOBAL_TIMEOUT)
+        super().__init__(timeout=QUEUE_TIMEOUT)
         self.discord_user_id = discord_user_id
         default_races = default_races or []
         self.selected_bw_race = next((race for race in default_races if race.startswith("bw_")), None)
@@ -584,7 +584,7 @@ class QueueSearchingView(discord.ui.View):
     """View shown while searching for a match"""
     
     def __init__(self, original_view, selected_races, vetoed_maps, player):
-        super().__init__(timeout=GLOBAL_TIMEOUT)
+        super().__init__(timeout=QUEUE_TIMEOUT)
         self.original_view = original_view
         self.selected_bw_race = next((code for code in selected_races if code.startswith("bw_")), None)
         self.selected_sc2_race = next((code for code in selected_races if code.startswith("sc2_")), None)
@@ -959,7 +959,7 @@ class MatchFoundView(discord.ui.View):
     """View shown when a match is found"""
     
     def __init__(self, match_result: MatchResult, is_player1: bool):
-        super().__init__(timeout=3600)  # 1-hour timeout for the view
+        super().__init__(timeout=QUEUE_TIMEOUT)
         self.match_result = match_result
         self.is_player1 = is_player1
         self.selected_result = match_result.match_result

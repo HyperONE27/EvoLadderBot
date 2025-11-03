@@ -75,11 +75,9 @@ def is_prune_related_message(message: discord.Message) -> bool:
     # Check for prune-related embed titles
     prune_titles = [
         "🗑️ Confirm Message Deletion",
-        "🗑️ Pruning in Progress...",
-        "✅ Messages Pruned",
-        "❌ Failed to Prune",
-        "✅ No Messages to Prune",
-        "🗑️ Confirm Message Deletion",  # Duplicate to be extra sure
+        # "✅ Messages Pruned",
+        # "❌ Failed to Prune",
+        # "✅ No Messages to Prune",
     ]
     
     if embed.title:
@@ -92,9 +90,7 @@ def is_prune_related_message(message: discord.Message) -> bool:
         "message(s) will be deleted",
         "Deleting",
         "old message(s)",
-        "Successfully deleted",
         "Could not delete",
-        "No bot messages found",
         "Queue-related messages",
         "automatically protected",
         "Delete old bot messages",
@@ -104,14 +100,6 @@ def is_prune_related_message(message: discord.Message) -> bool:
     if embed.description:
         for desc_pattern in prune_descriptions:
             if desc_pattern in embed.description:
-                return True
-    
-    # Check for prune-related field names
-    if embed.fields:
-        for field in embed.fields:
-            if field.name and any(keyword in field.name.lower() for keyword in ["oldest message", "newest message", "estimated time"]):
-                return True
-            if field.value and any(keyword in field.value.lower() for keyword in ["jump to message", "created:", "seconds"]):
                 return True
     
     return False
@@ -198,7 +186,7 @@ def register_prune_command(tree: app_commands.CommandTree):
     """Register the prune command"""
     @tree.command(
         name="prune",
-        description=f"Delete old bot messages (older than {GLOBAL_TIMEOUT/60} minutes) to reduce lag"
+        description=f"Delete old bot messages (older than {int(GLOBAL_TIMEOUT/60)} minutes) to reduce lag"
     )
     async def prune(interaction: discord.Interaction):
         await prune_command(interaction)
@@ -353,7 +341,7 @@ async def prune_command(interaction: discord.Interaction):
     if not messages_to_delete:
         info_embed = discord.Embed(
             title="✅ No Messages to Prune",
-            description="No bot messages found that can be safely deleted.\n\nQueue-related messages less than a week old are automatically protected.",
+            description=f"No bot messages found that can be safely deleted.\n\nQueue-related messages less than {QUEUE_MESSAGE_PROTECTION_DAYS} days old are automatically protected.",
             color=discord.Color.blue()
         )
         await queue_edit_original(interaction, embed=info_embed, view=None)
@@ -368,7 +356,7 @@ async def prune_command(interaction: discord.Interaction):
     confirm_embed = discord.Embed(
         title="🗑️ Confirm Message Deletion",
         description=f"**{len(messages_to_delete)} message(s)** will be deleted.\n\n"
-                   f"Queue-related messages less than a week old are automatically protected from deletion.",
+                   f"Queue-related messages less than {QUEUE_MESSAGE_PROTECTION_DAYS} days old are automatically protected from deletion.",
         color=discord.Color.orange()
     )
     

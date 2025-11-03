@@ -22,6 +22,7 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
+import discord
 
 from src.bot.config import DISCORD_MESSAGE_RATE_LIMIT
 
@@ -73,8 +74,8 @@ class MessageQueue:
         
         # Rate limiting state
         self._rate_limit: float = DISCORD_MESSAGE_RATE_LIMIT
-        self._min_interval: float = 1.0 / self._rate_limit  # 0.025 seconds for 40 msg/sec
-        self._last_send_time: float = 0.0
+        self._min_interval: float = 1.0 / self._rate_limit  # 0.022 seconds for 45 msg/sec
+        self._next_allowed_time: float = time.monotonic()
         
         logger.info(f"[MessageQueue] Initialized with rate limit: {self._rate_limit} msg/sec "
                    f"(min interval: {self._min_interval*1000:.1f}ms)")
@@ -191,20 +192,20 @@ class MessageQueue:
     
     async def _enforce_rate_limit(self):
         """
-        Enforce rate limiting using timer-based delays.
+        Deterministic rate limiter.
         
-        This ensures we never exceed DISCORD_MESSAGE_RATE_LIMIT messages per second.
-        The delay is calculated based on the time since the last send, not based on
-        network I/O wait times.
+        Guarantees ≤ self._rate_limit calls/sec by spacing messages
+        at exact self._min_interval intervals using monotonic time.
         """
-        now = time.time()
-        time_since_last = now - self._last_send_time
-        
-        if time_since_last < self._min_interval:
-            sleep_time = self._min_interval - time_since_last
-            await asyncio.sleep(sleep_time)
-        
-        self._last_send_time = time.time()
+        now = time.monotonic()
+        # Wait if the next allowed send time is still in the future
+        if now < self._next_allowed_time:
+            await asyncio.sleep(self._next_allowed_time - now)
+        # Schedule the next allowed send time
+        self._next_allowed_time = max(
+            self._next_allowed_time + self._min_interval,
+            time.monotonic()
+        )
     
     async def _execute_job(self, job: MessageQueueJob, queue_type: str):
         """
@@ -216,6 +217,14 @@ class MessageQueue:
         """
         # Enforce rate limit BEFORE making the call
         await self._enforce_rate_limit()
+        
+        # Optional: verify interval accuracy (debug builds only)
+        if __debug__:
+            now = time.monotonic()
+            delta = now - getattr(self, "_last_debug_time", now)
+            self._last_debug_time = now
+            if delta < self._min_interval * 0.98:
+                logger.warning(f"[MessageQueue] Rate drift: {delta:.4f}s < {self._min_interval:.4f}s")
         
         try:
             # Call the operation to get a fresh coroutine, then await it
@@ -243,8 +252,38 @@ class MessageQueue:
                 # Some other AttributeError - handle as normal exception
                 raise
         
+        except discord.NotFound as e:
+            # Handle 404 Not Found errors - these are expected for message deletions
+            # when the message was already deleted
+            if e.code == 10008:  # Unknown Message
+                logger.debug(
+                    f"[MessageQueue] {job.job_type} job: Message already deleted (404/10008), treating as success"
+                )
+                if not job.future.done():
+                    job.future.set_result(None)
+            else:
+                # Other NotFound errors should be retried
+                if job.retry_count < 3:
+                    job.retry_count += 1
+                    logger.warning(
+                        f"[MessageQueue] {job.job_type} job failed (attempt {job.retry_count}/3): {e}. "
+                        f"Re-queuing to back..."
+                    )
+                    
+                    if queue_type == "interaction":
+                        await self._interaction_queue.put(job)
+                    else:
+                        await self._notification_queue.put(job)
+                else:
+                    logger.error(
+                        f"[MessageQueue] {job.job_type} job failed after 3 attempts: {e}",
+                        exc_info=True
+                    )
+                    if not job.future.done():
+                        job.future.set_exception(e)
+        
         except Exception as e:
-            # Retry logic
+            # Retry logic for other exceptions
             if job.retry_count < 3:
                 job.retry_count += 1
                 logger.warning(
