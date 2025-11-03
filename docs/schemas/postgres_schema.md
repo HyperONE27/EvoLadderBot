@@ -22,7 +22,8 @@ CREATE TABLE players (
     activation_code         TEXT,
     created_at              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    remaining_aborts        INTEGER DEFAULT 3
+    remaining_aborts        INTEGER DEFAULT 3,
+    player_state            TEXT DEFAULT 'idle'
 );
 
 CREATE TABLE player_action_logs (

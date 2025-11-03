@@ -1,8 +1,0 @@
-CHANGES NEEDED:
-
-1. Line 246: Change __init__ signature to accept state parameters
-2. Lines 254-259: Use parameters instead of hardcoded defaults
-3. Line 287-294: Pass state to LeaderboardView() instead of copying after
-
-This will ensure UI components are created with the correct selected/pressed state.
-
