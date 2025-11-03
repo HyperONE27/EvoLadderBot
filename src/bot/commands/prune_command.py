@@ -407,7 +407,7 @@ async def prune_command(interaction: discord.Interaction):
         progress_embed = discord.Embed(
             title="🗑️ Pruning in Progress...",
             description=f"Deleting {len(messages_to_delete)} old message(s).\n\n"
-                       f"*This may take up to {estimated_time} seconds "
+                       f"*This will take at least {estimated_time} seconds "
                        f"to avoid Discord rate limits.*",
             color=discord.Color.blue()
         )

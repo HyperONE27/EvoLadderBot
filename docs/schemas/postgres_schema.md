@@ -23,7 +23,9 @@ CREATE TABLE players (
     created_at              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     remaining_aborts        INTEGER DEFAULT 3,
-    player_state            TEXT DEFAULT 'idle'
+    player_state            TEXT DEFAULT 'idle',
+    shield_battery_bug      BOOLEAN DEFAULT FALSE,
+    is_banned               BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE player_action_logs (

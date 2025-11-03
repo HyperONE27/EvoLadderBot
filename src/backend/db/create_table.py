@@ -52,7 +52,9 @@ def create_database(db_path: str = "evoladder.db") -> None:
             created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             remaining_aborts        INTEGER DEFAULT 3,
-            player_state            TEXT DEFAULT 'idle'
+            player_state            TEXT DEFAULT 'idle',
+            shield_battery_bug      INTEGER DEFAULT 0,
+            is_banned               INTEGER DEFAULT 0
         )
     """)
     

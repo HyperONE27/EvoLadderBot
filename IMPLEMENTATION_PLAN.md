@@ -753,3 +753,57 @@ ALTER TABLE players ADD COLUMN is_banned BOOLEAN DEFAULT FALSE;
 - Add `"is_banned": pl.Series([], dtype=pl.Boolean),` after `"shield_battery_bug"`
 - Add both fields to `create_player()` new_row with default `[False]`
 
+## Implementation To-dos
+
+### Feature 1: Deactivate Searching View
+- [ ] Remove "Match Found!" embed edit from `QueueSearchingView._listen_for_match()` in queue_command.py
+
+### Feature 2: Shield Battery Bug Notification
+- [ ] Add `shield_battery_bug BOOLEAN DEFAULT FALSE` to PostgreSQL schema (docs/schemas/postgres_schema.md)
+- [ ] Add `shield_battery_bug INTEGER DEFAULT 0` to SQLite schema (src/backend/db/create_table.py)
+- [ ] Add `"shield_battery_bug": pl.Series([], dtype=pl.Boolean)` to DataAccessService empty DataFrame
+- [ ] Add `UPDATE_SHIELD_BATTERY_BUG` to WriteJobType enum
+- [ ] Add `get_shield_battery_bug()` method to DataAccessService
+- [ ] Add `set_shield_battery_bug()` method to DataAccessService
+- [ ] Add handler for UPDATE_SHIELD_BATTERY_BUG in `_process_write_job()`
+- [ ] Add `update_shield_battery_bug()` to DatabaseWriter (db_reader_writer.py)
+- [ ] Add `"shield_battery_bug": [False]` to `create_player()` new_row DataFrame
+- [ ] Create new file `src/bot/components/shield_battery_bug_embed.py` with ShieldBatteryBugView
+- [ ] Add `_send_shield_battery_notification()` method to QueueSearchingView
+- [ ] Integrate shield battery notification call in `_listen_for_match()` after match message sent
+
+### Feature 3: Match Confirmation Reminder
+- [ ] Add `_send_confirmation_reminder()` method to QueueSearchingView
+- [ ] Integrate confirmation reminder call in `_listen_for_match()` after match message sent
+
+### Feature 4: Player Ban System
+- [ ] Add `is_banned BOOLEAN DEFAULT FALSE` to PostgreSQL schema (docs/schemas/postgres_schema.md)
+- [ ] Add `is_banned INTEGER DEFAULT 0` to SQLite schema (src/backend/db/create_table.py)
+- [ ] Add `"is_banned": pl.Series([], dtype=pl.Boolean)` to DataAccessService empty DataFrame
+- [ ] Add `UPDATE_IS_BANNED` to WriteJobType enum
+- [ ] Add `get_is_banned()` method to DataAccessService
+- [ ] Add `set_is_banned()` method to DataAccessService
+- [ ] Add handler for UPDATE_IS_BANNED in `_process_write_job()`
+- [ ] Add `update_is_banned()` to DatabaseWriter (db_reader_writer.py)
+- [ ] Add `"is_banned": [False]` to `create_player()` new_row DataFrame
+- [ ] Add `BannedError` exception class to command_guard_service.py
+- [ ] Add `require_not_banned()` method to CommandGuardService
+- [ ] Integrate ban check into `ensure_player_record()` method
+- [ ] Create new file `src/bot/components/banned_embed.py` with create_banned_embed()
+- [ ] Update imports in command_guard_embeds.py to include BannedError
+- [ ] Add BannedError case to `create_command_guard_error_embed()`
+
+### Feature 5: Admin Ban Toggle Command
+- [ ] Add `toggle_ban_status()` method to AdminService (admin_service.py)
+- [ ] Add `/admin ban` command to admin_command.py with confirmation flow
+
+### Feature 6: Replay Embeds in Admin Match
+- [ ] Add `import polars as pl` to admin_command.py if not present
+- [ ] Add `from src.bot.components.replay_details_embed import ReplayDetailsEmbed` to admin_command.py
+- [ ] Add replay embed generation code to `/admin match` command
+- [ ] Update followup.send() to include replay_embeds parameter
+
+### Database Migration (Post-Implementation)
+- [ ] Run `ALTER TABLE players ADD COLUMN shield_battery_bug BOOLEAN DEFAULT FALSE;` on Supabase
+- [ ] Run `ALTER TABLE players ADD COLUMN is_banned BOOLEAN DEFAULT FALSE;` on Supabase
+

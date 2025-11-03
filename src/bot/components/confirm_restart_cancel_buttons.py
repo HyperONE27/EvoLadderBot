@@ -2,7 +2,7 @@ import discord
 from typing import Optional, Union, Callable
 from src.bot.utils.discord_utils import send_ephemeral_response
 from src.bot.components.cancel_embed import create_cancel_embed
-from src.bot.utils.message_helpers import queue_edit_original
+from src.bot.utils.message_helpers import queue_interaction_edit, queue_interaction_modal
 
 
 class ConfirmButton(discord.ui.Button):
@@ -43,19 +43,20 @@ class RestartButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         if isinstance(self.reset_target, discord.ui.View):
-            # Removed defer() - system is now fast enough that Discord's loading indicator provides better UX
+            # Use interaction.response.edit_message to acknowledge the button click
+            # and edit the message in one atomic operation
             
             # Check if the view has a get_embed method to get the proper embed
             if hasattr(self.reset_target, 'get_embed'):
                 embed = self.reset_target.get_embed()
-                await queue_edit_original(
+                await queue_interaction_edit(
                     interaction,
                     content="",
                     embed=embed,
                     view=self.reset_target
                 )
             else:
-                await queue_edit_original(
+                await queue_interaction_edit(
                     interaction,
                     content="",
                     embed=None,
@@ -63,7 +64,7 @@ class RestartButton(discord.ui.Button):
                 )
         elif isinstance(self.reset_target, discord.ui.Modal):
             # Modals must be sent immediately, no deferral
-            await interaction.response.send_modal(self.reset_target)
+            await queue_interaction_modal(interaction, self.reset_target)
         else:
             await send_ephemeral_response(
                 interaction,
@@ -87,12 +88,13 @@ class CancelButton(discord.ui.Button):
         self.show_fields = show_fields
 
     async def callback(self, interaction: discord.Interaction):
-        # Removed defer() - system is now fast enough that Discord's loading indicator provides better UX
+        # Use interaction.response.edit_message to acknowledge the button click
+        # and edit the message in one atomic operation
         
         # Always use the cancel embed for consistency
         cancel_view = create_cancel_embed()
         
-        await queue_edit_original(
+        await queue_interaction_edit(
             interaction,
             content="",
             embed=cancel_view.embed,

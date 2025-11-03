@@ -16,6 +16,7 @@ from src.bot.components.command_guard_embeds import create_command_guard_error_e
 from src.bot.utils.command_decorators import dm_only
 from src.bot.config import GLOBAL_TIMEOUT
 from src.backend.services.performance_service import FlowTracker
+from src.bot.utils.message_helpers import queue_interaction_modal
 
 
 # API Call / Data Handling
@@ -80,7 +81,7 @@ def register_activate_command(tree: app_commands.CommandTree):
             await send_ephemeral_response(interaction, embed=error_embed)
             return
         
-        await interaction.response.send_modal(ActivateModal())
+        await queue_interaction_modal(interaction, ActivateModal())
 
 
 # UI Elements

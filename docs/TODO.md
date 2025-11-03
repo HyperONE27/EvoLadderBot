@@ -1,7 +1,8 @@
 ## PRE-ALPHA
 
 ### Account Configuration
-- ⏰ Update Terms of Service for closed alpha/open beta stage
+- ❌ Update Terms of Service for closed alpha/open beta stage
+  - ⏰ Create a Rentry/Github document for this and just link it
 - ✅ Fix country setup descriptions for XX (nonrepresenting) / ZZ (other)
 - ✅ /setup persists pre-existing values as defaults (so you don't have to fill them all out again to change one thing)
 - ✅ nulling of alt names is properly recorded in action logs table
@@ -156,7 +157,7 @@
 ### Other Last Minute Stuff
 - ⏰ Improve the matchmaking algorithm
 - ⏰ Send a follow-up message to players who do not confirm match in half the abort countdown timer after match assignment
-- ⏰ Send a dismissable message to players who enter a match involving BW Protoss about how to avoid Shield Battery lag
+- ✅ Send a dismissable message to players who enter a match involving BW Protoss about how to avoid Shield Battery lag
 - ⏰ I already updated admins.json with "owner" and "admin" roles, add an owner-only command to adjust admins while the bot is up
 
 ## PRE-BETA
@@ -177,6 +178,8 @@
     - ⏰ High MMR/top competitive players are used to playing across oceans and continents
     - ⏰ Low MMR players just want to not fight the game
     - ⏰ Tune the matchmaker to prefer low ping at lower MMR at expense of MMR fairness? Default to strict MMR fairness higher up??? Is this fair?
+- Scaling:
+  - Add extra API keys to handle Korean, Simplified Chinese, Spanish, Portugese, and German
 
 ## PRE-RELEASE
 

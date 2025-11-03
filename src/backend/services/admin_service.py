@@ -613,6 +613,11 @@ class AdminService:
         """
         from src.backend.services.match_completion_service import match_completion_service
         
+        # Save original reports (if any) before modifying them
+        original_p1_report = match_data.get('player_1_report')
+        original_p2_report = match_data.get('player_2_report')
+        print(f"[AdminService] Saving original reports: P1={original_p1_report}, P2={original_p2_report}")
+        
         # Step 1: Update match_result in memory
         await self.data_service.update_match(
             match_id=match_id,
@@ -639,7 +644,40 @@ class AdminService:
         final_match_data = self.data_service.get_match(match_id)
         mmr_change = final_match_data.get('mmr_change', 0) if final_match_data else 0
         
-        # Step 6: Log admin action
+        # Step 5: Restore original reports in memory
+        import polars as pl
+        
+        self.data_service._matches_1v1_df = self.data_service._matches_1v1_df.with_columns([
+            pl.when(pl.col("id") == match_id)
+              .then(pl.lit(original_p1_report))
+              .otherwise(pl.col("player_1_report"))
+              .alias("player_1_report"),
+            pl.when(pl.col("id") == match_id)
+              .then(pl.lit(original_p2_report))
+              .otherwise(pl.col("player_2_report"))
+              .alias("player_2_report")
+        ])
+        print(f"[AdminService] Restored original reports in memory: P1={original_p1_report}, P2={original_p2_report}")
+        
+        # Step 6: Queue admin resolution write to restore original reports in DB and set updated_at
+        # This is an atomic operation that preserves original reports, sets final result, and timestamps
+        from src.backend.services.data_access_service import WriteJob, WriteJobType
+        import time
+        
+        admin_resolve_job = WriteJob(
+            job_type=WriteJobType.ADMIN_RESOLVE_MATCH,
+            data={
+                "match_id": match_id,
+                "match_result": new_result,
+                "p1_report": original_p1_report,
+                "p2_report": original_p2_report
+            },
+            timestamp=time.time()
+        )
+        await self.data_service._queue_write(admin_resolve_job)
+        print(f"[AdminService] Queued ADMIN_RESOLVE_MATCH: result={new_result}, P1={original_p1_report}, P2={original_p2_report}")
+        
+        # Step 7: Log admin action
         await self._log_admin_action(
             admin_discord_id=admin_discord_id,
             action_type='resolve_match',
@@ -715,6 +753,11 @@ class AdminService:
             await self.data_service.update_player_mmr(p1_uid, p1_race, p1_mmr_before)
             await self.data_service.update_player_mmr(p2_uid, p2_race, p2_mmr_before)
             print(f"[AdminService] Restored MMRs for re-resolution")
+        
+        # Save original reports before modifying them
+        original_p1_report = match_data.get('player_1_report')
+        original_p2_report = match_data.get('player_2_report')
+        print(f"[AdminService] Saving original reports: P1={original_p1_report}, P2={original_p2_report}")
         
         # Step 2: Remove from processed_matches so we can re-process
         if match_id in match_completion_service.processed_matches:
@@ -793,10 +836,43 @@ class AdminService:
         await self._clear_player_queue_lock(p2_uid)
         print(f"[AdminService] Cleared queue locks for both players")
         
-        # Step 10: Get final match data
+        # Step 10: Restore original reports in memory
+        import polars as pl
+        
+        self.data_service._matches_1v1_df = self.data_service._matches_1v1_df.with_columns([
+            pl.when(pl.col("id") == match_id)
+              .then(pl.lit(original_p1_report))
+              .otherwise(pl.col("player_1_report"))
+              .alias("player_1_report"),
+            pl.when(pl.col("id") == match_id)
+              .then(pl.lit(original_p2_report))
+              .otherwise(pl.col("player_2_report"))
+              .alias("player_2_report")
+        ])
+        print(f"[AdminService] Restored original reports in memory: P1={original_p1_report}, P2={original_p2_report}")
+        
+        # Step 11: Queue admin resolution write to restore original reports in DB and set updated_at
+        # This is an atomic operation that preserves original reports, sets final result, and timestamps
+        from src.backend.services.data_access_service import WriteJob, WriteJobType
+        import time
+        
+        admin_resolve_job = WriteJob(
+            job_type=WriteJobType.ADMIN_RESOLVE_MATCH,
+            data={
+                "match_id": match_id,
+                "match_result": new_result,
+                "p1_report": original_p1_report,
+                "p2_report": original_p2_report
+            },
+            timestamp=time.time()
+        )
+        await self.data_service._queue_write(admin_resolve_job)
+        print(f"[AdminService] Queued ADMIN_RESOLVE_MATCH: result={new_result}, P1={original_p1_report}, P2={original_p2_report}")
+        
+        # Step 12: Get final match data
         final_match_data = self.data_service.get_match(match_id)
         
-        # Step 11: Log admin action
+        # Step 13: Log admin action
         await self._log_admin_action(
             admin_discord_id=admin_discord_id,
             action_type='resolve_conflict',
@@ -932,6 +1008,9 @@ class AdminService:
             await self.data_service._queue_write(job)
         
         print(f"[AdminService] Queued database writes for both player reports")
+    
+    # NOTE: _restore_player_reports method removed - replaced by ADMIN_RESOLVE_MATCH write job
+    # which atomically restores reports, sets match_result, and timestamps updated_at
     
     async def adjust_player_mmr(
         self,
@@ -1131,7 +1210,11 @@ class AdminService:
         try:
             current = self.data_service.get_remaining_aborts(discord_uid)
             
-            await self.data_service.update_remaining_aborts(discord_uid, new_count)
+            await self.data_service.update_remaining_aborts(
+                discord_uid, 
+                new_count,
+                changed_by=f"admin:{admin_discord_id}"
+            )
             
             await self._log_admin_action(
                 admin_discord_id=admin_discord_id,
@@ -1203,6 +1286,71 @@ class AdminService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
     
+    async def toggle_ban_status(
+        self,
+        discord_uid: int,
+        admin_discord_id: int,
+        reason: str
+    ) -> dict:
+        """
+        Toggle the is_banned status for a player.
+        Returns dict with old_status, new_status, player_name, notification.
+        """
+        try:
+            # Get current status
+            current_banned = self.data_service.get_is_banned(discord_uid)
+            new_banned = not current_banned
+            
+            # Update status
+            await self.data_service.set_is_banned(
+                discord_uid, 
+                new_banned,
+                changed_by=f"admin:{admin_discord_id}",
+                reason=reason
+            )
+            
+            # Invalidate cache so the player sees the new ban status immediately
+            from src.backend.services.cache_service import player_cache
+            player_cache.invalidate(discord_uid)
+            
+            # Get player info for logging
+            player = self.data_service.get_player_info(discord_uid)
+            player_name = player.get("player_name", "Unknown") if player else "Unknown"
+            
+            # Get admin name for notifications
+            admin_name = None
+            try:
+                admin_player = self.data_service.get_player_info(admin_discord_id)
+                admin_name = admin_player.get("player_name", "Admin") if admin_player else "Admin"
+            except Exception:
+                admin_name = "Admin"
+            
+            # Log admin action
+            await self._log_admin_action(
+                admin_discord_id=admin_discord_id,
+                action_type="toggle_ban",
+                target_player_uid=discord_uid,
+                details={
+                    "reason": reason,
+                    "old_status": current_banned,
+                    "new_status": new_banned
+                }
+            )
+            
+            return {
+                "success": True,
+                "old_status": current_banned,
+                "new_status": new_banned,
+                "player_name": player_name,
+                "notification": {
+                    "player_uid": discord_uid,
+                    "admin_name": admin_name,
+                    "reason": reason
+                }
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
     # ========== LAYER 3: EMERGENCY CONTROLS ==========
     
     async def emergency_clear_queue(
@@ -1240,8 +1388,9 @@ class AdminService:
                 await queue_service.clear_queue()
                 print(f"[AdminService] EMERGENCY: Cleared QueueService")
             
-            # Clear queue-locked state for all removed players
+            # Reset player state to idle and clear queue-locked state for all removed players
             for player_id in player_ids:
+                await self.data_service.set_player_state(player_id, "idle")
                 await self._clear_player_queue_lock(player_id)
             
             await self._log_admin_action(
@@ -1304,6 +1453,96 @@ class AdminService:
         )
         
         print(f"[AdminService] Logged admin action: {action_type} by {admin_name}")
+    
+    # ========== LAYER 4: OWNER OPERATIONS ==========
+    
+    async def toggle_admin_status(
+        self,
+        discord_uid: int,
+        username: str,
+        owner_discord_id: int
+    ) -> dict:
+        """
+        Toggle admin status for a user (owner-only operation).
+        
+        If user is currently an admin, remove them.
+        If user is not an admin, add them.
+        Cannot modify owner status.
+        
+        Args:
+            discord_uid: Discord UID of user to toggle
+            username: Discord username for the admin entry
+            owner_discord_id: Discord UID of owner performing action
+            
+        Returns:
+            Dict with success status and details
+        """
+        try:
+            with open('data/misc/admins.json', 'r', encoding='utf-8') as f:
+                admins_data = json.load(f)
+            
+            # Find existing entry
+            existing_entry = None
+            existing_index = None
+            for idx, admin in enumerate(admins_data):
+                if admin.get('discord_id') == discord_uid:
+                    existing_entry = admin
+                    existing_index = idx
+                    break
+            
+            # Check if user is owner (owners cannot be removed)
+            if existing_entry and existing_entry.get('role') == 'owner':
+                return {
+                    'success': False,
+                    'error': 'Cannot modify owner status'
+                }
+            
+            # Toggle admin status
+            if existing_entry:
+                # Remove admin
+                admins_data.pop(existing_index)
+                action = 'removed'
+            else:
+                # Add admin
+                admins_data.append({
+                    'discord_id': discord_uid,
+                    'name': username,
+                    'role': 'admin'
+                })
+                action = 'added'
+            
+            # Write back to file
+            with open('data/misc/admins.json', 'w', encoding='utf-8') as f:
+                json.dump(admins_data, f, indent=4)
+            
+            # Log owner action
+            await self._log_admin_action(
+                admin_discord_id=owner_discord_id,
+                action_type='toggle_admin_status',
+                details={
+                    'target_discord_uid': discord_uid,
+                    'target_username': username,
+                    'action': action
+                }
+            )
+            
+            return {
+                'success': True,
+                'action': action,
+                'discord_uid': discord_uid,
+                'username': username
+            }
+            
+        except FileNotFoundError:
+            return {
+                'success': False,
+                'error': 'admins.json not found'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }
 
 
 admin_service = AdminService()

@@ -674,24 +674,6 @@ class QueueSearchingView(discord.ui.View):
             if not self.last_interaction:
                 raise RuntimeError(f"Cannot display match view: no interaction stored for player {self.player.discord_user_id}")
             
-            # Create a nice confirmation embed
-            opponent_name = match_result.player_2_user_id if is_player1 else match_result.player_1_user_id
-            opponent_display = f"vs {opponent_name}"
-            
-            confirmation_embed = discord.Embed(
-                title="🎉 Match Found!",
-                description=f"Your match is ready. Full details below.",
-                color=discord.Color.green()
-            )
-            
-            await queue_edit_original(
-                self.last_interaction,
-                content=None,
-                embed=confirmation_embed,
-                view=None
-            )
-            flow.checkpoint("searching_message_edited")
-            
             flow.checkpoint("create_match_found_view")
             # Step 2: Create match found view
             match_view = MatchFoundView(match_result, is_player1)
@@ -706,9 +688,26 @@ class QueueSearchingView(discord.ui.View):
             new_match_message = await queue_channel_send(self.channel, embed=embed, view=match_view)
             flow.checkpoint("new_match_message_sent")
             
-            # Step 5: Update the match view with the new message's ID and channel
+            # Step 6: Update the match view with the new message's ID and channel
             match_view.channel = new_match_message.channel
             match_view.original_message_id = new_match_message.id
+            
+            # CRITICAL: Deactivate immediately after message ID is received
+            # This stops the periodic_status_update loop from continuing to edit the searching message
+            flow.checkpoint("deactivate_searching_view")
+            self.deactivate()
+            flow.checkpoint("searching_view_deactivated")
+            
+            # Schedule shield battery bug notification if needed (only for BW Protoss matches)
+            asyncio.create_task(self._send_shield_battery_notification(
+                match_result.match_id,
+                self.channel,
+                match_result.player_1_race,
+                match_result.player_2_race
+            ))
+            
+            # Schedule confirmation reminder
+            asyncio.create_task(self._send_confirmation_reminder(match_result.match_id, self.channel))
             
             # Register for replay detection
             await match_view.register_for_replay_detection(self.last_interaction.channel_id)
@@ -717,8 +716,8 @@ class QueueSearchingView(discord.ui.View):
             print(f"[Match Notification] Successfully displayed match view for player {self.player.discord_user_id}")
             
             flow.checkpoint("cleanup_start")
-            # Clean up
-            await queue_searching_view_manager.unregister(self.player.discord_user_id, view=self)
+            # Clean up - unregister without deactivating again (already deactivated above)
+            await queue_searching_view_manager.unregister(self.player.discord_user_id, view=self, deactivate=False)
             flow.checkpoint("cleanup_complete")
             
             flow.complete("match_displayed_successfully")
@@ -726,6 +725,92 @@ class QueueSearchingView(discord.ui.View):
         finally:
             # Always unsubscribe when done, even if an error occurred
             await notification_service.unsubscribe(self.player.discord_user_id)
+    
+    async def _send_shield_battery_notification(
+        self,
+        match_id: int,
+        channel,
+        player_1_race: str,
+        player_2_race: str
+    ):
+        """Send shield battery bug notification 15 seconds after match if player hasn't seen it and match has BW Protoss."""
+        from src.backend.services.app_context import data_access_service
+        from src.bot.components.shield_battery_bug_embed import create_shield_battery_bug_embed, ShieldBatteryBugView
+        from src.bot.utils.message_helpers import queue_channel_send
+        
+        # Wait 15 seconds
+        await asyncio.sleep(15)
+        
+        # Check if match is still active (not completed/aborted)
+        match_data = data_access_service.get_match(match_id)
+        if not match_data:
+            return  # Match not found
+        
+        match_result = match_data.get('match_result')
+        p1_report = match_data.get('player_1_report')
+        p2_report = match_data.get('player_2_report')
+        
+        # Match is concluded if it has a result OR both players have reported
+        if match_result is not None:
+            return  # Match already has final result
+        
+        if p1_report is not None and p2_report is not None:
+            return  # Both players have reported, match is being processed
+        
+        # Check if player has already acknowledged
+        has_acknowledged = data_access_service.get_shield_battery_bug(self.player.discord_user_id)
+        if has_acknowledged:
+            return
+        
+        # Check if either race is BW Protoss
+        if player_1_race != "bw_protoss" and player_2_race != "bw_protoss":
+            return  # No BW Protoss in this match
+        
+        # Send notification (use notification queue for background message)
+        embed = create_shield_battery_bug_embed()
+        view = ShieldBatteryBugView(self.player.discord_user_id)
+        await queue_channel_send(channel, embed=embed, view=view)
+    
+    async def _send_confirmation_reminder(self, match_id: int, channel):
+        """Send match confirmation reminder at 1/3 of abort timer if player hasn't confirmed."""
+        from src.backend.services.app_context import matchmaker, match_completion_service, data_access_service
+        from src.bot.utils.message_helpers import queue_channel_send
+        
+        # Calculate reminder time (1/3 of abort timer = 60 seconds for default 180s)
+        reminder_time = matchmaker.ABORT_TIMER_SECONDS / 3
+        
+        # Wait for the reminder time
+        await asyncio.sleep(reminder_time)
+        
+        # Check if match is still active (not completed/aborted)
+        match_data = data_access_service.get_match(match_id)
+        if not match_data:
+            return  # Match not found
+        
+        match_result = match_data.get('match_result')
+        p1_report = match_data.get('player_1_report')
+        p2_report = match_data.get('player_2_report')
+        
+        # Match is concluded if it has a result OR both players have reported
+        if match_result is not None:
+            return  # Match already has final result
+        
+        if p1_report is not None and p2_report is not None:
+            return  # Both players have reported, match is being processed
+        
+        # Check if player has confirmed
+        confirmed_players = match_completion_service.match_confirmations.get(match_id, set())
+        if self.player.discord_user_id in confirmed_players:
+            return  # Player already confirmed
+        
+        # Send reminder (use notification queue)
+        embed = discord.Embed(
+            title="⏰ Match Confirmation Reminder",
+            description="You need to confirm your match or abort it manually. Check your match notification above for the Confirm Match button.",
+            color=discord.Color.orange()
+        )
+        
+        await queue_channel_send(channel, embed=embed)
 
     async def on_timeout(self):
         """Handle view timeout"""
@@ -785,6 +870,12 @@ class CancelQueueButton(discord.ui.Button):
     
     async def callback(self, interaction: discord.Interaction):
         parent_view = self.view
+        
+        # Check if the view is still active - if not, ignore the button click
+        # This prevents responding to cancel after a match is found (saves API calls)
+        if isinstance(parent_view, QueueSearchingView) and not parent_view.is_active:
+            # Silently ignore - view is already deactivated, match was found
+            return
 
         # Proceed with cancelling the queue entry
         print(f"🚪 Removing player from matchmaker: {self.player.user_id}")

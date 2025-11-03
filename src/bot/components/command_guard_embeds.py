@@ -7,7 +7,8 @@ from src.backend.services.command_guard_service import (
     TermsNotAcceptedError,
     SetupIncompleteError,
     AccountNotActivatedError,
-    DMOnlyError
+    DMOnlyError,
+    BannedError
 )
 
 def create_command_guard_error_embed(error: CommandGuardError) -> discord.Embed:
@@ -40,6 +41,9 @@ def create_command_guard_error_embed(error: CommandGuardError) -> discord.Embed:
                         "Please send me a DM and try the command again.",
             color=discord.Color.red()
         )
+    elif isinstance(error, BannedError):
+        from src.bot.components.banned_embed import create_banned_embed
+        return create_banned_embed()
     else:
         # Generic error embed
         return discord.Embed(

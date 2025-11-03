@@ -19,20 +19,110 @@ from typing import Optional, Set
 import json
 import io
 import time
+import polars as pl
 
 from src.backend.services.app_context import admin_service, data_access_service, ranking_service, races_service
 from src.backend.services.process_pool_health import get_bot_instance
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
+from src.bot.components.replay_details_embed import ReplayDetailsEmbed
 from src.bot.config import GLOBAL_TIMEOUT
-from src.bot.utils.message_helpers import queue_user_send
+from src.bot.utils.message_helpers import (
+    queue_user_send,
+    queue_interaction_edit,
+    queue_interaction_response,
+    queue_interaction_defer,
+    queue_followup,
+    queue_edit_original
+)
 from src.bot.utils.discord_utils import (
     format_discord_timestamp,
     get_current_unix_timestamp,
     get_flag_emote,
     get_race_emote,
     get_rank_emote,
+    get_globe_emote,
+    get_game_emote,
     send_ephemeral_response
 )
+
+
+# ========== USER RESOLVER HELPER ==========
+
+async def resolve_user_input(user_input: str, interaction: discord.Interaction) -> Optional[dict]:
+    """
+    Universal user resolver that handles mentions, Discord IDs, and usernames.
+    
+    Args:
+        user_input: User input as @mention, Discord ID (numeric string), or username
+        interaction: Discord interaction for client access
+        
+    Returns:
+        Dict with 'discord_uid' and 'username' if successful, None otherwise
+        
+    Handles:
+        - @mentions: <@123456789> or <@!123456789>
+        - Discord IDs: "123456789"
+        - Usernames: "notatruckdriver" (searches registered players in bot DB)
+    """
+    # Try to parse as mention first
+    if user_input.startswith('<@') and user_input.endswith('>'):
+        user_id_str = user_input.strip('<@!>')
+        try:
+            user_id = int(user_id_str)
+            # Fetch from Discord to get username
+            try:
+                discord_user = await interaction.client.fetch_user(user_id)
+                return {
+                    'discord_uid': user_id,
+                    'username': discord_user.name
+                }
+            except Exception:
+                # User exists as ID but couldn't fetch from Discord
+                return {
+                    'discord_uid': user_id,
+                    'username': f"User#{user_id}"
+                }
+        except ValueError:
+            pass
+    
+    # Try to parse as numeric Discord ID
+    try:
+        user_id = int(user_input)
+        # Fetch from Discord to get username
+        try:
+            discord_user = await interaction.client.fetch_user(user_id)
+            return {
+                'discord_uid': user_id,
+                'username': discord_user.name
+            }
+        except Exception:
+            # Valid ID format but user doesn't exist
+            return None
+    except ValueError:
+        # Not a numeric ID, try as username
+        pass
+    
+    # Try to resolve as username from bot database
+    # Use admin_service.resolve_user which searches player_name, discord_username, battletag, etc.
+    user_info = await admin_service.resolve_user(user_input)
+    
+    if user_info:
+        discord_uid = user_info.get('discord_uid')
+        # Fetch actual Discord username
+        try:
+            discord_user = await interaction.client.fetch_user(discord_uid)
+            return {
+                'discord_uid': discord_uid,
+                'username': discord_user.name
+            }
+        except Exception:
+            # Fallback to player_name from DB if Discord fetch fails
+            return {
+                'discord_uid': discord_uid,
+                'username': user_info.get('player_name', f"User#{discord_uid}")
+            }
+    
+    return None
 
 
 # ========== NOTIFICATION HELPER ==========
@@ -428,13 +518,45 @@ def _load_admin_ids() -> Set[int]:
         return set()
 
 
-# Global set of admin IDs (loaded once at module import)
+def _load_owner_ids() -> Set[int]:
+    """Load owner Discord IDs from data/misc/admins.json."""
+    try:
+        with open('data/misc/admins.json', 'r', encoding='utf-8') as f:
+            admins_data = json.load(f)
+        
+        owner_ids = {
+            admin['discord_id'] 
+            for admin in admins_data 
+            if isinstance(admin, dict) 
+            and 'discord_id' in admin
+            and isinstance(admin['discord_id'], int)
+            and admin.get('role') == 'owner'
+        }
+        
+        print(f"[AdminCommands] Loaded {len(owner_ids)} owner(s)")
+        return owner_ids
+    
+    except FileNotFoundError:
+        print("[AdminCommands] WARNING: admins.json not found. No owners loaded.")
+        return set()
+    except Exception as e:
+        print(f"[AdminCommands] ERROR loading owners: {e}")
+        return set()
+
+
+# Global set of admin and owner IDs (loaded once at module import)
 ADMIN_IDS = _load_admin_ids()
+OWNER_IDS = _load_owner_ids()
 
 
 def is_admin(interaction: discord.Interaction) -> bool:
     """Check if user is an admin (loaded from admins.json)."""
     return interaction.user.id in ADMIN_IDS
+
+
+def is_owner(interaction: discord.Interaction) -> bool:
+    """Check if user is an owner (loaded from admins.json)."""
+    return interaction.user.id in OWNER_IDS
 
 
 def admin_only():
@@ -445,10 +567,34 @@ def admin_only():
     """
     async def predicate(interaction: discord.Interaction) -> bool:
         if not is_admin(interaction):
-            await interaction.response.send_message(
+            await queue_interaction_response(
+                interaction,
                 embed=discord.Embed(
                     title="🚫 Admin Access Denied",
                     description="This command is restricted to administrators.",
+                    color=discord.Color.red()
+                ),
+                ephemeral=True
+            )
+            return False
+        return True
+    
+    return app_commands.check(predicate)
+
+
+def owner_only():
+    """
+    Decorator to restrict commands to owners.
+    
+    Owner-only commands are the highest privilege level.
+    """
+    async def predicate(interaction: discord.Interaction) -> bool:
+        if not is_owner(interaction):
+            await queue_interaction_response(
+                interaction,
+                embed=discord.Embed(
+                    title="🚫 Owner Access Denied",
+                    description="This command is restricted to bot owners.",
                     color=discord.Color.red()
                 ),
                 ephemeral=True
@@ -497,14 +643,15 @@ class AdminConfirmationView(View):
         if interaction.user.id != self._original_admin_id:
             # Defer first to acknowledge the interaction without consuming response
             try:
-                await interaction.response.defer(ephemeral=True)
+                await queue_interaction_defer(interaction, ephemeral=True)
             except discord.errors.NotFound:
                 # Interaction already acknowledged (shouldn't happen, but handle gracefully)
                 pass
             
             # Send ephemeral followup instead of response to avoid consuming interaction
             try:
-                await interaction.followup.send(
+                await queue_followup(
+                    interaction,
                     embed=discord.Embed(
                         title="🚫 Admin Button Restricted",
                         description=f"Only <@{self._original_admin_id}> can interact with these buttons.",
@@ -544,7 +691,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
     @admin_only()
     async def admin_snapshot(interaction: discord.Interaction):
         """Display comprehensive system snapshot."""
-        await interaction.response.defer()
+        await queue_interaction_defer(interaction)
         
         snapshot = admin_service.get_system_snapshot()
         formatted = format_system_snapshot(snapshot)
@@ -563,21 +710,22 @@ def register_admin_commands(tree: app_commands.CommandTree):
                 inline=field.get('inline', False)
             )
         
-        await interaction.followup.send(embed=embed)
+        await queue_followup(interaction, embed=embed)
     
     @admin_group.command(name="player", description="[Admin] View player state")
-    @app_commands.describe(user="Player's @username, username, or Discord ID")
+    @app_commands.describe(user="Player's @mention, username, or Discord ID")
     @admin_only()
     async def admin_player(interaction: discord.Interaction, user: str):
         """Display complete player state."""
-        await interaction.response.defer()
+        await queue_interaction_defer(interaction)
         
-        # Resolve user input to Discord ID
-        user_info = await admin_service.resolve_user(user)
+        # Resolve user input (mention, ID, or username)
+        user_info = await resolve_user_input(user, interaction)
         
         if user_info is None:
-            await interaction.followup.send(
-                f"❌ Could not find user: {user}",
+            await queue_followup(
+                interaction,
+                content=f"❌ Could not find user: {user}",
             )
             return
         
@@ -592,19 +740,20 @@ def register_admin_commands(tree: app_commands.CommandTree):
         
         embed = format_player_state(state, discord_user)
         
-        await interaction.followup.send(embed=embed)
+        await queue_followup(interaction, embed=embed)
     
     @admin_group.command(name="match", description="[Admin] View match state")
     @app_commands.describe(match_id="Match ID")
     @admin_only()
     async def admin_match(interaction: discord.Interaction, match_id: int):
         """Display complete match state."""
-        await interaction.response.defer()
+        await queue_interaction_defer(interaction)
         
         state = admin_service.get_match_full_state(match_id)
         
         if 'error' in state:
-            await interaction.followup.send(
+            await queue_followup(
+                interaction,
                 content=f"Error: {state['error']}",
             )
             return
@@ -683,19 +832,19 @@ def register_admin_commands(tree: app_commands.CommandTree):
         p1_report = state['reports']['player_1']
         p2_report = state['reports']['player_2']
         
-        def format_report_code(code):
+        def format_report_code(code, reporter_name, opponent_name):
             if code is None:
                 return "⏳ Not Reported"
             elif code == 1:
-                return "✅ I Won"
+                return f"✅ {reporter_name} Won"
             elif code == 2:
-                return "❌ I Lost"
+                return f"❌ {opponent_name} Won"
             elif code == 0:
                 return "⚖️ Draw"
             elif code == -1:
                 return "🚫 Aborted"
             elif code == -3:
-                return "🚫 I Aborted"
+                return f"🚫 {reporter_name} Aborted"
             elif code == -4:
                 return "⏰ No Response"
             else:
@@ -704,8 +853,8 @@ def register_admin_commands(tree: app_commands.CommandTree):
         embed.add_field(
             name="📊 Player Reports",
             value=(
-                f"**{p1_name}:** {format_report_code(p1_report)}\n"
-                f"**{p2_name}:** {format_report_code(p2_report)}"
+                f"**{p1_name}:** {format_report_code(p1_report, p1_name, p2_name)}\n"
+                f"**{p2_name}:** {format_report_code(p2_report, p2_name, p1_name)}"
             ),
             inline=True
         )
@@ -729,19 +878,26 @@ def register_admin_commands(tree: app_commands.CommandTree):
                 inline=True
             )
         
-        # Add field interpretation guide (multiline for readability)
+        # Add raw match data for technical reference
+        raw_data = {
+            "match_id": match_id,
+            "player_1_report": p1_report,
+            "player_2_report": p2_report,
+            "match_result": match_data.get('match_result'),
+            "mmr_change": match_data.get('mmr_change'),
+            "played_at": match_data.get('played_at'),
+            "map": match_data.get('map_played'),
+            "server": match_data.get('server_choice')
+        }
+        
+        raw_data_str = json.dumps(raw_data, indent=2, default=str)
+        # Truncate if too long (Discord field limit is 1024 chars)
+        if len(raw_data_str) > 1000:
+            raw_data_str = raw_data_str[:997] + "..."
+        
         embed.add_field(
-            name="📖 Field Guide",
-            value=(
-                "**player_X_report:**\n"
-                "  1=Won, 2=Lost, 0=Draw, -1=Aborted,\n"
-                "  -3=I Aborted, -4=No Response, null=Not Reported\n\n"
-                "**match_result:**\n"
-                "  1=P1 Won, 2=P2 Won, 0=Draw, -1=Aborted,\n"
-                "  -2=Conflict, null=In Progress\n\n"
-                "**match_result_confirmation_status:**\n"
-                "  0=None, 1=P1 Only, 2=P2 Only, 3=Both"
-            ),
+            name="📋 Raw Match Data",
+            value=f"```json\n{raw_data_str}\n```",
             inline=False
         )
         
@@ -797,8 +953,76 @@ def register_admin_commands(tree: app_commands.CommandTree):
                 inline=False
             )
         
-        await interaction.followup.send(
-            embed=embed,
+        # Prepare replay embeds for both players
+        replay_embeds = []
+        
+        def _process_replay_data(replay_data: dict) -> dict:
+            """Process replay data from database - parse JSON strings back to Python objects."""
+            # Parse observers from JSON string to list
+            if isinstance(replay_data.get('observers'), str):
+                try:
+                    replay_data['observers'] = json.loads(replay_data['observers'])
+                except (json.JSONDecodeError, TypeError):
+                    replay_data['observers'] = []
+            
+            # Ensure replay_date is in a format the embed can handle
+            # If it's a datetime object or properly formatted ISO string, keep it
+            # Otherwise, try to parse it
+            replay_date = replay_data.get('replay_date')
+            if replay_date and isinstance(replay_date, str):
+                # The date might already be ISO formatted, keep it as-is
+                # The embed will handle parsing
+                pass
+            
+            return replay_data
+        
+        # Get player 1 and player 2 replay data
+        p1_replay_path = match_data.get('player_1_replay_path')
+        p2_replay_path = match_data.get('player_2_replay_path')
+        
+        # Player 1 replay
+        if p1_replay_path:
+            try:
+                p1_replay_data = data_access_service.get_replay_by_path(p1_replay_path)
+                if p1_replay_data:
+                    p1_replay_data = _process_replay_data(p1_replay_data)
+                    p1_embed = ReplayDetailsEmbed.get_success_embed(p1_replay_data)
+                    # Customize title to show player
+                    p1_embed.title = f"📄 Player 1 Replay: {p1_name}"
+                    replay_embeds.append(p1_embed)
+            except Exception as e:
+                error_embed = discord.Embed(
+                    title=f"❌ Player 1 Replay Error",
+                    description=f"Failed to load Player 1 replay: {str(e)}",
+                    color=discord.Color.red()
+                )
+                replay_embeds.append(error_embed)
+        
+        # Player 2 replay
+        if p2_replay_path:
+            try:
+                p2_replay_data = data_access_service.get_replay_by_path(p2_replay_path)
+                if p2_replay_data:
+                    p2_replay_data = _process_replay_data(p2_replay_data)
+                    p2_embed = ReplayDetailsEmbed.get_success_embed(p2_replay_data)
+                    # Customize title to show player
+                    p2_embed.title = f"📄 Player 2 Replay: {p2_name}"
+                    replay_embeds.append(p2_embed)
+            except Exception as e:
+                error_embed = discord.Embed(
+                    title=f"❌ Player 2 Replay Error",
+                    description=f"Failed to load Player 2 replay: {str(e)}",
+                    color=discord.Color.red()
+                )
+                replay_embeds.append(error_embed)
+        
+        # Create embeds list - main embed first, then replay embeds
+        all_embeds = [embed] + replay_embeds
+        
+        await queue_followup(
+            interaction,
+            content=f"Match #{match_id} State",
+            embeds=all_embeds if all_embeds else [embed],
             file=file,
         )
     
@@ -852,7 +1076,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
         resolution = winner_map[winner.value]
         
         async def confirm_callback(button_interaction: discord.Interaction):
-            await button_interaction.response.defer()
+            await queue_interaction_defer(button_interaction)
             
             result = await admin_service.resolve_match_conflict(
                 match_id=match_id,
@@ -993,7 +1217,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
                     color=discord.Color.red()
                 )
             
-            await button_interaction.edit_original_response(embed=result_embed, view=None)
+            await queue_edit_original(button_interaction, embed=result_embed, view=None)
         
         embed, view = _create_admin_confirmation(
             interaction,
@@ -1002,11 +1226,11 @@ def register_admin_commands(tree: app_commands.CommandTree):
             confirm_callback
         )
         
-        await interaction.response.send_message(embed=embed, view=view)
+        await queue_interaction_response(interaction, embed=embed, view=view)
     
     @admin_group.command(name="adjust_mmr", description="[Admin] Adjust player MMR")
     @app_commands.describe(
-        user="Player's @username, username, or Discord ID",
+        user="Player's @mention, username, or Discord ID",
         race="Race (e.g., bw_terran, sc2_zerg)",
         operation="How to adjust the MMR",
         value="MMR value to set/add/subtract",
@@ -1027,18 +1251,22 @@ def register_admin_commands(tree: app_commands.CommandTree):
         reason: str
     ):
         """Adjust player MMR with confirmation."""
-        # Resolve user input to Discord ID
-        user_info = await admin_service.resolve_user(user)
+        # Resolve user input (mention, ID, or username)
+        user_info = await resolve_user_input(user, interaction)
         
         if user_info is None:
-            await interaction.response.send_message(
-                f"❌ Could not find user: {user}",
+            await queue_interaction_response(
+                interaction,
+                content=f"❌ Could not find user: {user}",
                 ephemeral=True
             )
             return
         
         uid = user_info['discord_uid']
-        player_name = user_info['player_name']
+        
+        # Get player name from database
+        player_info = data_access_service.get_player_info(uid)
+        player_name = player_info.get('player_name') if player_info else user_info['username']
         
         operation_type = operation.value
         
@@ -1057,7 +1285,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
             change = -value
         
         async def confirm_callback(button_interaction: discord.Interaction):
-            await button_interaction.response.defer()
+            await queue_interaction_defer(button_interaction)
             
             result = await admin_service.adjust_player_mmr(
                 discord_uid=uid,
@@ -1187,7 +1415,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
                     color=discord.Color.red()
                 )
             
-            await button_interaction.edit_original_response(embed=result_embed, view=None)
+            await queue_edit_original(button_interaction, embed=result_embed, view=None)
         
         operation_desc = {
             'set': f"Set to {value}",
@@ -1202,11 +1430,11 @@ def register_admin_commands(tree: app_commands.CommandTree):
             confirm_callback
         )
         
-        await interaction.response.send_message(embed=embed, view=view)
+        await queue_interaction_response(interaction, embed=embed, view=view)
     
     @admin_group.command(name="remove_queue", description="[Admin] Force remove player from queue")
     @app_commands.describe(
-        user="Player's @username, username, or Discord ID",
+        user="Player's @mention, username, or Discord ID",
         reason="Reason for removal"
     )
     @admin_only()
@@ -1216,21 +1444,25 @@ def register_admin_commands(tree: app_commands.CommandTree):
         reason: str
     ):
         """Force remove a player from the matchmaking queue with confirmation."""
-        # Resolve user input to Discord ID
-        user_info = await admin_service.resolve_user(user)
+        # Resolve user input (mention, ID, or username)
+        user_info = await resolve_user_input(user, interaction)
         
         if user_info is None:
-            await interaction.response.send_message(
-                f"❌ Could not find user: {user}",
+            await queue_interaction_response(
+                interaction,
+                content=f"❌ Could not find user: {user}",
                 ephemeral=True
             )
             return
         
         uid = user_info['discord_uid']
-        player_name = user_info['player_name']
+        
+        # Get player name from database
+        player_info = data_access_service.get_player_info(uid)
+        player_name = player_info.get('player_name') if player_info else user_info['username']
         
         async def confirm_callback(button_interaction: discord.Interaction):
-            await button_interaction.response.defer()
+            await queue_interaction_defer(button_interaction)
             
             result = await admin_service.force_remove_from_queue(
                 discord_uid=uid,
@@ -1302,7 +1534,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
                     color=discord.Color.red()
                 )
             
-            await button_interaction.edit_original_response(embed=result_embed, view=None)
+            await queue_edit_original(button_interaction, embed=result_embed, view=None)
         
         embed, view = _create_admin_confirmation(
             interaction,
@@ -1311,11 +1543,11 @@ def register_admin_commands(tree: app_commands.CommandTree):
             confirm_callback
         )
         
-        await interaction.response.send_message(embed=embed, view=view)
+        await queue_interaction_response(interaction, embed=embed, view=view)
     
     @admin_group.command(name="unblock_queue", description="[Admin] Reset player state to idle (fixes stuck players)")
     @app_commands.describe(
-        user="Player's @username, username, or Discord ID",
+        user="Player's @mention, username, or Discord ID",
         reason="Reason for unblocking"
     )
     @admin_only()
@@ -1325,21 +1557,25 @@ def register_admin_commands(tree: app_commands.CommandTree):
         reason: str
     ):
         """Reset a player's state to idle with confirmation."""
-        # Resolve user input to Discord ID
-        user_info = await admin_service.resolve_user(user)
+        # Resolve user input (mention, ID, or username)
+        user_info = await resolve_user_input(user, interaction)
         
         if user_info is None:
-            await interaction.response.send_message(
-                f"❌ Could not find user: {user}",
+            await queue_interaction_response(
+                interaction,
+                content=f"❌ Could not find user: {user}",
                 ephemeral=True
             )
             return
         
         uid = user_info['discord_uid']
-        player_name = user_info['player_name']
+        
+        # Get player name from database
+        player_info = data_access_service.get_player_info(uid)
+        player_name = player_info.get('player_name') if player_info else user_info['username']
         
         async def confirm_callback(button_interaction: discord.Interaction):
-            await button_interaction.response.defer()
+            await queue_interaction_defer(button_interaction)
             
             result = await admin_service.unblock_player_state(
                 discord_uid=uid,
@@ -1371,7 +1607,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
                     color=discord.Color.red()
                 )
             
-            await button_interaction.edit_original_response(embed=result_embed, view=None)
+            await queue_edit_original(button_interaction, embed=result_embed, view=None)
         
         embed, view = _create_admin_confirmation(
             interaction,
@@ -1380,11 +1616,122 @@ def register_admin_commands(tree: app_commands.CommandTree):
             confirm_callback
         )
         
-        await interaction.response.send_message(embed=embed, view=view)
+        await queue_interaction_response(interaction, embed=embed, view=view)
+    
+    @admin_group.command(name="ban", description="[Admin] Toggle ban status for a player")
+    @app_commands.describe(
+        user="Player's @mention, username, or Discord ID",
+        reason="Reason for the ban/unban"
+    )
+    @admin_only()
+    async def admin_ban(
+        interaction: discord.Interaction,
+        user: str,
+        reason: str
+    ):
+        """Toggle ban status for a player."""
+        # Resolve user input (mention, ID, or username)
+        user_info = await resolve_user_input(user, interaction)
+        
+        if user_info is None:
+            await queue_interaction_response(
+                interaction,
+                content=f"❌ Could not find user: {user}",
+                ephemeral=True
+            )
+            return
+        
+        uid = user_info['discord_uid']
+        
+        # Get player name from database
+        player_info = data_access_service.get_player_info(uid)
+        player_name = player_info.get('player_name') if player_info else user_info['username']
+        
+        # Check current status
+        current_banned = data_access_service.get_is_banned(uid)
+        action = "unban" if current_banned else "ban"
+        
+        async def confirm_callback(button_interaction: discord.Interaction):
+            await queue_interaction_defer(button_interaction)
+            
+            result = await admin_service.toggle_ban_status(
+                discord_uid=uid,
+                admin_discord_id=interaction.user.id,
+                reason=reason
+            )
+            
+            if result['success']:
+                action_past = "banned" if result["new_status"] else "unbanned"
+                
+                # Send notification to the player
+                if 'notification' in result:
+                    notif = result['notification']
+                    action_desc = "banned" if result["new_status"] else "unbanned"
+                    
+                    player_embed = discord.Embed(
+                        title=f"{'🚫' if result['new_status'] else '✅'} Account {action_desc.title()}",
+                        description=f"Your account has been {action_desc} by an administrator.",
+                        color=discord.Color.red() if result["new_status"] else discord.Color.green()
+                    )
+                    
+                    player_embed.add_field(
+                        name="📝 Reason",
+                        value=notif['reason'],
+                        inline=False
+                    )
+                    
+                    player_embed.add_field(
+                        name="👤 Admin",
+                        value=notif['admin_name'],
+                        inline=False
+                    )
+                    
+                    if not result["new_status"]:  # If unbanned
+                        player_embed.add_field(
+                            name="ℹ️ Note",
+                            value="You can now use all bot commands again.",
+                            inline=False
+                        )
+                    
+                    await send_player_notification(notif['player_uid'], player_embed)
+                
+                result_embed = discord.Embed(
+                    title=f"✅ Admin: Player {action_past.title()}",
+                    description=f"**Player:** <@{uid}> ({player_name})\n**Status:** {action_past.title()}\n**Previous Status:** {'Banned' if result['old_status'] else 'Not Banned'}",
+                    color=discord.Color.green()
+                )
+                
+                result_embed.add_field(
+                    name="👤 Admin",
+                    value=interaction.user.name,
+                    inline=True
+                )
+                result_embed.add_field(
+                    name="📝 Reason",
+                    value=reason,
+                    inline=False
+                )
+            else:
+                result_embed = discord.Embed(
+                    title="❌ Admin: Ban Toggle Failed",
+                    description=f"Error: {result.get('error', 'Unknown error')}",
+                    color=discord.Color.red()
+                )
+            
+            await queue_edit_original(button_interaction, embed=result_embed, view=None)
+        
+        embed, view = _create_admin_confirmation(
+            interaction,
+            f"⚠️ Admin: Confirm {action.title()}",
+            f"**Player:** <@{uid}> ({player_name})\n**Current Status:** {'Banned' if current_banned else 'Not Banned'}\n**Action:** {action.title()}\n**Reason:** {reason}\n\nThis will immediately {'unban' if current_banned else 'ban'} this player. Confirm?",
+            confirm_callback
+        )
+        
+        await queue_interaction_response(interaction, embed=embed, view=view)
     
     @admin_group.command(name="reset_aborts", description="[Admin] Reset player's abort count")
     @app_commands.describe(
-        user="Player's @username, username, or Discord ID",
+        user="Player's @mention, username, or Discord ID",
         new_count="New abort count",
         reason="Reason for reset"
     )
@@ -1396,24 +1743,28 @@ def register_admin_commands(tree: app_commands.CommandTree):
         reason: str
     ):
         """Reset a player's abort count with confirmation."""
-        # Resolve user input to Discord ID
-        user_info = await admin_service.resolve_user(user)
+        # Resolve user input (mention, ID, or username)
+        user_info = await resolve_user_input(user, interaction)
         
         if user_info is None:
-            await interaction.response.send_message(
-                f"❌ Could not find user: {user}",
+            await queue_interaction_response(
+                interaction,
+                content=f"❌ Could not find user: {user}",
                 ephemeral=True
             )
             return
         
         uid = user_info['discord_uid']
-        player_name = user_info['player_name']
+        
+        # Get player name from database
+        player_info = data_access_service.get_player_info(uid)
+        player_name = player_info.get('player_name') if player_info else user_info['username']
         
         # Get current abort count for confirmation display
         current_aborts = data_access_service.get_remaining_aborts(uid)
         
         async def confirm_callback(button_interaction: discord.Interaction):
-            await button_interaction.response.defer()
+            await queue_interaction_defer(button_interaction)
             
             result = await admin_service.reset_player_aborts(
                 discord_uid=uid,
@@ -1508,7 +1859,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
                     color=discord.Color.red()
                 )
             
-            await button_interaction.edit_original_response(embed=result_embed, view=None)
+            await queue_edit_original(button_interaction, embed=result_embed, view=None)
         
         embed, view = _create_admin_confirmation(
             interaction,
@@ -1517,7 +1868,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
             confirm_callback
         )
         
-        await interaction.response.send_message(embed=embed, view=view)
+        await queue_interaction_response(interaction, embed=embed, view=view)
     
     @admin_group.command(name="clear_queue", description="[Admin] EMERGENCY: Clear entire queue")
     @app_commands.describe(reason="Reason for clearing queue")
@@ -1526,7 +1877,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
         """Emergency command to clear the entire matchmaking queue with confirmation."""
         
         async def confirm_callback(button_interaction: discord.Interaction):
-            await button_interaction.response.defer()
+            await queue_interaction_defer(button_interaction)
             
             result = await admin_service.emergency_clear_queue(
                 admin_discord_id=interaction.user.id,
@@ -1617,7 +1968,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
                     color=discord.Color.red()
                 )
             
-            await button_interaction.edit_original_response(embed=result_embed, view=None)
+            await queue_edit_original(button_interaction, embed=result_embed, view=None)
         
         embed, view = _create_admin_confirmation(
             interaction,
@@ -1627,7 +1978,143 @@ def register_admin_commands(tree: app_commands.CommandTree):
             color=discord.Color.red()
         )
         
-        await interaction.response.send_message(embed=embed, view=view)
+        await queue_interaction_response(interaction, embed=embed, view=view)
     
     tree.add_command(admin_group)
+    
+    # ========== OWNER COMMANDS ==========
+    
+    owner_group = app_commands.Group(
+        name="owner",
+        description="Owner-only commands (Highest Privilege)"
+    )
+    
+    @owner_group.command(name="admin", description="[Owner] Toggle admin status for a user")
+    @app_commands.describe(
+        user="User's @mention, username, or Discord ID to toggle admin status"
+    )
+    @owner_only()
+    async def owner_admin(interaction: discord.Interaction, user: str):
+        """Toggle admin status for a user (owner-only)."""
+        # Resolve user input (mention, ID, or username)
+        user_info = await resolve_user_input(user, interaction)
+        
+        if user_info is None:
+            await queue_interaction_response(
+                interaction,
+                content=f"❌ Could not find user: {user}",
+                ephemeral=True
+            )
+            return
+        
+        user_id = user_info['discord_uid']
+        username = user_info['username']
+        
+        # Check if user is owner
+        if user_id in OWNER_IDS:
+            await queue_interaction_response(
+                interaction,
+                content=f"❌ Cannot modify owner status for {username}.",
+                ephemeral=True
+            )
+            return
+        
+        # Check current admin status
+        is_currently_admin = user_id in ADMIN_IDS
+        action = "remove" if is_currently_admin else "add"
+        
+        async def confirm_callback(button_interaction: discord.Interaction):
+            # Toggle admin status
+            result = await admin_service.toggle_admin_status(
+                discord_uid=user_id,
+                username=username,
+                owner_discord_id=interaction.user.id
+            )
+            
+            if result['success']:
+                action_past = result['action']  # 'added' or 'removed'
+                
+                # Reload admin IDs in memory
+                global ADMIN_IDS
+                ADMIN_IDS = _load_admin_ids()
+                
+                # Send notification to the affected user
+                player_embed = discord.Embed(
+                    title=f"{'👑' if action_past == 'added' else '📋'} Admin Status {action_past.title()}",
+                    description=f"Your admin status has been {action_past} by a bot owner.",
+                    color=discord.Color.gold() if action_past == 'added' else discord.Color.blue()
+                )
+                
+                player_embed.add_field(
+                    name="👤 Owner",
+                    value=interaction.user.name,
+                    inline=True
+                )
+                
+                player_embed.add_field(
+                    name="⚙️ Status",
+                    value="Admin" if action_past == 'added' else "Regular User",
+                    inline=True
+                )
+                
+                if action_past == 'added':
+                    player_embed.add_field(
+                        name="ℹ️ Note",
+                        value="You now have admin access to all bot commands.",
+                        inline=False
+                    )
+                else:
+                    player_embed.add_field(
+                        name="ℹ️ Note",
+                        value="You no longer have admin access to bot commands.",
+                        inline=False
+                    )
+                
+                await send_player_notification(user_id, player_embed)
+                
+                # Send confirmation to owner
+                result_embed = discord.Embed(
+                    title=f"✅ Admin Status {'Added' if action_past == 'added' else 'Removed'}",
+                    description=f"**User:** {username} (<@{user_id}>)\n**Status:** Admin permissions {action_past}",
+                    color=discord.Color.green() if action_past == 'added' else discord.Color.orange()
+                )
+                
+                result_embed.add_field(
+                    name="👤 Owner",
+                    value=interaction.user.name,
+                    inline=True
+                )
+                
+                result_embed.add_field(
+                    name="⚙️ Action",
+                    value=action_past.title(),
+                    inline=True
+                )
+                
+                result_embed.add_field(
+                    name="ℹ️ Note",
+                    value=f"{'The user now has admin access to all bot commands.' if action_past == 'added' else 'The user no longer has admin access.'}",
+                    inline=False
+                )
+            else:
+                result_embed = discord.Embed(
+                    title="❌ Owner: Admin Toggle Failed",
+                    description=f"Error: {result.get('error')}",
+                    color=discord.Color.red()
+                )
+            
+            # Use queue_interaction_edit to acknowledge button click and edit in one atomic operation
+            await queue_interaction_edit(button_interaction, embed=result_embed, view=None)
+        
+        embed, view = _create_admin_confirmation(
+            interaction,
+            f"👑 Owner: Confirm Admin Status Change",
+            f"**User:** {username} (<@{user_id}>)\n**Action:** {action.title()} admin permissions\n\nAre you sure?",
+            confirm_callback,
+            color=discord.Color.gold()
+        )
+        
+        await queue_interaction_response(interaction, embed=embed, view=view)
+    
+    tree.add_command(owner_group)
 

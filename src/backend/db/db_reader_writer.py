@@ -454,6 +454,30 @@ class DatabaseWriter:
             print(f"Error updating player state for {discord_uid}: {e}")
             return False
     
+    def update_shield_battery_bug(self, discord_uid: int, value: bool) -> bool:
+        """Update shield battery bug acknowledgement in database."""
+        try:
+            rowcount = self.adapter.execute_write(
+                "UPDATE players SET shield_battery_bug = :value WHERE discord_uid = :discord_uid",
+                {"value": value, "discord_uid": discord_uid}
+            )
+            return rowcount > 0
+        except Exception as e:
+            print(f"Error updating shield battery bug for {discord_uid}: {e}")
+            return False
+    
+    def update_is_banned(self, discord_uid: int, value: bool) -> bool:
+        """Update ban status in database."""
+        try:
+            rowcount = self.adapter.execute_write(
+                "UPDATE players SET is_banned = :value WHERE discord_uid = :discord_uid",
+                {"value": value, "discord_uid": discord_uid}
+            )
+            return rowcount > 0
+        except Exception as e:
+            print(f"Error updating ban status for {discord_uid}: {e}")
+            return False
+    
     def accept_terms_of_service(self, discord_uid: int) -> bool:
         """Mark player as having accepted terms of service."""
         return self.update_player(discord_uid, accepted_tos=True)
@@ -1029,8 +1053,7 @@ class DatabaseWriter:
                 SET 
                     player_1_report = :p1_report,
                     player_2_report = :p2_report,
-                    match_result = :match_result,
-                    updated_at = :updated_at
+                    match_result = :match_result
                 WHERE id = :match_id
             """
             
@@ -1040,8 +1063,7 @@ class DatabaseWriter:
                     "match_id": match_id,
                     "p1_report": p1_report,
                     "p2_report": p2_report,
-                    "match_result": match_result,
-                    "updated_at": get_timestamp()
+                    "match_result": match_result
                 }
             )
             
@@ -1049,6 +1071,57 @@ class DatabaseWriter:
             
         except Exception as e:
             print(f"Error updating match {match_id} reports and result: {e}")
+            return False
+
+    def admin_resolve_match(
+        self,
+        match_id: int,
+        match_result: int,
+        p1_report: Optional[int],
+        p2_report: Optional[int]
+    ) -> bool:
+        """
+        Admin-only method to resolve a match and set the updated_at timestamp.
+        This is the ONLY method that should set updated_at in matches_1v1.
+        
+        Args:
+            match_id: The ID of the match to update
+            match_result: The final match result after admin resolution
+            p1_report: The original player 1 report (to preserve)
+            p2_report: The original player 2 report (to preserve)
+            
+        Returns:
+            True if the update was successful, False otherwise
+        """
+        try:
+            update_query = """
+                UPDATE matches_1v1
+                SET 
+                    match_result = :match_result,
+                    player_1_report = :p1_report,
+                    player_2_report = :p2_report,
+                    updated_at = :updated_at
+                WHERE id = :match_id
+            """
+            
+            rowcount = self.adapter.execute_write(
+                update_query,
+                {
+                    "match_id": match_id,
+                    "match_result": match_result,
+                    "p1_report": p1_report,
+                    "p2_report": p2_report,
+                    "updated_at": get_timestamp()
+                }
+            )
+            
+            print(f"[DatabaseWriter] Admin resolved match {match_id}: result={match_result}, " 
+                  f"p1_report={p1_report}, p2_report={p2_report}, updated_at set")
+            
+            return rowcount > 0
+            
+        except Exception as e:
+            print(f"Error in admin_resolve_match for match {match_id}: {e}")
             return False
 
     def update_match_result(self, match_id: int, match_result: int) -> bool:

@@ -227,6 +227,22 @@ class MessageQueue:
             
             logger.debug(f"[MessageQueue] {job.job_type} job succeeded (retry: {job.retry_count})")
         
+        except AttributeError as e:
+            # Discord.py sometimes throws "'NoneType' object has no attribute 'is_finished'"
+            # after successfully sending a message. This is a discord.py internal state issue.
+            # If this happens, treat it as success since the message was sent.
+            if "'NoneType' object has no attribute 'is_finished'" in str(e) or "is_finished" in str(e):
+                logger.warning(
+                    f"[MessageQueue] {job.job_type} job encountered discord.py internal state error "
+                    f"but message was likely sent: {e}"
+                )
+                # Treat as success - set None as result
+                if not job.future.done():
+                    job.future.set_result(None)
+            else:
+                # Some other AttributeError - handle as normal exception
+                raise
+        
         except Exception as e:
             # Retry logic
             if job.retry_count < 3:

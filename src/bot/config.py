@@ -129,4 +129,4 @@ PRUNE_DELETE_DELAY_SECONDS = 1
 
 # Discord message queue rate limit (messages per second)
 # This controls the global throughput of all outbound Discord API calls
-DISCORD_MESSAGE_RATE_LIMIT = 40
+DISCORD_MESSAGE_RATE_LIMIT = 45

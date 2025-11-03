@@ -1,7 +1,7 @@
 import discord
 from typing import Optional, Union, Callable, Any
 from src.bot.utils.discord_utils import send_ephemeral_response
-from src.bot.utils.message_helpers import queue_interaction_edit
+from src.bot.utils.message_helpers import queue_interaction_edit, queue_interaction_modal
 
 
 class ErrorEmbedException(Exception):
@@ -98,7 +98,7 @@ class RetryTargetButton(discord.ui.Button):
                 view=self.reset_target
             )
         elif isinstance(self.reset_target, discord.ui.Modal):
-            await interaction.response.send_modal(self.reset_target)
+            await queue_interaction_modal(interaction, self.reset_target)
         else:
             await send_ephemeral_response(
                 interaction,

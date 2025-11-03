@@ -53,7 +53,10 @@ class WriteJobType(Enum):
     LOG_ADMIN_ACTION = "log_admin_action"
     ABORT_MATCH = "abort_match"
     SYSTEM_ABORT_UNCONFIRMED = "system_abort_unconfirmed"
+    ADMIN_RESOLVE_MATCH = "admin_resolve_match"
     UPDATE_PLAYER_STATE = "update_player_state"
+    UPDATE_SHIELD_BATTERY_BUG = "update_shield_battery_bug"
+    UPDATE_IS_BANNED = "update_is_banned"
 
 
 @dataclass
@@ -185,6 +188,8 @@ class DataAccessService:
                 "updated_at": pl.Series([], dtype=pl.Utf8),
                 "remaining_aborts": pl.Series([], dtype=pl.Int32),
                 "player_state": pl.Series([], dtype=pl.Utf8),
+                "shield_battery_bug": pl.Series([], dtype=pl.Boolean),
+                "is_banned": pl.Series([], dtype=pl.Boolean),
             })
         print(f"[DataAccessService]   Players loaded: {len(self._players_df)} rows, size: {self._players_df.estimated_size('mb'):.2f} MB")
         
@@ -748,6 +753,18 @@ class DataAccessService:
                     job.data['reason']
                 )
             
+            elif job.job_type == WriteJobType.LOG_PLAYER_ACTION:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.log_player_action,
+                    job.data['discord_uid'],
+                    job.data['player_name'],
+                    job.data['setting_name'],
+                    job.data.get('old_value'),
+                    job.data.get('new_value'),
+                    job.data.get('changed_by', 'player')
+                )
+            
             elif job.job_type == WriteJobType.UPDATE_MATCH_REPORT:
                 # Use the database writer for match report updates
                 await loop.run_in_executor(
@@ -779,12 +796,40 @@ class DataAccessService:
                     -1  # match_result: -1 for aborted
                 )
             
+            elif job.job_type == WriteJobType.ADMIN_RESOLVE_MATCH:
+                # Admin resolution - sets match_result, reports, and updated_at atomically
+                print(f"[DataAccessService] Processing ADMIN_RESOLVE_MATCH: match_id={job.data['match_id']}, result={job.data['match_result']}")
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.admin_resolve_match,
+                    job.data['match_id'],
+                    job.data['match_result'],
+                    job.data['p1_report'],
+                    job.data['p2_report']
+                )
+            
             elif job.job_type == WriteJobType.UPDATE_PLAYER_STATE:
                 await loop.run_in_executor(
                     None,
                     self._db_writer.update_player_state,
                     job.data['discord_uid'],
                     job.data['state']
+                )
+            
+            elif job.job_type == WriteJobType.UPDATE_SHIELD_BATTERY_BUG:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.update_shield_battery_bug,
+                    job.data['discord_uid'],
+                    job.data['value']
+                )
+            
+            elif job.job_type == WriteJobType.UPDATE_IS_BANNED:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.update_is_banned,
+                    job.data['discord_uid'],
+                    job.data['value']
                 )
             
             # Add other job types as we implement them
@@ -1013,6 +1058,155 @@ class DataAccessService:
         await self._queue_write(job)
         return True
     
+    def get_shield_battery_bug(self, discord_uid: int) -> bool:
+        """Get whether player has acknowledged the shield battery bug."""
+        if self._players_df is None or len(self._players_df) == 0:
+            return False
+        
+        # Handle missing column (defensive)
+        if "shield_battery_bug" not in self._players_df.columns:
+            return False
+        
+        player_row = self._players_df.filter(pl.col("discord_uid") == discord_uid)
+        if len(player_row) == 0:
+            return False
+        
+        return player_row["shield_battery_bug"][0]
+
+    async def set_shield_battery_bug(
+        self, 
+        discord_uid: int, 
+        value: bool,
+        changed_by: str = "player"
+    ) -> bool:
+        """
+        Set whether player has acknowledged the shield battery bug.
+        
+        Args:
+            discord_uid: Player's Discord ID
+            value: New acknowledgment status
+            changed_by: Who made the change (e.g., "admin:123456", "system", "player")
+        """
+        if self._players_df is None:
+            return False
+        
+        # Get old value for logging
+        old_value = self.get_shield_battery_bug(discord_uid)
+        
+        # Update in-memory DataFrame
+        mask = pl.col("discord_uid") == discord_uid
+        self._players_df = self._players_df.with_columns(
+            pl.when(mask).then(pl.lit(value)).otherwise(pl.col("shield_battery_bug")).alias("shield_battery_bug")
+        )
+        
+        # Get player name for logging
+        player_info = self.get_player_info(discord_uid)
+        player_name = player_info.get("player_name", "Unknown") if player_info else "Unknown"
+        
+        # Queue async database write
+        job = WriteJob(
+            job_type=WriteJobType.UPDATE_SHIELD_BATTERY_BUG,
+            data={
+                "discord_uid": discord_uid,
+                "value": value
+            },
+            timestamp=time.time()
+        )
+        await self._queue_write(job)
+        
+        # Log to player_action_logs
+        action_log_job = WriteJob(
+            job_type=WriteJobType.LOG_PLAYER_ACTION,
+            data={
+                "discord_uid": discord_uid,
+                "player_name": player_name,
+                "setting_name": "shield_battery_bug",
+                "old_value": str(old_value),
+                "new_value": str(value),
+                "changed_by": changed_by
+            },
+            timestamp=time.time()
+        )
+        await self._queue_write(action_log_job)
+        
+        return True
+    
+    def get_is_banned(self, discord_uid: int) -> bool:
+        """Get whether player is banned."""
+        if self._players_df is None or len(self._players_df) == 0:
+            return False
+        
+        # Handle missing column (defensive)
+        if "is_banned" not in self._players_df.columns:
+            return False
+        
+        player_row = self._players_df.filter(pl.col("discord_uid") == discord_uid)
+        if len(player_row) == 0:
+            return False
+        
+        return player_row["is_banned"][0]
+
+    async def set_is_banned(
+        self, 
+        discord_uid: int, 
+        value: bool,
+        changed_by: str = "system",
+        reason: str = ""
+    ) -> bool:
+        """
+        Set whether player is banned.
+        
+        Args:
+            discord_uid: Player's Discord ID
+            value: New ban status
+            changed_by: Who made the change (e.g., "admin:123456", "system", "player")
+            reason: Reason for the change
+        """
+        if self._players_df is None:
+            return False
+        
+        # Get old value for logging
+        old_value = self.get_is_banned(discord_uid)
+        
+        # Update in-memory DataFrame
+        mask = pl.col("discord_uid") == discord_uid
+        self._players_df = self._players_df.with_columns(
+            pl.when(mask).then(pl.lit(value)).otherwise(pl.col("is_banned")).alias("is_banned")
+        )
+        
+        # Get player name for logging
+        player_info = self.get_player_info(discord_uid)
+        player_name = player_info.get("player_name", "Unknown") if player_info else "Unknown"
+        
+        # Queue async database write
+        job = WriteJob(
+            job_type=WriteJobType.UPDATE_IS_BANNED,
+            data={
+                "discord_uid": discord_uid,
+                "value": value
+            },
+            timestamp=time.time()
+        )
+        await self._queue_write(job)
+        
+        # Log to player_action_logs
+        action_log_job = WriteJob(
+            job_type=WriteJobType.LOG_PLAYER_ACTION,
+            data={
+                "discord_uid": discord_uid,
+                "player_name": player_name,
+                "setting_name": "is_banned",
+                "old_value": str(old_value),
+                "new_value": str(value),
+                "changed_by": changed_by,
+                "reason": reason
+            },
+            timestamp=time.time()
+        )
+        await self._queue_write(action_log_job)
+        
+        return True
+    
     async def reset_all_player_states_to_idle(self) -> int:
         """
         Reset all non-idle player states to idle. Used on startup for crash recovery.
@@ -1227,7 +1421,12 @@ class DataAccessService:
     
     # ========== Write Methods (Players Table) ==========
     
-    async def update_remaining_aborts(self, discord_uid: int, new_aborts: int) -> bool:
+    async def update_remaining_aborts(
+        self, 
+        discord_uid: int, 
+        new_aborts: int,
+        changed_by: str = "system"
+    ) -> bool:
         """
         Update a player's remaining aborts count.
         
@@ -1236,6 +1435,7 @@ class DataAccessService:
         Args:
             discord_uid: Discord user ID
             new_aborts: New abort count
+            changed_by: Who made the change (e.g., "admin:123456", "system", "player")
             
         Returns:
             True if successful, False if player not found
@@ -1246,9 +1446,15 @@ class DataAccessService:
         
         # Check if player exists
         mask = pl.col("discord_uid") == discord_uid
-        if len(self._players_df.filter(mask)) == 0:
+        player_row = self._players_df.filter(mask)
+        if len(player_row) == 0:
             print(f"[DataAccessService] WARNING: Player {discord_uid} not found for abort update")
             return False
+        
+        # Get old value and player info for logging
+        old_aborts = int(player_row["remaining_aborts"][0])
+        player_info = self.get_player_info(discord_uid)
+        player_name = player_info.get("player_name", "Unknown") if player_info else "Unknown"
         
         # Update in-memory DataFrame
         self._players_df = self._players_df.with_columns(
@@ -1270,6 +1476,21 @@ class DataAccessService:
         
         await self._queue_write(job)
         
+        # Log to player_action_logs
+        action_log_job = WriteJob(
+            job_type=WriteJobType.LOG_PLAYER_ACTION,
+            data={
+                "discord_uid": discord_uid,
+                "player_name": player_name,
+                "setting_name": "remaining_aborts",
+                "old_value": str(old_aborts),
+                "new_value": str(new_aborts),
+                "changed_by": changed_by
+            },
+            timestamp=time.time()
+        )
+        await self._queue_write(action_log_job)
+        
         return True
     
     async def update_player_info(
@@ -1281,7 +1502,8 @@ class DataAccessService:
         battletag: Optional[str] = None,
         alt_player_name_1: Optional[str] = None,
         alt_player_name_2: Optional[str] = None,
-        region: Optional[str] = None
+        region: Optional[str] = None,
+        changed_by: str = "player"
     ) -> bool:
         """
         Update player information.
@@ -1297,6 +1519,7 @@ class DataAccessService:
             alt_player_name_1: First alternate name
             alt_player_name_2: Second alternate name
             region: Region code
+            changed_by: Who made the change (e.g., "admin:123456", "system", "player")
             
         Returns:
             True if successful, False if player not found
@@ -1307,9 +1530,29 @@ class DataAccessService:
         
         # Check if player exists
         mask = pl.col("discord_uid") == discord_uid
-        if len(self._players_df.filter(mask)) == 0:
+        player_row = self._players_df.filter(mask)
+        if len(player_row) == 0:
             print(f"[DataAccessService] WARNING: Player {discord_uid} not found for update")
             return False
+        
+        # Get old values for logging
+        old_values = {}
+        field_mapping = {
+            'discord_username': discord_username,
+            'player_name': player_name,
+            'country': country,
+            'battletag': battletag,
+            'alt_player_name_1': alt_player_name_1,
+            'alt_player_name_2': alt_player_name_2,
+            'region': region
+        }
+        
+        for field_name, new_value in field_mapping.items():
+            if new_value is not None:
+                old_values[field_name] = str(player_row[field_name][0]) if player_row[field_name][0] is not None else "None"
+        
+        # Get player name for logging
+        current_player_name = str(player_row["player_name"][0]) if player_row["player_name"][0] is not None else "Unknown"
         
         # Build update expressions for each field
         updates = {}
@@ -1356,6 +1599,23 @@ class DataAccessService:
             
             await self._write_queue.put(job)
             self._total_writes_queued += 1
+            
+            # Log each field change to player_action_logs
+            for field_name, new_value in field_mapping.items():
+                if new_value is not None:
+                    action_log_job = WriteJob(
+                        job_type=WriteJobType.LOG_PLAYER_ACTION,
+                        data={
+                            "discord_uid": discord_uid,
+                            "player_name": current_player_name,
+                            "setting_name": field_name,
+                            "old_value": old_values.get(field_name, "None"),
+                            "new_value": str(new_value),
+                            "changed_by": changed_by
+                        },
+                        timestamp=time.time()
+                    )
+                    await self._queue_write(action_log_job)
         
         return True
     
@@ -1403,6 +1663,8 @@ class DataAccessService:
             "region": [region],
             "remaining_aborts": [3],  # Default value
             "player_state": ["idle"],  # Default state
+            "shield_battery_bug": [False],  # Default value
+            "is_banned": [False],  # Default value
         })
         
         # Append to existing DataFrame
@@ -1868,6 +2130,14 @@ class DataAccessService:
             return None
         
         result = self._replays_df.filter(pl.col("id") == replay_id)
+        return result.to_dicts()[0] if len(result) > 0 else None
+    
+    def get_replay_by_path(self, replay_path: str) -> Optional[Dict[str, Any]]:
+        """Get a specific replay by file path."""
+        if self._replays_df is None:
+            return None
+        
+        result = self._replays_df.filter(pl.col("replay_path") == replay_path)
         return result.to_dicts()[0] if len(result) > 0 else None
     
     # ========== Write Methods (Matches Table) ==========

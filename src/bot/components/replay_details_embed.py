@@ -1,6 +1,6 @@
 import discord
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.backend.core.types import VerificationResult
 from src.backend.core.config import REPLAY_TIMESTAMP_WINDOW_MINUTES
@@ -74,22 +74,58 @@ class ReplayDetailsEmbed:
         # Add timestamp
         if replay_data.get("replay_date"):
             try:
-                replay_dt = datetime.fromisoformat(
-                    replay_data["replay_date"].replace('+00', '+00:00')
-                )
-                formatted_ts = replay_dt.strftime("%d %b %Y, %H:%M:%S UTC")
-                unix_timestamp = int(replay_dt.timestamp())
-                discord_ts = f"<t:{unix_timestamp}>"
+                replay_date_str = str(replay_data["replay_date"])
+                
+                # Try different parsing strategies
+                replay_dt = None
+                
+                # Strategy 1: ISO format with timezone
+                try:
+                    replay_dt = datetime.fromisoformat(
+                        replay_date_str.replace('+00', '+00:00')
+                    )
+                except (ValueError, AttributeError):
+                    pass
+                
+                # Strategy 2: ISO format without microseconds
+                if not replay_dt:
+                    try:
+                        # Handle format like "2024-01-15 12:34:56"
+                        replay_dt = datetime.strptime(replay_date_str, "%Y-%m-%d %H:%M:%S")
+                        # Assume UTC if no timezone
+                        replay_dt = replay_dt.replace(tzinfo=timezone.utc)
+                    except ValueError:
+                        pass
+                
+                # Strategy 3: ISO format with T separator
+                if not replay_dt:
+                    try:
+                        # Handle format like "2024-01-15T12:34:56"
+                        replay_dt = datetime.fromisoformat(replay_date_str.replace('Z', '+00:00'))
+                    except ValueError:
+                        pass
+                
+                if replay_dt:
+                    formatted_ts = replay_dt.strftime("%d %b %Y, %H:%M:%S UTC")
+                    unix_timestamp = int(replay_dt.timestamp())
+                    discord_ts = f"<t:{unix_timestamp}>"
+                    embed.add_field(
+                        name="🕒 Game Start Time",
+                        value=f"{formatted_ts}\n({discord_ts})",
+                        inline=True
+                    )
+                else:
+                    # Could not parse - show raw value for debugging
+                    embed.add_field(
+                        name="🕒 Game Start Time",
+                        value=f"Invalid format: {replay_date_str[:50]}",
+                        inline=True
+                    )
+            except (ValueError, TypeError, AttributeError) as e:
+                # Handle cases where replay_date is not a valid format
                 embed.add_field(
                     name="🕒 Game Start Time",
-                    value=f"{formatted_ts}\n({discord_ts})",
-                    inline=True
-                )
-            except (ValueError, TypeError):
-                # Handle cases where replay_date is not a valid ISO string
-                embed.add_field(
-                    name="🕒 Game Start Time",
-                    value="Invalid date format",
+                    value=f"Parse error: {str(e)[:50]}",
                     inline=True
                 )
 

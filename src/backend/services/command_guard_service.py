@@ -29,6 +29,10 @@ class DMOnlyError(CommandGuardError):
     """Raised when a command is used outside of DMs."""
 
 
+class BannedError(CommandGuardError):
+    """Raised when a banned user attempts to use the bot."""
+
+
 class CommandGuardService:
     """Centralized helper to perform pre-command checks for slash handlers."""
 
@@ -42,13 +46,16 @@ class CommandGuardService:
         Uses cache-first strategy:
         1. Check cache for player record
         2. If not found, query database and cache result
-        3. Return player record
+        3. Check if player is banned
+        4. Return player record
         
         Expected performance: <5ms (cached) vs ~170ms (uncached)
         """
         # Try cache first
         cached_player = player_cache.get(discord_user_id)
         if cached_player:
+            # Check ban status before returning
+            self.require_not_banned(cached_player)
             return cached_player
         
         # Cache miss - fetch from database
@@ -56,6 +63,9 @@ class CommandGuardService:
         
         # Cache the result
         player_cache.set(discord_user_id, player_record)
+        
+        # Check ban status
+        self.require_not_banned(player_record)
         
         return player_record
 
@@ -70,6 +80,11 @@ class CommandGuardService:
     def require_setup_completed(self, player: Dict[str, Any]) -> None:
         if not player.get("completed_setup"):
             raise SetupIncompleteError("Profile setup not completed.")
+    
+    def require_not_banned(self, player: Dict[str, Any]) -> None:
+        """Check if player is banned. Raises BannedError if banned."""
+        if player.get('is_banned', False):
+            raise BannedError("Your account has been banned from using this bot.")
 
     def require_account_activated(self, player: Dict[str, Any]) -> None:
         """DISABLED: Activation requirement removed - command is obsolete."""
