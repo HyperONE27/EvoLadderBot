@@ -11,6 +11,7 @@ from src.backend.services.app_context import (
 )
 from src.bot.utils.discord_utils import send_ephemeral_response, get_race_emote, get_flag_emote, get_game_emote, get_rank_emote, get_globe_emote
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
+from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.utils.command_decorators import dm_only
 from src.backend.services.performance_service import FlowTracker
 from datetime import datetime, timezone
@@ -60,9 +61,30 @@ async def profile_command(interaction: discord.Interaction):
     embed = create_profile_embed(interaction.user, player_data, mmr_data)
     flow.checkpoint("create_embed_complete")
     
+    # Create view with cancel button only
+    flow.checkpoint("create_view_start")
+    class ProfileView(discord.ui.View):
+        pass
+    
+    profile_view = ProfileView(timeout=300)
+    
+    # Add cancel button using the abstraction
+    cancel_buttons = ConfirmRestartCancelButtons.create_buttons(
+        reset_target=profile_view,
+        include_confirm=False,
+        include_restart=False,
+        include_cancel=True,
+        cancel_label="Close"
+    )
+    
+    for button in cancel_buttons:
+        profile_view.add_item(button)
+    
+    flow.checkpoint("create_view_complete")
+    
     # Send response
     flow.checkpoint("send_response_start")
-    await send_ephemeral_response(interaction, embed=embed)
+    await send_ephemeral_response(interaction, embed=embed, view=profile_view)
     flow.checkpoint("send_response_complete")
     
     flow.complete("success")
