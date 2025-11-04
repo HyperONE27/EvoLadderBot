@@ -114,7 +114,7 @@ async def termsofservice_command(interaction: discord.Interaction):
         @discord.ui.button(label="I Accept These Terms", emoji="✅", style=discord.ButtonStyle.success)
         async def accept_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
             # Update in backend that user has confirmed the terms of service
-            success = user_info_service.accept_terms_of_service(user_info["id"])
+            success = await user_info_service.accept_terms_of_service(user_info["id"])
 
             if not success:
                 error_embed = discord.Embed(

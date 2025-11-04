@@ -156,9 +156,9 @@
 
 ### Other Last Minute Stuff
 - ⏰ Improve the matchmaking algorithm
-- ⏰ Send a follow-up message to players who do not confirm match in half the abort countdown timer after match assignment
+- ✅ Send a follow-up message to players who do not confirm match in a third of the abort countdown timer after match assignment
 - ✅ Send a dismissable message to players who enter a match involving BW Protoss about how to avoid Shield Battery lag
-- ⏰ I already updated admins.json with "owner" and "admin" roles, add an owner-only command to adjust admins while the bot is up
+- ✅ I already updated admins.json with "owner" and "admin" roles, add an owner-only command to adjust admins while the bot is up
 
 ## PRE-BETA
 

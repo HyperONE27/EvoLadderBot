@@ -610,7 +610,7 @@ def create_setup_confirmation_view(user_id: str, alt_ids: list, battle_tag: str,
         
         # Send data to backend
         # Always pass alt names (empty string if not provided) to ensure clearing is recorded
-        success = user_info_service.complete_setup(
+        success = await user_info_service.complete_setup(
             discord_uid=user_info["id"],
             player_name=user_id,
             battletag=battle_tag,

@@ -16,7 +16,6 @@ import discord
 import asyncio
 from src.backend.db.db_reader_writer import DatabaseReader, DatabaseWriter
 from src.backend.services.data_access_service import DataAccessService
-from src.backend.services.cache_service import player_cache
 
 
 # ========== Utility Functions ==========
@@ -378,9 +377,6 @@ class UserInfoService:
             # Update existing player's activation code
             success = self.writer.update_player_activation_code(discord_uid, activation_code)
             if success:
-                # Invalidate cache since player record changed
-                player_cache.invalidate(discord_uid)
-                
                 player_name = self._get_player_display_name(player)
                 self.writer.log_player_action(
                     discord_uid=discord_uid,
@@ -399,19 +395,25 @@ class UserInfoService:
                 activation_code=activation_code
             )
             if player_id:
-                # Invalidate cache for new player
-                player_cache.invalidate(discord_uid)
+                player_name = self._get_player_display_name(player)
+                self.writer.log_player_action(
+                    discord_uid=discord_uid,
+                    player_name=player_name,
+                    setting_name="activation_code",
+                    old_value=None,
+                    new_value=activation_code
+                )
                 return {"status": "ok", "message": "Player created with activation code"}
             else:
                 return {"status": "error", "message": "Failed to create player"}
     
-    def accept_terms_of_service(self, discord_uid: int) -> bool:
+    async def accept_terms_of_service(self, discord_uid: int) -> bool:
         """
         Mark player as having accepted terms of service.
         
         Args:
             discord_uid: Discord user ID.
-        
+            
         Returns:
             True if successful, False otherwise.
         """
@@ -422,27 +424,22 @@ class UserInfoService:
             self.create_player(discord_uid=discord_uid)
             player = self.get_player(discord_uid)
         
-        # This operation is not performance-critical and has no equivalent in DataAccessService yet.
-        # It can be migrated later if needed. For now, we leave the legacy writer.
-        success = self.writer.accept_terms_of_service(discord_uid)
+        # Use DataAccessService - updates memory + queues DB write (including accepted_tos_date timestamp)
+        success = await self.data_service.update_player_info(discord_uid, accepted_tos=True)
         
-        if success:
-            # Invalidate cache since player record changed
-            player_cache.invalidate(discord_uid)
-            
-            if player:
-                player_name = self._get_player_display_name(player)
-                asyncio.create_task(self.data_service.log_player_action(
-                    discord_uid=discord_uid,
-                    player_name=player_name,
-                    setting_name="accepted_tos",
-                    old_value="False",
-                    new_value="True",
-                ))
+        if success and player:
+            player_name = self._get_player_display_name(player)
+            asyncio.create_task(self.data_service.log_player_action(
+                discord_uid=discord_uid,
+                player_name=player_name,
+                setting_name="accepted_tos",
+                old_value="False",
+                new_value="True",
+            ))
         
         return success
     
-    def complete_setup(
+    async def complete_setup(
         self,
         discord_uid: int,
         player_name: str,
@@ -497,14 +494,10 @@ class UserInfoService:
         # Mark setup as complete
         old_player = self.get_player(discord_uid)
         
-        # This operation is not performance-critical and has no equivalent in DataAccessService yet.
-        # It can be migrated later if needed. For now, we leave the legacy writer.
-        success = self.writer.complete_setup(discord_uid)
+        # Use DataAccessService - updates memory + queues DB write (including completed_setup_date timestamp)
+        success = await self.data_service.update_player_info(discord_uid, completed_setup=True)
         
         if success:
-            # Invalidate cache since player record changed
-            player_cache.invalidate(discord_uid)
-            
             # Only log if completed_setup actually changed
             if old_player and not old_player.get("completed_setup"):
                 asyncio.create_task(self.data_service.log_player_action(

@@ -18,8 +18,7 @@ from discord.ext import commands
 
 from src.backend.db.connection_pool import close_pool, initialize_pool
 from src.backend.db.test_connection_startup import test_database_connection
-from src.backend.services.app_context import command_guard_service, leaderboard_service, ranking_service
-from src.backend.services.cache_service import static_cache
+from src.backend.services.app_context import command_guard_service, leaderboard_service, ranking_service, static_cache
 from src.backend.services.command_guard_service import DMOnlyError
 from src.backend.services.data_access_service import DataAccessService
 from src.backend.services.memory_monitor import initialize_memory_monitor, log_memory

@@ -25,7 +25,6 @@ from src.backend.services.match_completion_service import match_completion_servi
 from src.backend.services.matchmaking_service import MatchResult, Player, QueuePreferences, matchmaker
 from src.backend.services.replay_service import ReplayRaw, parse_replay_data_blocking
 from src.backend.services.user_info_service import get_user_info
-from src.bot.components.cancel_embed import create_cancel_embed
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.utils.message_helpers import (
@@ -440,14 +439,8 @@ class CancelQueueSetupButton(discord.ui.Button):
         )
     
     async def callback(self, interaction: discord.Interaction):
-        # Create and show the cancel embed
-        cancel_view = create_cancel_embed()
-        await queue_interaction_edit(
-            interaction,
-            content="",
-            embed=cancel_view.embed,
-            view=cancel_view
-        )
+        from src.bot.utils.message_helpers import queue_message_delete
+        await queue_message_delete(interaction.message)
 
 
 class QueueView(discord.ui.View):
@@ -706,8 +699,10 @@ class QueueSearchingView(discord.ui.View):
                 match_result.player_2_race
             ))
             
-            # Schedule confirmation reminder
-            asyncio.create_task(self._send_confirmation_reminder(match_result.match_id, self.channel))
+            # Schedule confirmation reminder and store task reference
+            from src.backend.services.app_context import match_completion_service
+            reminder_task = asyncio.create_task(self._send_confirmation_reminder(match_result.match_id, self.channel))
+            match_completion_service.reminder_tasks[match_result.match_id] = reminder_task
             
             # Register for replay detection
             await match_view.register_for_replay_detection(self.last_interaction.channel_id)

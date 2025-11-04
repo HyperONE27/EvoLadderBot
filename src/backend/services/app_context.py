@@ -20,6 +20,7 @@ Usage:
 
 # Database imports removed - all services now use DataAccessService
 # NOTE: admin_service import moved below to avoid circular dependency
+from src.backend.services.cache_service import StaticDataCache
 from src.backend.services.command_guard_service import CommandGuardService
 from src.backend.services.countries_service import CountriesService
 from src.backend.services.leaderboard_service import LeaderboardService
@@ -36,6 +37,14 @@ from src.backend.services.replay_service import ReplayService
 from src.backend.services.storage_service import StorageService
 from src.backend.services.user_info_service import UserInfoService
 from src.backend.services.validation_service import ValidationService
+
+
+# =============================================================================
+# CACHE LAYER - Create shared cache instances
+# =============================================================================
+
+static_cache = StaticDataCache()
+static_cache.initialize()  # Load static data at startup
 
 
 # =============================================================================
@@ -158,5 +167,7 @@ __all__ = [
     "admin_service",
     # Message queue (frontend service)
     "message_queue",
+    # Cache services
+    "static_cache",
 ]
 

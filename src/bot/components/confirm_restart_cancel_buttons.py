@@ -1,7 +1,6 @@
 import discord
 from typing import Optional, Union, Callable
 from src.bot.utils.discord_utils import send_ephemeral_response
-from src.bot.components.cancel_embed import create_cancel_embed
 from src.bot.utils.message_helpers import queue_interaction_edit, queue_interaction_modal
 
 
@@ -88,18 +87,8 @@ class CancelButton(discord.ui.Button):
         self.show_fields = show_fields
 
     async def callback(self, interaction: discord.Interaction):
-        # Use interaction.response.edit_message to acknowledge the button click
-        # and edit the message in one atomic operation
-        
-        # Always use the cancel embed for consistency
-        cancel_view = create_cancel_embed()
-        
-        await queue_interaction_edit(
-            interaction,
-            content="",
-            embed=cancel_view.embed,
-            view=cancel_view
-        )
+        from src.bot.utils.message_helpers import queue_message_delete
+        await queue_message_delete(interaction.message)
 
 
 class ConfirmRestartCancelButtons:

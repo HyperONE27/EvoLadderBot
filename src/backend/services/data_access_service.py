@@ -579,7 +579,9 @@ class DataAccessService:
                     alt_player_name_1=job.data.get('alt_player_name_1'),
                     alt_player_name_2=job.data.get('alt_player_name_2'),
                     country=job.data.get('country'),
-                    region=job.data.get('region')
+                    region=job.data.get('region'),
+                    accepted_tos=job.data.get('accepted_tos'),
+                    completed_setup=job.data.get('completed_setup')
                 )
                 
                 # Special handling for remaining_aborts
@@ -1503,6 +1505,8 @@ class DataAccessService:
         alt_player_name_1: Optional[str] = None,
         alt_player_name_2: Optional[str] = None,
         region: Optional[str] = None,
+        accepted_tos: Optional[bool] = None,
+        completed_setup: Optional[bool] = None,
         changed_by: str = "player"
     ) -> bool:
         """
@@ -1544,7 +1548,9 @@ class DataAccessService:
             'battletag': battletag,
             'alt_player_name_1': alt_player_name_1,
             'alt_player_name_2': alt_player_name_2,
-            'region': region
+            'region': region,
+            'accepted_tos': accepted_tos,
+            'completed_setup': completed_setup
         }
         
         for field_name, new_value in field_mapping.items():
@@ -1585,6 +1591,14 @@ class DataAccessService:
         if region is not None:
             updates["region"] = pl.when(mask).then(pl.lit(region)).otherwise(pl.col("region"))
             write_data['region'] = region
+        
+        if accepted_tos is not None:
+            updates["accepted_tos"] = pl.when(mask).then(pl.lit(accepted_tos)).otherwise(pl.col("accepted_tos"))
+            write_data['accepted_tos'] = accepted_tos
+        
+        if completed_setup is not None:
+            updates["completed_setup"] = pl.when(mask).then(pl.lit(completed_setup)).otherwise(pl.col("completed_setup"))
+            write_data['completed_setup'] = completed_setup
         
         # Apply updates to DataFrame if any
         if updates:
@@ -1653,18 +1667,27 @@ class DataAccessService:
             print(f"[DataAccessService] WARNING: Player {discord_uid} already exists")
             return False
         
-        # Create new row
+        # Create new row - matches PostgreSQL schema order exactly
         new_row = pl.DataFrame({
             "discord_uid": [discord_uid],
             "discord_username": [discord_username],
             "player_name": [player_name],
-            "country": [country],
             "battletag": [battletag],
+            "alt_player_name_1": [None],
+            "alt_player_name_2": [None],
+            "country": [country],
             "region": [region],
-            "remaining_aborts": [3],  # Default value
-            "player_state": ["idle"],  # Default state
-            "shield_battery_bug": [False],  # Default value
-            "is_banned": [False],  # Default value
+            "accepted_tos": [False],
+            "accepted_tos_date": [None],
+            "completed_setup": [False],
+            "completed_setup_date": [None],
+            "activation_code": [None],
+            "created_at": [None],
+            "updated_at": [None],
+            "remaining_aborts": [3],
+            "player_state": ["idle"],
+            "shield_battery_bug": [False],
+            "is_banned": [False],
         })
         
         # Append to existing DataFrame

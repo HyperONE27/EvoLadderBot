@@ -47,6 +47,8 @@ class MatchCompletionService:
             cls._instance.notification_callbacks: Dict[int, List[Callable]] = {}
             # Track match confirmations: match_id -> set of player_discord_uids
             cls._instance.match_confirmations: Dict[int, Set[int]] = {}
+            # Track reminder tasks: match_id -> asyncio.Task
+            cls._instance.reminder_tasks: Dict[int, asyncio.Task] = {}
             # Initialize logger
             cls._instance.logger = logging.getLogger(__name__)
         return cls._instance
@@ -99,6 +101,7 @@ class MatchCompletionService:
         self.notification_callbacks.pop(match_id, None)
         self.processing_locks.pop(match_id, None)
         self.match_confirmations.pop(match_id, None)
+        self.reminder_tasks.pop(match_id, None)
 
         print(f"🛑 Stopped monitoring match {match_id}")
     
@@ -123,6 +126,12 @@ class MatchCompletionService:
             
             self.match_confirmations[match_id].add(player_discord_uid)
             self.logger.info(f"Player {player_discord_uid} confirmed match {match_id}")
+            
+            # Cancel reminder task if exists
+            reminder_task = self.reminder_tasks.pop(match_id, None)
+            if reminder_task and not reminder_task.done():
+                reminder_task.cancel()
+                self.logger.info(f"Cancelled confirmation reminder for match {match_id}")
             
             # Check if both players have confirmed
             if len(self.match_confirmations[match_id]) == 2:

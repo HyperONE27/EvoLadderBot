@@ -1309,10 +1309,6 @@ class AdminService:
                 reason=reason
             )
             
-            # Invalidate cache so the player sees the new ban status immediately
-            from src.backend.services.cache_service import player_cache
-            player_cache.invalidate(discord_uid)
-            
             # Get player info for logging
             player = self.data_service.get_player_info(discord_uid)
             player_name = player.get("player_name", "Unknown") if player else "Unknown"
