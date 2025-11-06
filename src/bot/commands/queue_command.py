@@ -45,8 +45,7 @@ from src.bot.utils.discord_utils import (
     send_ephemeral_response,
     get_rank_emote,
     get_globe_emote,
-    followup_ephemeral_response,
-    get_user_info,
+    followup_ephemeral_response
 )
 import time
 from contextlib import suppress
@@ -178,7 +177,7 @@ async def queue_command(interaction: discord.Interaction):
         flow.complete("already_queued")
         error = ErrorEmbedException(
             title="Queueing Not Allowed",
-            description="You cannot queue more than once, or while a match is active."
+            description="You are already in a queue or an active match."
         )
         error_view = create_error_view_from_exception(error)
         await queue_edit_original(interaction, embed=error_view.embed, view=error_view)
