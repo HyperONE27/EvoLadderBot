@@ -373,85 +373,187 @@ class Matchmaker:
 		
 		return bw_only, sc2_only, both_races
 
+	def _calculate_skill_bias(self, player: Player) -> int:
+		"""
+		Calculate skill bias for a "both" player.
+		Positive = stronger at BW, Negative = stronger at SC2.
+		
+		Args:
+			player: A player with both BW and SC2 races
+			
+		Returns:
+			Skill bias (bw_mmr - sc2_mmr)
+		"""
+		bw_mmr = player.bw_mmr or config.MMR_DEFAULT
+		sc2_mmr = player.sc2_mmr or config.MMR_DEFAULT
+		return bw_mmr - sc2_mmr
+
 	def equalize_lists(self, list_x: List[Player], list_y: List[Player], 
 					  list_z: List[Player]) -> Tuple[List[Player], List[Player], List[Player]]:
 		"""
-		Equalize the sizes of list_x and list_y by temporarily moving players from list_z.
-		Returns the equalized lists AND the remaining unmatched Z players.
+		Intelligently equalize the sizes of list_x (BW) and list_y (SC2) by assigning 
+		"both" players from list_z based on:
+		1. Population balance (hard constraint)
+		2. Skill bias (assign to stronger side)
+		3. Mean MMR balance (soft constraint)
 		
 		Args:
-			list_x: First list to equalize
-			list_y: Second list to equalize  
-			list_z: Source list to move players from
+			list_x: BW-only players list
+			list_y: SC2-only players list
+			list_z: Both-races players list
 			
 		Returns:
-			Tuple of (equalized_x, equalized_y, remaining_z)
+			Tuple of (equalized_bw, equalized_sc2, remaining_both)
 		"""
-		x_copy = list_x.copy()
-		y_copy = list_y.copy()
-		z_copy = list_z.copy()
+		bw_list = list_x.copy()
+		sc2_list = list_y.copy()
+		both_players = list_z.copy()
 		
-		# Special case: if both X and Y are empty, distribute Z players evenly
-		if not x_copy and not y_copy and z_copy:
-			# Distribute Z players evenly between X and Y
-			for i, player in enumerate(z_copy):
-				if i % 2 == 0:
-					x_copy.append(player)
-				else:
-					y_copy.append(player)
-			z_copy = []  # All Z players have been distributed
-			return x_copy, y_copy, z_copy
+		# Special case: if both X and Y are empty, distribute evenly by skill bias
+		if not bw_list and not sc2_list and both_players:
+			# Sort by skill bias (SC2-favoring to BW-favoring)
+			both_players_sorted = sorted(both_players, key=lambda p: self._calculate_skill_bias(p))
+			
+			# Split evenly: first half to SC2, second half to BW
+			mid = len(both_players_sorted) // 2
+			sc2_list = both_players_sorted[:mid]
+			bw_list = both_players_sorted[mid:]
+			
+			return bw_list, sc2_list, []
 		
-		# Normal equalization logic
-		# Distribute Z players to balance X and Y lists
-		while z_copy:
-			if len(x_copy) < len(y_copy):
-				# Move player from z to x
-				if x_copy and y_copy:
-					x_mean = sum(p.bw_mmr or 0 for p in x_copy) / len(x_copy)
-					y_mean = sum(p.sc2_mmr or 0 for p in y_copy) / len(y_copy)
-					if x_mean < y_mean:
-						# Move highest-rated player from z to x
-						player = z_copy.pop(0)
-						x_copy.append(player)
-					else:
-						# Move lowest-rated player from z to x
-						player = z_copy.pop(-1)
-						x_copy.append(player)
-				else:
-					player = z_copy.pop(0)
-					x_copy.append(player)
-			elif len(x_copy) > len(y_copy):
-				# Move player from z to y
-				if x_copy and y_copy:
-					x_mean = sum(p.bw_mmr or 0 for p in x_copy) / len(x_copy)
-					y_mean = sum(p.sc2_mmr or 0 for p in y_copy) / len(y_copy)
-					if x_mean < y_mean:
-						# Move highest-rated player from z to y
-						player = z_copy.pop(0)
-						y_copy.append(player)
-					else:
-						# Move lowest-rated player from z to y
-						player = z_copy.pop(-1)
-						y_copy.append(player)
-				else:
-					player = z_copy.pop(0)
-					y_copy.append(player)
+		if not both_players:
+			# No "both" players to assign
+			return bw_list, sc2_list, []
+		
+		# Step 1: Calculate population delta
+		delta_n = len(bw_list) - len(sc2_list)
+		
+		# Step 2: Sort "both" players by skill bias (ascending: SC2-favoring first)
+		both_players_sorted = sorted(both_players, key=lambda p: self._calculate_skill_bias(p))
+		
+		# Step 3: Assign players to balance counts (hard constraint)
+		if delta_n < 0:
+			# BW needs more players
+			needed = abs(delta_n)
+			# Take the most BW-favoring players (from the end)
+			for _ in range(min(needed, len(both_players_sorted))):
+				bw_list.append(both_players_sorted.pop())
+		elif delta_n > 0:
+			# SC2 needs more players
+			needed = delta_n
+			# Take the most SC2-favoring players (from the start)
+			for _ in range(min(needed, len(both_players_sorted))):
+				sc2_list.append(both_players_sorted.pop(0))
+		
+		# If lists are now equal and we have remaining "both" players, distribute evenly
+		while len(both_players_sorted) > 0:
+			if len(bw_list) < len(sc2_list):
+				bw_list.append(both_players_sorted.pop())
+			elif len(bw_list) > len(sc2_list):
+				sc2_list.append(both_players_sorted.pop(0))
 			else:
-				# Lists are equal, alternate between x and y
-				if len(z_copy) > 0:
-					player = z_copy.pop(0)
-					x_copy.append(player)
-				if len(z_copy) > 0:
-					player = z_copy.pop(0)
-					y_copy.append(player)
+				# Equal - alternate
+				if both_players_sorted:
+					sc2_list.append(both_players_sorted.pop(0))
+				if both_players_sorted:
+					bw_list.append(both_players_sorted.pop())
 		
-		return x_copy, y_copy, z_copy
+		# Step 4: Calculate mean MMRs and rebalance if needed
+		if len(bw_list) > 0 and len(sc2_list) > 0:
+			bw_mean = sum(p.bw_mmr or config.MMR_DEFAULT for p in bw_list) / len(bw_list)
+			sc2_mean = sum(p.sc2_mmr or config.MMR_DEFAULT for p in sc2_list) / len(sc2_list)
+			mmr_delta = bw_mean - sc2_mean
+			
+			# If skill imbalance exceeds threshold, try to shift neutral players
+			if abs(mmr_delta) > config.MM_BALANCE_THRESHOLD_MMR:
+				# Find "both" players with small bias (neutral)
+				both_in_bw = [p for p in bw_list if p.has_bw_race and p.has_sc2_race]
+				both_in_sc2 = [p for p in sc2_list if p.has_bw_race and p.has_sc2_race]
+				
+				# Sort by absolute bias (most neutral first)
+				both_in_bw.sort(key=lambda p: abs(self._calculate_skill_bias(p)))
+				both_in_sc2.sort(key=lambda p: abs(self._calculate_skill_bias(p)))
+				
+				if mmr_delta > config.MM_BALANCE_THRESHOLD_MMR and both_in_bw:
+					# BW is stronger, move neutral player to SC2
+					player_to_move = both_in_bw[0]
+					bw_list.remove(player_to_move)
+					sc2_list.append(player_to_move)
+				elif mmr_delta < -config.MM_BALANCE_THRESHOLD_MMR and both_in_sc2:
+					# SC2 is stronger, move neutral player to BW
+					player_to_move = both_in_sc2[0]
+					sc2_list.remove(player_to_move)
+					bw_list.append(player_to_move)
+		
+		return bw_list, sc2_list, []
+
+	def _build_candidate_pairs(self, lead_side: List[Player], follow_side: List[Player],
+							  is_bw_match: bool) -> List[Tuple[float, Player, Player, int]]:
+		"""
+		Build all valid match candidates within MMR windows.
+		
+		Args:
+			lead_side: Players on the lead side
+			follow_side: Players on the follow side
+			is_bw_match: True if lead is BW, False if lead is SC2
+			
+		Returns:
+			List of (score, lead_player, follow_player, mmr_diff) tuples
+			Score is lower for better matches (squared MMR diff minus wait priority)
+		"""
+		candidates = []
+		queue_size = len(self.players)
+		
+		for lead_player in lead_side:
+			lead_mmr = lead_player.get_effective_mmr(is_bw_match) or 0
+			max_diff = self.max_diff(lead_player.wait_cycles)
+			
+			for follow_player in follow_side:
+				follow_mmr = follow_player.get_effective_mmr(not is_bw_match) or 0
+				mmr_diff = abs(lead_mmr - follow_mmr)
+				
+				if mmr_diff <= max_diff:
+					# Score: squared MMR diff minus wait priority
+					# Lower score = better match
+					wait_priority = (lead_player.wait_cycles + follow_player.wait_cycles)
+					score = (mmr_diff ** 2) - (wait_priority * config.MM_WAIT_CYCLE_PRIORITY_COEFFICIENT)
+					
+					candidates.append((score, lead_player, follow_player, mmr_diff))
+		
+		return candidates
+
+	def _select_matches_from_candidates(self, candidates: List[Tuple[float, Player, Player, int]]) -> List[Tuple[Player, Player]]:
+		"""
+		Greedily select matches from sorted candidates to maximize overall quality.
+		
+		Args:
+			candidates: List of (score, lead_player, follow_player, mmr_diff)
+			
+		Returns:
+			List of matched player pairs
+		"""
+		candidates.sort(key=lambda x: x[0])  # Sort by score ascending (lower is better)
+		
+		matches = []
+		used_lead = set()
+		used_follow = set()
+		
+		for score, lead_player, follow_player, mmr_diff in candidates:
+			if (lead_player.discord_user_id not in used_lead and 
+				follow_player.discord_user_id not in used_follow):
+				matches.append((lead_player, follow_player))
+				used_lead.add(lead_player.discord_user_id)
+				used_follow.add(follow_player.discord_user_id)
+		
+		return matches
 
 	def find_matches(self, lead_side: List[Player], follow_side: List[Player], 
 					is_bw_match: bool) -> List[Tuple[Player, Player]]:
 		"""
-		Find matches between lead_side and follow_side players.
+		Find matches between lead_side and follow_side players using locally-optimal algorithm.
+		
+		Uses candidate-based approach to minimize sum of squared MMR differences
+		while respecting wait time priorities.
 		
 		Args:
 			lead_side: List of players to match from
@@ -461,57 +563,80 @@ class Matchmaker:
 		Returns:
 			List of matched player pairs
 		"""
-		matches = []
-		used_lead = set()
-		used_follow = set()
+		if not lead_side or not follow_side:
+			return []
 		
-		# Calculate mean MMR of lead side
-		if not lead_side:
-			return matches
-			
-		lead_mean = sum(p.get_effective_mmr(is_bw_match) or 0 for p in lead_side) / len(lead_side)
+		# Build all valid candidate pairs within MMR windows
+		candidates = self._build_candidate_pairs(lead_side, follow_side, is_bw_match)
 		
-		# Calculate priority for each lead side player and sort once
-		lead_side_with_priority = []
-		for player in lead_side:
-			mmr = player.get_effective_mmr(is_bw_match) or 0
-			distance_from_mean = abs(mmr - lead_mean)
-			priority = distance_from_mean + (config.MM_WAIT_CYCLE_PRIORITY_BONUS * player.wait_cycles)
-			lead_side_with_priority.append((priority, player))
-		
-		# Sort by priority (highest first) - do this once outside the loop
-		lead_side_with_priority.sort(key=lambda x: x[0], reverse=True)
-		sorted_lead_side = [player for _, player in lead_side_with_priority]
-		
-		# Try to match each lead side player
-		for lead_player in sorted_lead_side:
-			if lead_player.discord_user_id in used_lead:
-				continue
-				
-			lead_mmr = lead_player.get_effective_mmr(is_bw_match) or 0
-			max_diff = self.max_diff(lead_player.wait_cycles)
-			
-			# Find best match in follow side
-			best_match = None
-			best_diff = float('inf')
-			
-			for follow_player in follow_side:
-				if follow_player.discord_user_id in used_follow:
-					continue
-					
-				follow_mmr = follow_player.get_effective_mmr(not is_bw_match) or 0
-				mmr_diff = abs(lead_mmr - follow_mmr)
-				
-				if mmr_diff <= max_diff and mmr_diff < best_diff:
-					best_match = follow_player
-					best_diff = mmr_diff
-			
-			if best_match:
-				matches.append((lead_player, best_match))
-				used_lead.add(lead_player.discord_user_id)
-				used_follow.add(best_match.discord_user_id)
+		# Select matches greedily from sorted candidates (minimizes squared MMR diffs)
+		matches = self._select_matches_from_candidates(candidates)
 		
 		return matches
+
+	def _refine_matches_least_squares(self, matches: List[Tuple[Player, Player]], 
+									  is_bw_match: bool) -> List[Tuple[Player, Player]]:
+		"""
+		Perform adjacent swap passes to minimize sum of squared MMR differences.
+		Runs for MM_REFINEMENT_PASSES iterations.
+		Only swaps if both new pairs remain within their MMR windows.
+		
+		Args:
+			matches: Initial list of matched player pairs
+			is_bw_match: True if lead is BW, False if lead is SC2
+			
+		Returns:
+			Refined list of matched player pairs
+		"""
+		if len(matches) < 2:
+			return matches
+		
+		match_list = list(matches)  # Mutable copy
+		total_swaps = 0
+		
+		for pass_num in range(config.MM_REFINEMENT_PASSES):
+			swaps_made = False
+			
+			for i in range(len(match_list) - 1):
+				p1_lead, p1_follow = match_list[i]
+				p2_lead, p2_follow = match_list[i + 1]
+				
+				# Calculate current squared error
+				p1_lead_mmr = p1_lead.get_effective_mmr(is_bw_match) or 0
+				p1_follow_mmr = p1_follow.get_effective_mmr(not is_bw_match) or 0
+				p2_lead_mmr = p2_lead.get_effective_mmr(is_bw_match) or 0
+				p2_follow_mmr = p2_follow.get_effective_mmr(not is_bw_match) or 0
+				
+				error_before = ((p1_lead_mmr - p1_follow_mmr) ** 2 + 
+							  (p2_lead_mmr - p2_follow_mmr) ** 2)
+				
+				# Calculate error after swap (swap follow players)
+				error_after = ((p1_lead_mmr - p2_follow_mmr) ** 2 + 
+							 (p2_lead_mmr - p1_follow_mmr) ** 2)
+				
+				if error_after < error_before:
+					# Check if swap respects MMR windows
+					max_diff_p1 = self.max_diff(p1_lead.wait_cycles)
+					max_diff_p2 = self.max_diff(p2_lead.wait_cycles)
+					
+					new_diff_p1 = abs(p1_lead_mmr - p2_follow_mmr)
+					new_diff_p2 = abs(p2_lead_mmr - p1_follow_mmr)
+					
+					if new_diff_p1 <= max_diff_p1 and new_diff_p2 <= max_diff_p2:
+						# Perform swap
+						match_list[i] = (p1_lead, p2_follow)
+						match_list[i + 1] = (p2_lead, p1_follow)
+						swaps_made = True
+						total_swaps += 1
+			
+			# Early exit if no swaps in this pass
+			if not swaps_made:
+				break
+		
+		if total_swaps > 0:
+			print(f"   🔄 Least-squares refinement: {total_swaps} swaps made across {pass_num + 1} passes")
+		
+		return match_list
 
 	def generate_in_game_channel(self, match_id: int) -> str:
 		"""
@@ -588,6 +713,12 @@ class Matchmaker:
 		
 		print(f"   📊 After equalization: BW={len(bw_list)}, SC2={len(sc2_list)}, Remaining Z={len(remaining_z)}")
 		
+		# Log skill balance after equalization
+		if len(bw_list) > 0 and len(sc2_list) > 0:
+			bw_mean = sum(p.bw_mmr or config.MMR_DEFAULT for p in bw_list) / len(bw_list)
+			sc2_mean = sum(p.sc2_mmr or config.MMR_DEFAULT for p in sc2_list) / len(sc2_list)
+			print(f"   ⚖️  Skill balance: BW avg={bw_mean:.0f}, SC2 avg={sc2_mean:.0f}, delta={abs(bw_mean - sc2_mean):.0f}")
+		
 		flow.checkpoint("find_matches_start")
 		# Find matches
 		matches = []
@@ -604,8 +735,25 @@ class Matchmaker:
 				is_bw_match = False
 			
 			bw_matches = self.find_matches(lead_side, follow_side, is_bw_match)
+			
+			# Apply least-squares refinement to improve match quality
+			bw_matches = self._refine_matches_least_squares(bw_matches, is_bw_match)
+			
 			matches.extend(bw_matches)
 			print(f"   ✅ Found {len(bw_matches)} BW vs SC2 matches (lead: {len(lead_side)}, follow: {len(follow_side)})")
+			
+			# Log match quality metrics
+			if bw_matches:
+				mmr_diffs = []
+				for p1, p2 in bw_matches:
+					p1_mmr = p1.get_effective_mmr(is_bw_match) or 0
+					p2_mmr = p2.get_effective_mmr(not is_bw_match) or 0
+					mmr_diffs.append(abs(p1_mmr - p2_mmr))
+				
+				avg_diff = sum(mmr_diffs) / len(mmr_diffs)
+				min_diff = min(mmr_diffs)
+				max_diff = max(mmr_diffs)
+				print(f"   📈 Match quality: avg MMR diff={avg_diff:.1f}, min={min_diff}, max={max_diff}")
 		
 		flow.checkpoint("find_matches_complete")
 		
@@ -787,7 +935,7 @@ class Matchmaker:
 	async def run(self):
 		"""Continuously try to match players every MATCH_INTERVAL_SECONDS."""
 		self.running = True
-		print("🚀 Advanced matchmaker started - checking for matches every 45 seconds")
+		print(f"🚀 Advanced matchmaker started - checking for matches every {self.MATCH_INTERVAL_SECONDS} seconds")
 
 		interval = self.MATCH_INTERVAL_SECONDS
 

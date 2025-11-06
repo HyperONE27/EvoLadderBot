@@ -104,7 +104,8 @@
 ### System Hardening & Optimization
 - ✅ No 60-second leaderboard refresh loop, invalidate cache specifically only when services modify MMR
 - ✅ Remove synchronous leaderboard path (async path should not fall back to it)
-- ⏰ Implement a smarter prune protection algorithm than using string matching
+- ❌ Implement a smarter prune protection algorithm than using string matching
+  - ✅ Still using string matching but it's less stupid now
 - ❓ Implement frontend mock testing
   - ✅ Characterization/regression tests including simulation of frontend flows but not true UI mocking
 
@@ -126,7 +127,7 @@
 - Clear Queue: ✅ Incomplete
   - ✅ Players are removed from the queue
   - ✅ Player does not get a notification ([AdminCommand] Cannot send notification: bot instance not available)
-  - ❌ Player remains in queue-locked state, cannot queue again
+  - ✅ Player remains in queue-locked state, cannot queue again
 - Player: ✅ Mostly functional
   - ✅ All information technically present and accounted for
   - ✅ Active Matches list needs to be pruned down
@@ -155,10 +156,21 @@
   - ✅ Match resolution must remove queue-locked state mid-match
 
 ### Other Last Minute Stuff
-- ⏰ Improve the matchmaking algorithm
+- ✅ Improve the matchmaking algorithm
+  - ✅ Locally optimal solution instead of greedy matching
 - ✅ Send a follow-up message to players who do not confirm match in a third of the abort countdown timer after match assignment
 - ✅ Send a dismissable message to players who enter a match involving BW Protoss about how to avoid Shield Battery lag
 - ✅ I already updated admins.json with "owner" and "admin" roles, add an owner-only command to adjust admins while the bot is up
+
+### MORE LAST MINUTE STUFF
+- ✅ Figure out what cache handles fingerprint official SC: Evo Complete Extension mod
+- ⏰ Add cache handles column and cache handles check boolean to replays table
+- ⏰ Add functionality to replay parser to validate cache handles
+- ⏰ Add cache handle data to mods.json
+- ⏰ Add all needed emotes for the bot into test server
+- ⏰ Overwrite emotes in emotes.json
+- ⏰ Make admin commands DM-only???
+- ⏰ Actually, do send all match results to a dedicated channel
 
 ## PRE-BETA
 

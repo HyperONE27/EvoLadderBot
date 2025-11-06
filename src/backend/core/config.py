@@ -86,8 +86,8 @@ MM_ABORT_TIMER_SECONDS = 180
 MM_MMR_EXPANSION_STEP = 1
 
 # --- Queue Pressure Ratio Thresholds ---
-MM_HIGH_PRESSURE_THRESHOLD = 0.5
-MM_MODERATE_PRESSURE_THRESHOLD = 0.3
+MM_HIGH_PRESSURE_THRESHOLD = 0.20  # Balanced: good for 20-30 player queues
+MM_MODERATE_PRESSURE_THRESHOLD = 0.10  # Balanced: good for 20-30 player queues
 
 # --- MMR Window Parameters (Base, Growth) ---
 MM_HIGH_PRESSURE_PARAMS = (75, 25)
@@ -103,7 +103,18 @@ MM_PRESSURE_SCALE_MID_POP = 1.0
 MM_PRESSURE_SCALE_HIGH_POP = 0.8
 
 # --- Match Finding ---
-MM_WAIT_CYCLE_PRIORITY_BONUS = 10
+# Legacy priority calculation for match ordering (linear growth)
+MM_WAIT_CYCLE_PRIORITY_BONUS = 10  # Legacy - replaced by coefficient/exponent below
+
+# Priority calculation for match ordering (exponential growth)
+MM_WAIT_CYCLE_PRIORITY_COEFFICIENT = 20  # Balanced: reasonable priority for long-waiters
+MM_WAIT_CYCLE_PRIORITY_EXPONENT = 1.25  # Balanced: moderate exponential growth
+
+# "Both" player assignment threshold
+MM_BALANCE_THRESHOLD_MMR = 50  # Balanced: reasonable skill balance threshold
+
+# Least-squares refinement
+MM_REFINEMENT_PASSES = 2  # Number of swap passes for match refinement
 
 # --- In-Game Channel Naming ---
 MM_IN_GAME_CHANNEL_PREFIX = "scevo"
