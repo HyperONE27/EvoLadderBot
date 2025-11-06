@@ -1,7 +1,7 @@
 import discord
 from typing import Optional, Union, Callable, Any
 from src.bot.utils.discord_utils import send_ephemeral_response
-from src.bot.utils.message_helpers import queue_interaction_edit, queue_interaction_modal
+from src.bot.utils.message_helpers import queue_interaction_edit, queue_interaction_modal, queue_message_delete
 
 
 class ErrorEmbedException(Exception):
@@ -113,11 +113,8 @@ class DismissButton(discord.ui.Button):
         super().__init__(emoji="✖️", label=label, style=discord.ButtonStyle.danger)
 
     async def callback(self, interaction: discord.Interaction):
-        await queue_interaction_edit(
-            interaction,
-            content="❌ Error dismissed.",
-            embed=None,
-            view=None
+        await queue_message_delete(
+            message=interaction.message
         )
 
 
