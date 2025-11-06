@@ -45,7 +45,8 @@ from src.bot.utils.discord_utils import (
     send_ephemeral_response,
     get_rank_emote,
     get_globe_emote,
-    followup_ephemeral_response
+    followup_ephemeral_response,
+    get_user_info,
 )
 import time
 from contextlib import suppress
@@ -177,10 +178,10 @@ async def queue_command(interaction: discord.Interaction):
         flow.complete("already_queued")
         error = ErrorEmbedException(
             title="Queueing Not Allowed",
-            description="You are already in a queue or an active match."
+            description="You cannot queue more than once, or while a match is active."
         )
         error_view = create_error_view_from_exception(error)
-        await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
+        await queue_edit_original(interaction, embed=error_view.embed, view=error_view)
         return
     
     flow.checkpoint("check_player_state_complete")
@@ -326,7 +327,7 @@ class JoinQueueButton(discord.ui.Button):
                 description="You cannot queue more than once, or while a match is active."
             )
             error_view = create_error_view_from_exception(error)
-            await followup_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
+            await queue_edit_original(interaction, embed=error_view.embed, view=error_view)
             return
         
         flow.checkpoint("persist_preferences")
