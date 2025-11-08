@@ -77,7 +77,7 @@ MM_ACTIVITY_WINDOW_SECONDS = 15 * 60
 MM_PRUNE_INTERVAL_SECONDS = 30
 
 # Global matchmaking interval (matchwave) in seconds
-MM_MATCH_INTERVAL_SECONDS = 60
+MM_MATCH_INTERVAL_SECONDS = 50
 
 # Time window in seconds for players to abort a match after it's found
 MM_ABORT_TIMER_SECONDS = 120

@@ -279,3 +279,46 @@ Please note:
 This is an **alpha**, which means things **will** break! We're counting on your feedback to help us find and squash bugs, as well as report cheaters! We will have a dedicated channel for all reports.
 
 Thanks for tuning in. I will see you later this week!
+
+===
+
+Hi @everyone, the moment you have all been waiting for is here.
+
+# The SC: Evo Complete ranked ladder OPEN ALPHA is now LIVE.
+
+### Alpha access is available EXCLUSIVELY on the official SC: Evo Complete Discord server: https://discord.gg/fDvwdnkDeB
+- If you have not yet joined the server, please be aware that Discord requires us to approve new members manually. Thank you for your patience.
+
+### Read the Terms of Service, User Conduct guidelines, and Privacy Policy here:
+- [SCEvo.net](<https://www.scevo.net/ladder/tos>)
+- [Rentry.co mirror](<https://rentry.co/evoladderbot-tos>)
+
+### Quick Start Guide:
+- **BOT COMMANDS ARE DM-ONLY!**
+- /termsofservice: Read and accept Terms of Service. Users who do not accept the Terms of Service will be denied access.
+- /setup: Setup your ID, BattleTag, nationality, and region.
+- /queue: Play with others!
+- /profile: View your settings and MMRs
+- /prune: Keep your DMs lag-free by deleting old bot messages
+
+### Matchmaking Basics:
+- **Queue Settings:**
+  - Queue with 1 Brood War race, 1 StarCraft II race, or both
+  - Veto up to 4 out of 9 maps in the map pool
+- **Searching View:**
+  - The bot will look for a match
+  - All matches are Brood War vs StarCraft II only
+  - Matches are assigned at the start of every minute
+  - You can view the number of players seen in the last 15 minutes, as well as the current number of players queuing and the races they have selected
+- **Match Found:**
+  - The bot will send you a new message, alerting you it has found a match
+  - You must QUICKLY CONFIRM that you are available to play the match, or abort if you cannot play
+    - Matches will be dropped if one or both players does not CONFIRM the match in time
+    - Players who drop too many matches will be penalized
+- asdf
+- asdf
+- asdf
+
+More:
+- Talk about the ladder in <#1432573813945532538>
+- Report bugs, cheaters, and other issues in <#1432573800846725151>
