@@ -64,10 +64,11 @@ CREATE TABLE replays (
     observers               TEXT NOT NULL,
     map_name                TEXT NOT NULL,
     duration                INTEGER NOT NULL,
-    game_privacy            TEXT NOT NULL,          -- NEW
-    game_speed              TEXT NOT NULL,          -- NEW
-    game_duration_setting   TEXT NOT NULL,          -- NEW
-    locked_alliances        TEXT NOT NULL,          -- NEW
+    game_privacy            TEXT NOT NULL,
+    game_speed              TEXT NOT NULL,
+    game_duration_setting   TEXT NOT NULL,
+    locked_alliances        TEXT NOT NULL,
+    cache_handles           TEXT NOT NULL,          -- NEW: JSON array of mod cache handle URLs
     uploaded_at             TIMESTAMPTZ NOT NULL
 );
 

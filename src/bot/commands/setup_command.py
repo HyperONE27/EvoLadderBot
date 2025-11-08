@@ -35,8 +35,8 @@ async def setup_command(interaction: discord.Interaction):
         flow.checkpoint("guard_checks_complete")
     except CommandGuardError as exc:
         flow.complete("guard_check_failed")
-        error_embed = create_command_guard_error_embed(exc)
-        await send_ephemeral_response(interaction, embed=error_embed)
+        error_embed, error_view = create_command_guard_error_embed(exc)
+        await send_ephemeral_response(interaction, embed=error_embed, view=error_view)
         return
     
     # Get existing player data for presets

@@ -513,6 +513,193 @@ class AdminService:
             }
         }
     
+    async def get_replay_embeds_for_match(self, match_id: int) -> dict:
+        """
+        Get replay detail embeds for both players with full verification.
+        Returns embeds exactly as players would see them during match upload.
+        
+        Args:
+            match_id: Match ID
+            
+        Returns:
+            Dict with player_1_embed and player_2_embed (discord.Embed objects or None)
+        """
+        from src.backend.services.match_completion_service import match_completion_service
+        from src.bot.components.replay_details_embed import ReplayDetailsEmbed
+        import json
+        
+        match_data = self.data_service.get_match(match_id)
+        if not match_data:
+            return {
+                'player_1_embed': None,
+                'player_2_embed': None
+            }
+        
+        p1_info = self.data_service.get_player_info(match_data['player_1_discord_uid'])
+        p2_info = self.data_service.get_player_info(match_data['player_2_discord_uid'])
+        
+        p1_name = p1_info.get('player_name', 'Unknown') if p1_info else 'Unknown'
+        p2_name = p2_info.get('player_name', 'Unknown') if p2_info else 'Unknown'
+        
+        p1_replay_path = match_data.get('player_1_replay_path')
+        p2_replay_path = match_data.get('player_2_replay_path')
+        
+        def _process_replay_data(replay_data: dict) -> dict:
+            """Process replay data from database - parse JSON strings back to Python objects."""
+            # Parse observers from JSON string to list
+            if isinstance(replay_data.get('observers'), str):
+                try:
+                    replay_data['observers'] = json.loads(replay_data['observers'])
+                except (json.JSONDecodeError, TypeError):
+                    replay_data['observers'] = []
+            
+            # Parse cache_handles from JSON string to list
+            if isinstance(replay_data.get('cache_handles'), str):
+                try:
+                    replay_data['cache_handles'] = json.loads(replay_data['cache_handles'])
+                except (json.JSONDecodeError, TypeError):
+                    replay_data['cache_handles'] = []
+            
+            return replay_data
+        
+        async def create_replay_embed(replay_path: str, player_name: str, player_num: int):
+            """Create full replay embed with verification for a player."""
+            if not replay_path:
+                return None
+            
+            try:
+                # Get replay data from database
+                replay_data = self.data_service.get_replay_by_path(replay_path)
+                if not replay_data:
+                    print(f"[AdminService] No replay data found for path: {replay_path}")
+                    return None
+                
+                # Process JSON fields
+                replay_data = _process_replay_data(replay_data)
+                
+                # Get verification results (same as players see during upload)
+                verification_results = await match_completion_service.verify_replay_data(
+                    match_id=match_id,
+                    replay_data=replay_data
+                )
+                
+                # Create embed with full verification (exactly as players see it)
+                embed = ReplayDetailsEmbed.get_success_embed(
+                    replay_data=replay_data,
+                    verification_results=verification_results
+                )
+                
+                # Customize title to show player number
+                embed.title = f"📄 Player #{player_num} Replay Details"
+                
+                return embed
+                
+            except Exception as e:
+                print(f"[AdminService] Error creating replay embed for player {player_num}: {e}")
+                import traceback
+                traceback.print_exc()
+                return None
+        
+        # Create embeds for both players
+        p1_embed = await create_replay_embed(p1_replay_path, p1_name, 1)
+        p2_embed = await create_replay_embed(p2_replay_path, p2_name, 2)
+        
+        return {
+            'player_1_embed': p1_embed,
+            'player_2_embed': p2_embed
+        }
+    
+    async def fetch_match_replay_files(self, match_id: int) -> dict:
+        """
+        Fetch replay files for both players in a match.
+        
+        Args:
+            match_id: Match ID
+            
+        Returns:
+            Dict with player_1_replay and player_2_replay as bytes (or None if not available)
+            Format: {
+                'player_1_replay': bytes or None,
+                'player_1_name': str,
+                'player_2_replay': bytes or None,
+                'player_2_name': str
+            }
+        """
+        from src.backend.services.app_context import storage_service
+        from pathlib import Path
+        
+        match_data = self.data_service.get_match(match_id)
+        if not match_data:
+            return {
+                'player_1_replay': None,
+                'player_1_name': 'Unknown',
+                'player_2_replay': None,
+                'player_2_name': 'Unknown'
+            }
+        
+        p1_info = self.data_service.get_player_info(match_data['player_1_discord_uid'])
+        p2_info = self.data_service.get_player_info(match_data['player_2_discord_uid'])
+        
+        p1_name = p1_info.get('player_name', 'Unknown') if p1_info else 'Unknown'
+        p2_name = p2_info.get('player_name', 'Unknown') if p2_info else 'Unknown'
+        
+        p1_replay_path = match_data.get('player_1_replay_path')
+        p2_replay_path = match_data.get('player_2_replay_path')
+        
+        async def fetch_replay_bytes(replay_path: str, player_uid: int) -> bytes:
+            """Fetch replay bytes from Supabase or local storage."""
+            if not replay_path:
+                return None
+            
+            try:
+                # Check if it's a Supabase URL
+                if replay_path.startswith('http'):
+                    print(f"[AdminService] Downloading replay from Supabase URL: {replay_path}")
+                    
+                    # Download directly from the URL using httpx
+                    import httpx
+                    with httpx.Client(timeout=30.0) as client:
+                        response = client.get(replay_path)
+                        
+                        if response.status_code != 200:
+                            print(f"[AdminService] Failed to download replay: {response.status_code} {response.text}")
+                            return None
+                        
+                        replay_bytes = response.content
+                        print(f"[AdminService] Successfully downloaded replay ({len(replay_bytes)} bytes)")
+                        return replay_bytes
+                else:
+                    # It's a local file path
+                    print(f"[AdminService] Reading replay from local storage: {replay_path}")
+                    replay_path_obj = Path(replay_path)
+                    
+                    if not replay_path_obj.exists():
+                        print(f"[AdminService] Local replay file not found: {replay_path}")
+                        return None
+                    
+                    with open(replay_path_obj, 'rb') as f:
+                        replay_bytes = f.read()
+                    
+                    print(f"[AdminService] Successfully read local replay ({len(replay_bytes)} bytes)")
+                    return replay_bytes
+                    
+            except Exception as e:
+                print(f"[AdminService] Error fetching replay for player {player_uid}: {e}")
+                import traceback
+                traceback.print_exc()
+                return None
+        
+        # Fetch both replays
+        p1_replay_bytes = await fetch_replay_bytes(p1_replay_path, match_data['player_1_discord_uid'])
+        p2_replay_bytes = await fetch_replay_bytes(p2_replay_path, match_data['player_2_discord_uid'])
+        
+        return {
+            'player_1_replay': p1_replay_bytes,
+            'player_1_name': p1_name,
+            'player_2_replay': p2_replay_bytes,
+            'player_2_name': p2_name
+        }
+    
     
     # ========== LAYER 2: CONTROLLED MODIFICATIONS ==========
     
@@ -691,21 +878,77 @@ class AdminService:
             }
         )
         
-        # Return success with calculated MMR
+        # Step 8: Get player details for embed
         admin_info = self.data_service.get_player_info(admin_discord_id)
+        p1_info = self.data_service.get_player_info(p1_uid)
+        p2_info = self.data_service.get_player_info(p2_uid)
+        
+        # Get player details
+        p1_name = p1_info.get('player_name') if p1_info else 'Unknown'
+        p2_name = p2_info.get('player_name') if p2_info else 'Unknown'
+        p1_country = p1_info.get('country')
+        p2_country = p2_info.get('country')
+        p1_race = final_match_data.get('player_1_race')
+        p2_race = final_match_data.get('player_2_race')
+        map_name = final_match_data.get('map_played')
+        
+        # Get MMR details - use match table's stored initial MMRs
+        p1_mmr_initial = final_match_data.get('player_1_mmr')
+        p2_mmr_initial = final_match_data.get('player_2_mmr')
+        
+        # Calculate "after" MMRs based on initial + change
+        p1_mmr_after = p1_mmr_initial + mmr_change
+        p2_mmr_after = p2_mmr_initial - mmr_change
+        
+        # Get ranks
+        from src.backend.services.app_context import ranking_service
+        p1_rank = ranking_service.get_letter_rank(p1_uid, p1_race)
+        p2_rank = ranking_service.get_letter_rank(p2_uid, p2_race)
+        
+        # Return success with calculated MMR and full match data
         return {
             'success': True,
             'match_id': match_id,
             'resolution': resolution,
             'method': 'simulated_reports',
             'mmr_change': mmr_change,
+            'match_data': {
+                'player_1_uid': p1_uid,
+                'player_2_uid': p2_uid,
+                'player_1_name': p1_name,
+                'player_2_name': p2_name,
+                'player_1_country': p1_country,
+                'player_2_country': p2_country,
+                'player_1_race': p1_race,
+                'player_2_race': p2_race,
+                'map_name': map_name or 'Unknown',
+                'player_1_mmr_before': p1_mmr_initial or 0,
+                'player_2_mmr_before': p2_mmr_initial or 0,
+                'player_1_mmr_after': p1_mmr_after or 0,
+                'player_2_mmr_after': p2_mmr_after or 0,
+                'player_1_rank': p1_rank,
+                'player_2_rank': p2_rank
+            },
             'notification_data': {
                 'players': [p1_uid, p2_uid],
                 'admin_name': admin_info.get('player_name', 'Admin') if admin_info else 'Admin',
                 'reason': reason,
                 'match_id': match_id,
                 'resolution': resolution,
-                'mmr_change': mmr_change
+                'mmr_change': mmr_change,
+                'player_1_name': p1_name,
+                'player_2_name': p2_name,
+                'player_1_country': p1_country,
+                'player_2_country': p2_country,
+                'player_1_race': p1_race,
+                'player_2_race': p2_race,
+                'map_name': map_name or 'Unknown',
+                'player_1_mmr_before': p1_mmr_initial or 0,
+                'player_2_mmr_before': p2_mmr_initial or 0,
+                'player_1_mmr_after': p1_mmr_after or 0,
+                'player_2_mmr_after': p2_mmr_after or 0,
+                'player_1_rank': p1_rank,
+                'player_2_rank': p2_rank
             }
         }
     
@@ -952,8 +1195,8 @@ class AdminService:
                 'player_1_race': p1_race,
                 'player_2_race': p2_race,
                 'map_name': map_name or 'Unknown',
-                'player_1_mmr_before': p1_mmr_before or 0,
-                'player_2_mmr_before': p2_mmr_before or 0,
+                'player_1_mmr_before': p1_mmr_initial or 0,
+                'player_2_mmr_before': p2_mmr_initial or 0,
                 'player_1_mmr_after': p1_mmr_after or 0,
                 'player_2_mmr_after': p2_mmr_after or 0,
                 'player_1_rank': p1_rank,
@@ -1539,6 +1782,50 @@ class AdminService:
                 'success': False,
                 'error': str(e)
             }
+    
+    async def forward_match_completion_to_admin_channel(
+        self,
+        embed: "discord.Embed",
+        match_id: int,
+        content: str = None
+    ) -> bool:
+        """
+        Forward a match completion or abort embed to the admin monitoring channel.
+        
+        Args:
+            embed: The Discord embed to forward (same embed sent to players)
+            match_id: The match ID for logging purposes
+            content: Optional content string (e.g., role mentions) to send with embed
+            
+        Returns:
+            True if forwarded successfully, False otherwise
+        """
+        try:
+            from src.backend.services.process_pool_health import get_bot_instance
+            
+            bot = get_bot_instance()
+            if not bot:
+                print(f"[AdminService] Cannot forward match {match_id} - bot instance not available")
+                return False
+            
+            # Admin monitoring channel ID
+            ADMIN_CHANNEL_ID = 1435182864290287636
+            
+            channel = bot.get_channel(ADMIN_CHANNEL_ID)
+            if not channel:
+                print(f"[AdminService] Cannot forward match {match_id} - admin channel {ADMIN_CHANNEL_ID} not found")
+                return False
+            
+            # Send the embed to the admin channel with optional content
+            await channel.send(content=content, embed=embed)
+            print(f"[AdminService] Forwarded match {match_id} result to admin channel {ADMIN_CHANNEL_ID}")
+            return True
+            
+        except Exception as e:
+            print(f"[AdminService] Error forwarding match {match_id} to admin channel: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
 
 admin_service = AdminService()

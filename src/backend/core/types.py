@@ -42,6 +42,13 @@ class GameSettingVerificationDetail(TypedDict):
     found: str
 
 
+class ModVerificationDetail(TypedDict):
+    """Detailed result of mod cache handle verification check."""
+    success: bool
+    message: str
+    region_detected: Optional[str]
+
+
 class VerificationResult(TypedDict):
     """
     Standardized result of all replay verification checks with rich context.
@@ -55,6 +62,7 @@ class VerificationResult(TypedDict):
         game_speed: Detailed game speed verification result
         game_duration: Detailed game duration verification result
         locked_alliances: Detailed locked alliances verification result
+        mod: Detailed mod validation result
     """
     races: RaceVerificationDetail
     map: MapVerificationDetail
@@ -64,4 +72,5 @@ class VerificationResult(TypedDict):
     game_speed: GameSettingVerificationDetail
     game_duration: GameSettingVerificationDetail
     locked_alliances: GameSettingVerificationDetail
+    mod: ModVerificationDetail
 

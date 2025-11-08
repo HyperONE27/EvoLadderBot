@@ -311,6 +311,7 @@ class DataAccessService:
                 "game_speed": pl.Series([], dtype=pl.Utf8),
                 "game_duration_setting": pl.Series([], dtype=pl.Utf8),
                 "locked_alliances": pl.Series([], dtype=pl.Utf8),
+                "cache_handles": pl.Series([], dtype=pl.Utf8),
                 "uploaded_at": pl.Series([], dtype=pl.Utf8),
             })
         print(f"[DataAccessService]   Replays loaded: {len(self._replays_df)} rows, size: {self._replays_df.estimated_size('mb'):.2f} MB")
@@ -1595,6 +1596,10 @@ class DataAccessService:
         if accepted_tos is not None:
             updates["accepted_tos"] = pl.when(mask).then(pl.lit(accepted_tos)).otherwise(pl.col("accepted_tos"))
             write_data['accepted_tos'] = accepted_tos
+            # Update timestamp whenever accepted_tos is changed
+            timestamp_str = datetime.now(timezone.utc).isoformat()
+            updates["accepted_tos_date"] = pl.when(mask).then(pl.lit(timestamp_str)).otherwise(pl.col("accepted_tos_date"))
+            write_data['accepted_tos_date'] = timestamp_str
         
         if completed_setup is not None:
             updates["completed_setup"] = pl.when(mask).then(pl.lit(completed_setup)).otherwise(pl.col("completed_setup"))

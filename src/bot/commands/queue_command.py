@@ -56,6 +56,25 @@ from src.bot.config import QUEUE_TIMEOUT
 from src.backend.core.config import EXPECTED_GAME_PRIVACY, EXPECTED_GAME_SPEED, EXPECTED_GAME_DURATION, EXPECTED_LOCKED_ALLIANCES
 
 
+def get_queue_block_reason(player_state: str) -> str:
+    """
+    Generate a user-friendly reason for why a player cannot queue.
+    
+    Args:
+        player_state: The current player state ("queueing" or "in_match:...")
+        
+    Returns:
+        A human-readable reason string
+    """
+    if player_state == "queueing":
+        return "Reason: Currently in queue"
+    elif player_state.startswith("in_match:"):
+        match_id = player_state.split(":", 1)[1]
+        return f"Reason: Currently in Match #{match_id}"
+    else:
+        return "Reason: Already queued or in a match"
+
+
 class QueueSearchingViewManager:
     """Manage active queue searching views safely across async tasks."""
 
@@ -165,8 +184,8 @@ async def queue_command(interaction: discord.Interaction):
         flow.checkpoint("guard_checks_complete")
     except CommandGuardError as exc:
         flow.complete("guard_check_failed")
-        error_embed = create_command_guard_error_embed(exc)
-        await send_ephemeral_response(interaction, embed=error_embed)
+        error_embed, error_view = create_command_guard_error_embed(exc)
+        await send_ephemeral_response(interaction, embed=error_embed, view=error_view)
         return
 
     # Check player state atomically (single source of truth)
@@ -175,12 +194,13 @@ async def queue_command(interaction: discord.Interaction):
     player_state = data_access_service.get_player_state(interaction.user.id)
     if player_state != "idle":
         flow.complete("already_queued")
+        reason = get_queue_block_reason(player_state)
         error = ErrorEmbedException(
             title="Queueing Not Allowed",
-            description="You are already in a queue or an active match."
+            description=f"You cannot queue at this time.\n{reason}"
         )
         error_view = create_error_view_from_exception(error)
-        await queue_edit_original(interaction, embed=error_view.embed, view=error_view)
+        await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
         return
     
     flow.checkpoint("check_player_state_complete")
@@ -321,9 +341,10 @@ class JoinQueueButton(discord.ui.Button):
         player_state = data_access_service.get_player_state(user_id)
         if player_state != "idle":
             flow.complete("already_queued")
+            reason = get_queue_block_reason(player_state)
             error = ErrorEmbedException(
                 title="Queueing Not Allowed",
-                description="You cannot queue more than once, or while a match is active."
+                description=f"You cannot queue at this time.\n{reason}"
             )
             error_view = create_error_view_from_exception(error)
             await queue_edit_original(interaction, embed=error_view.embed, view=error_view)
@@ -702,7 +723,8 @@ class QueueSearchingView(discord.ui.View):
             # Schedule confirmation reminder and store task reference
             from src.backend.services.app_context import match_completion_service
             reminder_task = asyncio.create_task(self._send_confirmation_reminder(match_result.match_id, self.channel))
-            match_completion_service.reminder_tasks[match_result.match_id] = reminder_task
+            # Store task with (match_id, player_id) key to track per-player reminders
+            match_completion_service.reminder_tasks[(match_result.match_id, self.player.discord_user_id)] = reminder_task
             
             # Register for replay detection
             await match_view.register_for_replay_detection(self.last_interaction.channel_id)
@@ -1186,12 +1208,34 @@ class MatchFoundView(discord.ui.View):
         map_author = maps_service.get_map_author(map_name)
         map_link_display = map_link if map_link else "Unavailable"
         
+        # Get mod information based on region
+        from src.backend.services.mods_service import ModsService
+        mods_service = ModsService()
+        mod_name = mods_service.get_mod_name()
+        mod_author = mods_service.get_mod_author()
+        
+        mod_region = "americas"  # default
+        if server_code and region_info:
+            region_name = region_info["name"].lower()
+            if "americas" in region_name:
+                mod_region = "am"
+            elif "europe" in region_name:
+                mod_region = "eu"
+            elif "asia" in region_name:
+                mod_region = "as"
+        
+        mod_link = mods_service.get_mod_link(mod_region)
+        mod_link_display = mod_link if mod_link else "Unavailable"
+        
         embed.add_field(
             name="**🌐 Match Information and Settings:**",
             value=(
                 f"- Map: `{map_name}`\n"
                 f"  - Map Link: `{map_link_display}`\n"
-                f"  - Author: `{map_author}`"
+                f"  - Author: `{map_author}`\n"
+                f"- Mod: `{mod_name}`\n"
+                f"  - Mod Link: `{mod_link_display}`\n"
+                f"  - Author: `{mod_author}`"
             ),
             inline=False
         )
@@ -1536,6 +1580,14 @@ class MatchFoundView(discord.ui.View):
             await queue_channel_send(self.channel, embed=notification_embed)
         except discord.HTTPException as e:
             print(f"Error sending final notification for match {self.match_result.match_id}: {e}")
+        
+        # Forward to admin channel (only from player 1's view to avoid duplication)
+        if self.is_player1:
+            from src.backend.services.app_context import admin_service
+            await admin_service.forward_match_completion_to_admin_channel(
+                notification_embed,
+                self.match_result.match_id
+            )
 
     async def _send_conflict_notification_embed(self):
         """Sends a rich follow-up message indicating a match conflict with full details."""
@@ -1580,7 +1632,11 @@ class MatchFoundView(discord.ui.View):
         
         p1_current_mmr = match_data['player_1_mmr']
         p2_current_mmr = match_data['player_2_mmr']
-        map_name = match_data.get('map_name', 'Unknown')
+        map_name = match_data.get('map_played')
+        
+        if not map_name:
+            print(f"⚠️ [WARNING] Match {self.match_result.match_id} has no map_played field in conflict embed")
+            map_name = 'Unknown'
         
         # Decode what each player reported
         # Report codes: 1 = Player 1 won, 2 = Player 2 won, 0 = Draw, -3 = Abort, -4 = No response
@@ -1627,7 +1683,7 @@ class MatchFoundView(discord.ui.View):
         
         conflict_embed.add_field(
             name="**Status:**",
-            value="⚠️ The reported results do not agree. **No MMR changes have been applied.**\n\nPlease contact an administrator to resolve this dispute.",
+            value="⚠️ The reported results do not agree. **No MMR changes have been applied.**\n\nLadder staff have been alerted of this conflict. Please contact them to resolve this dispute.",
             inline=False
         )
         
@@ -1635,6 +1691,15 @@ class MatchFoundView(discord.ui.View):
             await queue_channel_send(self.channel, embed=conflict_embed)
         except discord.HTTPException as e:
             print(f"Error sending conflict notification for match {self.match_result.match_id}: {e}")
+        
+        # Forward to admin channel (only from player 1's view to avoid duplication)
+        if self.is_player1:
+            from src.backend.services.app_context import admin_service
+            await admin_service.forward_match_completion_to_admin_channel(
+                conflict_embed,
+                self.match_result.match_id,
+                content="<@&1432573890898559036>"  # Mention ladder staff role
+            )
 
     async def _send_abort_notification_embed(self, p1_report: Optional[int] = None, p2_report: Optional[int] = None):
         """
@@ -1675,23 +1740,31 @@ class MatchFoundView(discord.ui.View):
 
         aborted_by = "Unknown"
         reason = "The match was aborted. No MMR changes were applied."
+        is_automatic_abandon = False
 
         # Determine the specific abort reason based on report codes
+        # Report code -4 = no confirmation (automatic abandon)
+        # Report code -3 = manual abort by player
         if p1_report == -4 and p2_report == -4:
             aborted_by = "System"
-            reason = "The match was automatically aborted because neither player confirmed in time."
+            reason = "The match was automatically abandoned because neither player confirmed in time."
+            is_automatic_abandon = True
         elif p1_report == -4 and p2_report is None:
             aborted_by = "System"
-            reason = f"The match was automatically aborted because **{p1_name}** did not confirm in time."
+            reason = f"The match was automatically abandoned because **{p1_name}** did not confirm in time."
+            is_automatic_abandon = True
         elif p2_report == -4 and p1_report is None:
             aborted_by = "System"
-            reason = f"The match was automatically aborted because **{p2_name}** did not confirm in time."
+            reason = f"The match was automatically abandoned because **{p2_name}** did not confirm in time."
+            is_automatic_abandon = True
         elif p1_report == -4:
             aborted_by = "System"
-            reason = f"The match was automatically aborted because **{p1_name}** did not confirm in time."
+            reason = f"The match was automatically abandoned because **{p1_name}** did not confirm in time."
+            is_automatic_abandon = True
         elif p2_report == -4:
             aborted_by = "System"
-            reason = f"The match was automatically aborted because **{p2_name}** did not confirm in time."
+            reason = f"The match was automatically abandoned because **{p2_name}** did not confirm in time."
+            is_automatic_abandon = True
         elif p1_report == -3:
             aborted_by = p1_name
             reason = f"The match was aborted by **{aborted_by}**. No MMR changes were applied."
@@ -1720,8 +1793,10 @@ class MatchFoundView(discord.ui.View):
         p1_current_mmr = match_data['player_1_mmr']
         p2_current_mmr = match_data['player_2_mmr']
 
+        # Use "Abandoned" for automatic abandons, "Aborted" for manual aborts
+        title_action = "Abandoned" if is_automatic_abandon else "Aborted"
         abort_embed = discord.Embed(
-            title=f"🛑 Match #{self.match_result.match_id} Aborted",
+            title=f"🛑 Match #{self.match_result.match_id} {title_action}",
             description=f"**{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_name} ({int(p1_current_mmr)})** vs **{p2_rank_emote} {p2_flag} {p2_race_emote} {p2_name} ({int(p2_current_mmr)})**",
             color=discord.Color.red()
         )
@@ -1745,6 +1820,14 @@ class MatchFoundView(discord.ui.View):
         except discord.HTTPException as e:
             print(f"❌ [DEBUG] Error sending abort notification for match {self.match_result.match_id}: {e}")
             print(f"Error sending abort notification for match {self.match_result.match_id}: {e}")
+        
+        # Forward to admin channel (only from player 1's view to avoid duplication)
+        if self.is_player1:
+            from src.backend.services.app_context import admin_service
+            await admin_service.forward_match_completion_to_admin_channel(
+                abort_embed,
+                self.match_result.match_id
+            )
 
     def disable_all_components(self):
         """Disables all components in the view."""
@@ -2245,8 +2328,13 @@ class StarCraftRaceSelect(discord.ui.Select):
         await self.view.update_embed(interaction)
 
 
-async def store_replay_background(match_id: int, player_id: int, replay_bytes: bytes, replay_info: dict, channel):
-    """Background task to store replay without blocking UI updates"""
+async def store_replay_background(match_id: int, player_id: int, replay_bytes: bytes, replay_info: dict, channel) -> Optional[dict]:
+    """
+    Store replay and return verification results.
+    
+    Returns:
+        Dictionary with 'verification_results' and 'success' keys, or None on failure
+    """
     try:
         print(f"[Background] Starting replay storage for match {match_id} (player: {player_id})")
         
@@ -2277,6 +2365,12 @@ async def store_replay_background(match_id: int, player_id: int, replay_bytes: b
                     )
                     await queue_channel_send(channel, embed=final_embed)
                     
+                    # Return verification results for dropdown locking logic
+                    return {
+                        "success": True,
+                        "verification_results": verification_results
+                    }
+                    
                 except ValueError as e:
                     # Match not found in database
                     error_embed = discord.Embed(
@@ -2286,6 +2380,7 @@ async def store_replay_background(match_id: int, player_id: int, replay_bytes: b
                     )
                     await queue_channel_send(channel, embed=error_embed)
                     print(f"❌ Verification error for match {stored_match_id}: {e}")
+                    return None
                     
                 except Exception as e:
                     # Unexpected error during verification
@@ -2298,16 +2393,25 @@ async def store_replay_background(match_id: int, player_id: int, replay_bytes: b
                     print(f"❌ Unexpected verification error for match {stored_match_id}: {e}")
                     import traceback
                     traceback.print_exc()
+                    return None
             
             print(f"✅ Background replay storage completed for match {match_id} (player: {player_id})")
+            return {"success": True, "verification_results": None}
         else:
-            error_message = result.get("error")
+            error_message = result.get("error", "Unknown storage error")
             print(f"❌ Background replay storage failed for match {match_id}: {error_message}")
+            
+            # Send replay details error embed
+            error_embed = ReplayDetailsEmbed.get_error_embed(error_message)
+            await queue_channel_send(channel, embed=error_embed)
+            
+            return None
             
     except Exception as e:
         print(f"❌ Background replay storage error for match {match_id}: {e}")
         import traceback
         traceback.print_exc()
+        return None
 
 
 async def on_message(message: discord.Message, bot=None):
@@ -2452,14 +2556,37 @@ async def on_message(message: discord.Message, bot=None):
             print(f"❌ Failed to parse replay for match {match_view.match_result.match_id}: {error_message}")
             return
         
-        # IMMEDIATE UI UPDATE - Don't wait for storage to complete
-        flow.checkpoint("immediate_ui_update_start")
+        # Wait for storage and verification to complete before updating UI
+        flow.checkpoint("storage_and_verification_start")
+        verification_result = await store_replay_background(
+            match_view.match_result.match_id,
+            message.author.id,
+            replay_bytes,
+            replay_info,
+            message.channel
+        )
+        flow.checkpoint("storage_and_verification_complete")
+        
+        # Check verification results before unlocking dropdowns
+        if verification_result and verification_result.get("success"):
+            verif = verification_result.get("verification_results")
+            
+            # Check if races, map, and mod all match
+            all_valid = True
+            if verif:
+                all_valid = all([
+                    verif['races']['success'],
+                    verif['map']['success'],
+                    verif['mod']['success']
+                ])
+            
+            if all_valid:
+                # All validations passed - unlock dropdowns
         unix_epoch = int(time.time())
         match_view.match_result.replay_uploaded = "Yes"
         match_view.match_result.replay_upload_time = unix_epoch
         
-        # Update ONLY the view for the player who uploaded the replay
-        # Each player should only see their own replay status
+                # Update the view for the player who uploaded the replay
         match_view._update_dropdown_states()
         
         # FIX: Ensure abort button remains disabled if the confirmation window is closed
@@ -2469,19 +2596,37 @@ async def on_message(message: discord.Message, bot=None):
         # Edit the original message using bot token (never expires!)
         embed = match_view.get_embed()
         await match_view._edit_original_message(embed, match_view)
-        flow.checkpoint("immediate_ui_update_complete")
+                
+                print(f"✅ Replay verified and dropdowns unlocked for match {match_view.match_result.match_id}")
+            else:
+                # Validation failed - re-lock dropdowns
+                match_view.match_result.replay_uploaded = "Replay Invalid"
+                
+                # Re-lock dropdowns to handle case where valid replay was uploaded first
+                match_view._update_dropdown_states()
         
-        # Start background storage task (non-blocking)
-        flow.checkpoint("start_background_storage")
-        asyncio.create_task(store_replay_background(
-            match_view.match_result.match_id,
-            message.author.id,
-            replay_bytes,
-            replay_info,
-            message.channel
-        ))
+                # Update the embed to show invalid status
+                embed = match_view.get_embed()
+                await match_view._edit_original_message(embed, match_view)
+                
+                print(f"⚠️ Replay validation failed for match {match_view.match_result.match_id} - dropdowns locked")
+        else:
+            # Storage or verification failed
+            match_view.match_result.replay_uploaded = "Replay Invalid"
+            
+            # Re-lock dropdowns to handle case where valid replay was uploaded first
+            match_view._update_dropdown_states()
+            
+            # Send error embed explaining the failure
+            error_message = "Replay storage or verification failed. Please try again or contact an admin."
+            error_embed = ReplayDetailsEmbed.get_error_embed(error_message)
+            await queue_channel_send(message.channel, embed=error_embed)
+            
+            embed = match_view.get_embed()
+            await match_view._edit_original_message(embed, match_view)
+            print(f"❌ Replay storage/verification failed for match {match_view.match_result.match_id}")
         
-        print(f"✅ Replay upload UI updated immediately for match {match_view.match_result.match_id} (player: {message.author.id})")
+        print(f"✅ Replay upload processing complete for match {match_view.match_result.match_id} (player: {message.author.id})")
         flow.complete("success")
 
     except Exception as e:

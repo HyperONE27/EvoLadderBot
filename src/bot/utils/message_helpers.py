@@ -160,14 +160,19 @@ async def queue_followup(
     queue = get_message_queue()
     
     async def operation():
-        return await interaction.followup.send(
-            content=content,
-            embed=embed,
-            view=view,
-            ephemeral=ephemeral,
-            wait=wait,
+        send_kwargs = {
+            'ephemeral': ephemeral,
+            'wait': wait,
             **kwargs
-        )
+        }
+        if content is not None:
+            send_kwargs['content'] = content
+        if embed is not None:
+            send_kwargs['embed'] = embed
+        if view is not None:
+            send_kwargs['view'] = view
+        
+        return await interaction.followup.send(**send_kwargs)
     
     future = await queue.enqueue_interaction(operation)
     return await future

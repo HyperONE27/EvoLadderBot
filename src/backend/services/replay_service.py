@@ -74,6 +74,25 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
             print(f"[Worker Process] Parse failed: {error_msg}")
             return {"error": error_msg}
         
+        # Extract cache handles
+        cache_handles = []
+        if hasattr(replay, 'raw_data'):
+            # Try primary location
+            if 'replay.details.backup' in replay.raw_data:
+                raw_handles = replay.raw_data['replay.details.backup'].get('cache_handles', [])
+                cache_handles = [str(h) for h in raw_handles]  # Convert DepotFile to str
+            
+            # Fallback location if primary didn't yield results
+            if not cache_handles and 'replay.initData.backup' in replay.raw_data:
+                game_desc = replay.raw_data['replay.initData.backup'].get('game_description', {})
+                raw_handles = game_desc.get('cache_handles', [])
+                cache_handles = [str(h) for h in raw_handles]  # Convert DepotFile to str
+        
+        if not cache_handles:
+            error_msg = "Failed to extract cache_handles from replay. No cache handles found in replay data."
+            print(f"[Worker Process] Parse failed: {error_msg}")
+            return {"error": error_msg}
+        
         # Calculate replay hash
         hasher = hashlib.blake2b(digest_size=10)  # 80 bits = 10 bytes
         hasher.update(replay_bytes)
@@ -198,7 +217,8 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
             "game_privacy": replay.attributes[16]["Game Privacy"],
             "game_speed": replay.attributes[16]["Game Speed"],
             "game_duration_setting": replay.attributes[16]["Game Duration"],
-            "locked_alliances": replay.attributes[16]["Locked Alliances"]
+            "locked_alliances": replay.attributes[16]["Locked Alliances"],
+            "cache_handles": cache_handles  # Keep as list, will be JSON-encoded later
         }
         
     except Exception as e:
@@ -238,6 +258,7 @@ class ReplayParsed:
     game_speed: str
     game_duration_setting: str
     locked_alliances: str
+    cache_handles: list[str]
 
 class ReplayService:
     """
@@ -374,9 +395,18 @@ class ReplayService:
                 "game_speed": parsed_dict["game_speed"],
                 "game_duration_setting": parsed_dict["game_duration_setting"],
                 "locked_alliances": parsed_dict["locked_alliances"],
+            }
+            
+            # Validate cache_handles are strings (safety check)
+            cache_handles_list = parsed_dict["cache_handles"]
+            if not all(isinstance(h, str) for h in cache_handles_list):
+                raise TypeError(f"cache_handles must be list of strings, got types: {[type(h).__name__ for h in cache_handles_list]}")
+            
+            replay_data.update({
+                "cache_handles": json.dumps(cache_handles_list),  # Convert list to JSON
                 "replay_path": replay_url,  # Store URL (Supabase) or path (local fallback)
                 "uploaded_at": get_timestamp()  # Add uploaded_at timestamp (new column)
-            }
+            })
             
             # Insert into replays table (async, non-blocking)
             await data_service.insert_replay(replay_data)

@@ -42,8 +42,8 @@ async def setcountry_command(interaction: discord.Interaction, country_code: str
         player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
         guard_service.require_tos_accepted(player)
     except CommandGuardError as exc:
-        error_embed = create_command_guard_error_embed(exc)
-        await send_ephemeral_response(interaction, embed=error_embed)
+        error_embed, error_view = create_command_guard_error_embed(exc)
+        await send_ephemeral_response(interaction, embed=error_embed, view=error_view)
         return
     
     country = countries_service.get_country_by_code(country_code)

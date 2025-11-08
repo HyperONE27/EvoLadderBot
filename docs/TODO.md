@@ -1,15 +1,16 @@
 ## PRE-ALPHA
 
 ### Account Configuration
-- ❌ Update Terms of Service for closed alpha/open beta stage
-  - ⏰ Create a Rentry/Github document for this and just link it
+- ✅ Update Terms of Service for closed alpha/open beta stage
+  - ✅ Create a Rentry/Github document for this and just link it
+  - ✅ Create a page on official SC: Evo website
 - ✅ Fix country setup descriptions for XX (nonrepresenting) / ZZ (other)
 - ✅ /setup persists pre-existing values as defaults (so you don't have to fill them all out again to change one thing)
 - ✅ nulling of alt names is properly recorded in action logs table
 
 ### Admin & Monitoring
-- ❌ Add automatic logging/pinging of admins when a match disagreement arises
-  - ❌ Send replay data to admins
+- ✅ Add automatic logging/pinging of admins when a match disagreement arises
+  - ✅ Send replay data to admins
 - ✅ Add an interface to allow admins to view conflicts in matches and resolve with 1 click
 
 ### Core Architecture & Performance
@@ -158,19 +159,44 @@
 ### Other Last Minute Stuff
 - ✅ Improve the matchmaking algorithm
   - ✅ Locally optimal solution instead of greedy matching
+  - ⏰ Fill out pings in server cross-table
+  - ⏰ Adjust matchmaking bias a little based on ping quality and fairness
 - ✅ Send a follow-up message to players who do not confirm match in a third of the abort countdown timer after match assignment
 - ✅ Send a dismissable message to players who enter a match involving BW Protoss about how to avoid Shield Battery lag
 - ✅ I already updated admins.json with "owner" and "admin" roles, add an owner-only command to adjust admins while the bot is up
 
 ### MORE LAST MINUTE STUFF
 - ✅ Figure out what cache handles fingerprint official SC: Evo Complete Extension mod
-- ⏰ Add cache handles column and cache handles check boolean to replays table
-- ⏰ Add functionality to replay parser to validate cache handles
-- ⏰ Add cache handle data to mods.json
-- ⏰ Add all needed emotes for the bot into test server
-- ⏰ Overwrite emotes in emotes.json
-- ⏰ Make admin commands DM-only???
-- ⏰ Actually, do send all match results to a dedicated channel
+- ✅ Add cache handles column and cache handles check boolean to replays table
+- ✅ Add functionality to replay parser to validate cache handles
+- ✅ Add cache handle data to mods.json
+- ✅ Add all needed emotes for the bot into test server
+- ✅ Overwrite emotes in emotes.json
+- ❌ Make admin commands DM-only???
+- ✅ Actually, do send all match results to a dedicated channel
+- ✅ Add the bot to the official server
+- ⏰ Test and tidy up every command (DO LAST)
+  - ❌ /help
+    - ✅ Unregistered for now
+  - ✅ /leaderboard
+  - ⏰ /profile
+  - ✅ /queue
+  - ✅ /setcountry
+  - ✅ /setup
+  - ✅ /termsofservice
+  - ✅ /admin adjust_mmr
+  - ✅ /admin ban
+  - ⏰ /admin snapshot
+  - ✅ /admin clear_queue
+  - ⏰ /admin match
+  - ⏰ /admin player
+  - ✅ /admin resolve
+  - ✅ /admin remove_queue
+  - ✅ /admin reset_aborts
+  - ✅ /admin unblock_queue
+  - ✅ /owner admin
+- ✅ Clean up the /help command
+- ✅ Check every command to add a "❌ Clear/Cancel" button to it
 
 ## PRE-BETA
 

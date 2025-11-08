@@ -77,8 +77,8 @@ def register_activate_command(tree: app_commands.CommandTree):
             player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
             guard_service.require_tos_accepted(player)
         except CommandGuardError as exc:
-            error_embed = create_command_guard_error_embed(exc)
-            await send_ephemeral_response(interaction, embed=error_embed)
+            error_embed, error_view = create_command_guard_error_embed(exc)
+            await send_ephemeral_response(interaction, embed=error_embed, view=error_view)
             return
         
         await queue_interaction_modal(interaction, ActivateModal())
@@ -133,8 +133,8 @@ class ActivateModal(discord.ui.Modal, title="Enter Activation Code"):
             await send_ephemeral_response(interaction, embed=error_view.embed, view=error_view)
             
         except CommandGuardError as e:
-            error_embed = create_command_guard_error_embed(e)
-            await send_ephemeral_response(interaction, embed=error_embed)
+            error_embed, error_view = create_command_guard_error_embed(e)
+            await send_ephemeral_response(interaction, embed=error_embed, view=error_view)
             return
             
         except Exception as e:

@@ -439,6 +439,38 @@ class UserInfoService:
         
         return success
     
+    async def decline_terms_of_service(self, discord_uid: int) -> bool:
+        """
+        Mark player as having declined terms of service.
+        
+        Args:
+            discord_uid: Discord user ID.
+            
+        Returns:
+            True if successful, False otherwise.
+        """
+        player = self.get_player(discord_uid)
+        
+        # Create player if they don't exist
+        if not player:
+            self.create_player(discord_uid=discord_uid)
+            player = self.get_player(discord_uid)
+        
+        # Use DataAccessService - updates memory + queues DB write (including accepted_tos_date timestamp)
+        success = await self.data_service.update_player_info(discord_uid, accepted_tos=False)
+        
+        if success and player:
+            player_name = self._get_player_display_name(player)
+            asyncio.create_task(self.data_service.log_player_action(
+                discord_uid=discord_uid,
+                player_name=player_name,
+                setting_name="accepted_tos",
+                old_value="True",
+                new_value="False",
+            ))
+        
+        return success
+    
     async def complete_setup(
         self,
         discord_uid: int,

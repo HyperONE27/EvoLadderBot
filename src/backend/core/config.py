@@ -61,7 +61,7 @@ WAL_PATH = get_wal_path()
 
 # Maximum time window (in minutes) allowed between match assignment and replay start time.
 # Used to verify that replays are from the correct match window.
-REPLAY_TIMESTAMP_WINDOW_MINUTES = 20
+REPLAY_TIMESTAMP_WINDOW_MINUTES = 10
 
 # Expected game settings for replay verification
 EXPECTED_GAME_PRIVACY = "Normal"

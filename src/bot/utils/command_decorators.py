@@ -43,8 +43,8 @@ def dm_only(func: Callable) -> Callable:
         try:
             command_guard_service.require_dm(interaction)
         except CommandGuardError as exc:
-            error_embed = create_command_guard_error_embed(exc)
-            await send_ephemeral_response(interaction, embed=error_embed)
+            error_embed, error_view = create_command_guard_error_embed(exc)
+            await send_ephemeral_response(interaction, embed=error_embed, view=error_view)
             return
         
         return await func(interaction, *args, **kwargs)

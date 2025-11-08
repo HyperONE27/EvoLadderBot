@@ -10,7 +10,7 @@ import json
 import logging
 from asyncio import Lock
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Dict, List, Optional, Set
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from src.backend.core.types import (
     VerificationResult,
@@ -18,7 +18,8 @@ from src.backend.core.types import (
     MapVerificationDetail,
     TimestampVerificationDetail,
     ObserverVerificationDetail,
-    GameSettingVerificationDetail
+    GameSettingVerificationDetail,
+    ModVerificationDetail
 )
 from src.backend.core.config import (
     REPLAY_TIMESTAMP_WINDOW_MINUTES,
@@ -47,8 +48,8 @@ class MatchCompletionService:
             cls._instance.notification_callbacks: Dict[int, List[Callable]] = {}
             # Track match confirmations: match_id -> set of player_discord_uids
             cls._instance.match_confirmations: Dict[int, Set[int]] = {}
-            # Track reminder tasks: match_id -> asyncio.Task
-            cls._instance.reminder_tasks: Dict[int, asyncio.Task] = {}
+            # Track reminder tasks: (match_id, player_discord_uid) -> asyncio.Task
+            cls._instance.reminder_tasks: Dict[Tuple[int, int], asyncio.Task] = {}
             # Initialize logger
             cls._instance.logger = logging.getLogger(__name__)
         return cls._instance
@@ -127,11 +128,16 @@ class MatchCompletionService:
             self.match_confirmations[match_id].add(player_discord_uid)
             self.logger.info(f"Player {player_discord_uid} confirmed match {match_id}")
             
-            # Cancel reminder task if exists
-            reminder_task = self.reminder_tasks.pop(match_id, None)
+            # Cancel ALL reminder tasks for this match (both players)
+            tasks_to_cancel = [
+                key for key in self.reminder_tasks.keys() 
+                if key[0] == match_id
+            ]
+            for task_key in tasks_to_cancel:
+                reminder_task = self.reminder_tasks.pop(task_key, None)
             if reminder_task and not reminder_task.done():
                 reminder_task.cancel()
-                self.logger.info(f"Cancelled confirmation reminder for match {match_id}")
+                    self.logger.info(f"Cancelled confirmation reminder for match {match_id}, player {task_key[1]}")
             
             # Check if both players have confirmed
             if len(self.match_confirmations[match_id]) == 2:
@@ -741,6 +747,9 @@ class MatchCompletionService:
         duration_detail = self._verify_game_setting(replay_data, "game_duration_setting", EXPECTED_GAME_DURATION)
         alliances_detail = self._verify_game_setting(replay_data, "locked_alliances", EXPECTED_LOCKED_ALLIANCES)
         
+        # Verify mod
+        mod_detail = self._verify_mod(match_details, replay_data)
+        
         result = VerificationResult(
             races=races_detail,
             map=map_detail,
@@ -749,7 +758,8 @@ class MatchCompletionService:
             game_privacy=privacy_detail,
             game_speed=speed_detail,
             game_duration=duration_detail,
-            locked_alliances=alliances_detail
+            locked_alliances=alliances_detail,
+            mod=mod_detail
         )
         
         all_passed = all([
@@ -760,7 +770,8 @@ class MatchCompletionService:
             privacy_detail['success'],
             speed_detail['success'],
             duration_detail['success'],
-            alliances_detail['success']
+            alliances_detail['success'],
+            mod_detail['success']
         ])
         status_icon = "✅" if all_passed else "⚠️"
         self.logger.info(
@@ -768,7 +779,8 @@ class MatchCompletionService:
             f"races={races_detail['success']}, map={map_detail['success']}, "
             f"timestamp={timestamp_detail['success']}, observers={observers_detail['success']}, "
             f"privacy={privacy_detail['success']}, speed={speed_detail['success']}, "
-            f"duration={duration_detail['success']}, alliances={alliances_detail['success']}"
+            f"duration={duration_detail['success']}, alliances={alliances_detail['success']}, "
+            f"mod={mod_detail['success']}"
         )
         
         return result
@@ -886,7 +898,17 @@ class MatchCompletionService:
             if played_at.tzinfo is None:
                 played_at = played_at.replace(tzinfo=timezone.utc)
 
-            replay_date = datetime.fromisoformat(replay_date_str.replace('+00', '+00:00'))
+            # Handle replay_date being either a string (ISO) or numeric (Unix timestamp)
+            if isinstance(replay_date_str, (int, float)):
+                # It's a Unix timestamp
+                replay_date = datetime.fromtimestamp(replay_date_str, tz=timezone.utc)
+            elif isinstance(replay_date_str, datetime):
+                # Already a datetime object
+                replay_date = replay_date_str
+            else:
+                # It's a string ISO timestamp
+                replay_date = datetime.fromisoformat(str(replay_date_str).replace('+00', '+00:00'))
+            
             if replay_date.tzinfo is None:
                 replay_date = replay_date.replace(tzinfo=timezone.utc)
             
@@ -965,6 +987,64 @@ class MatchCompletionService:
             success=is_valid,
             expected=expected_value,
             found=actual_value
+        )
+    
+    def _verify_mod(
+        self,
+        match_details: Dict[str, any],
+        replay_data: Dict[str, any]
+    ) -> ModVerificationDetail:
+        """
+        Verifies that the replay contains valid mod cache handles.
+        
+        Args:
+            match_details: Match data from database
+            replay_data: Replay data parsed from replay file
+            
+        Returns:
+            ModVerificationDetail with success status and message
+        """
+        from src.backend.services.mods_service import ModsService
+        
+        mods_service = ModsService()
+        
+        cache_handles = replay_data.get('cache_handles')
+        
+        if not cache_handles:
+            return ModVerificationDetail(
+                success=False,
+                message="No cache handles found in replay data.",
+                region_detected=None
+            )
+        
+        if isinstance(cache_handles, str):
+            try:
+                cache_handles = json.loads(cache_handles)
+            except json.JSONDecodeError:
+                return ModVerificationDetail(
+                    success=False,
+                    message="Invalid cache_handles format (not valid JSON).",
+                    region_detected=None
+                )
+        
+        if not isinstance(cache_handles, list):
+            return ModVerificationDetail(
+                success=False,
+                message="Invalid cache_handles format (not a list).",
+                region_detected=None
+            )
+        
+        validation_result = mods_service.validate_cache_handles(cache_handles)
+        
+        if validation_result["valid"]:
+            message = "Mod file data signatures correspond to that of the official mod. The mod used was likely official."
+        else:
+            message = "Mod file data signatures DO NOT correspond to that of the official mod. The mod used was likely unofficial."
+        
+        return ModVerificationDetail(
+            success=validation_result["valid"],
+            message=message,
+            region_detected=validation_result.get("region_detected")
         )
     
     # REMOVED FOR DECOUPLING

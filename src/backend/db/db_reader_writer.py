@@ -386,10 +386,9 @@ class DatabaseWriter:
         if accepted_tos is not None:
             updates.append("accepted_tos = :accepted_tos")
             params["accepted_tos"] = accepted_tos
-            # Only set accepted_tos_date if it's currently NULL (can't be overwritten)
-            if accepted_tos:
-                updates.append("accepted_tos_date = COALESCE(accepted_tos_date, :accepted_tos_date)")
-                params["accepted_tos_date"] = get_timestamp()
+            # Always update the timestamp when accepted_tos is changed
+            updates.append("accepted_tos_date = :accepted_tos_date")
+            params["accepted_tos_date"] = get_timestamp()
         
         if completed_setup is not None:
             updates.append("completed_setup = :completed_setup")
@@ -1249,12 +1248,12 @@ class DatabaseWriter:
                     replay_path, replay_hash, replay_date, player_1_name, player_2_name,
                     player_1_race, player_2_race, result, player_1_handle, player_2_handle,
                     observers, map_name, duration, game_privacy, game_speed, game_duration_setting,
-                    locked_alliances, uploaded_at
+                    locked_alliances, cache_handles, uploaded_at
                 ) VALUES (
                     :replay_path, :replay_hash, :replay_date, :player_1_name, :player_2_name,
                     :player_1_race, :player_2_race, :result, :player_1_handle, :player_2_handle,
                     :observers, :map_name, :duration, :game_privacy, :game_speed, :game_duration_setting,
-                    :locked_alliances, :uploaded_at
+                    :locked_alliances, :cache_handles, :uploaded_at
                 )
                 ON CONFLICT (replay_path) DO NOTHING
                 """,

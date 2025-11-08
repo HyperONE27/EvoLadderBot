@@ -180,6 +180,13 @@ class ReplayDetailsEmbed:
                 f"but played `{map_check['played_map']}`."
             )
         
+        # Mod verification
+        mod_check = results['mod']
+        if mod_check['success']:
+            lines.append(f"- ✅ **Mod Valid:** {mod_check['message']}")
+        else:
+            lines.append(f"- ❌ **Mod Invalid:** {mod_check['message']}")
+
         # Timestamp verification with dynamic feedback
         timestamp_check = results['timestamp']
         if timestamp_check['success']:
@@ -265,19 +272,35 @@ class ReplayDetailsEmbed:
             privacy_check['success'],
             speed_check['success'],
             duration_check['success'],
-            alliances_check['success']
+            alliances_check['success'],
+            mod_check['success']
+        ])
+        
+        # Check for critical failures (races, map, or mod)
+        critical_checks_failed = not all([
+            races_check['success'],
+            map_check['success'],
+            mod_check['success']
         ])
         
         lines.append("")  # Empty line for spacing
         if all_ok:
             lines.append(
                 "✅ **Verification Complete:** All checks passed.\n"
-                "⚠️ This embed is provided for informational purposes only. You must still report the match result manually."
+                "ℹ️ This embed is provided for informational purposes only. Please report the match result manually."
+                "🔓 Match reporting unlocked. Please report the match result using the dropdown menus above."
+            )
+        elif critical_checks_failed:
+            lines.append(
+                "❌ **Critical Validation Failure:**\n"
+                "❌ We do not accept games played with the incorrect races, map, or mod.\n"
+                "🔒 Result reporting has been locked. Please contact an admin to nullify this match."
             )
         else:
             lines.append(
                 "⚠️ **Verification Issues:** One or more checks failed.\n"
-                "⚠️ Please review the issues above and ensure match parameters are correct for future games."
+                "⚠️ Please review the issues above and ensure match parameters are correct for future games.\n"
+                "🔓 Match reporting unlocked. Please report the match result using the dropdown menus above."
             )
         
         return "\n".join(lines)

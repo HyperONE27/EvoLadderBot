@@ -24,7 +24,6 @@ import polars as pl
 from src.backend.services.app_context import admin_service, data_access_service, ranking_service, races_service
 from src.backend.services.process_pool_health import get_bot_instance
 from src.bot.components.confirm_restart_cancel_buttons import ConfirmButton, CancelButton
-from src.bot.components.replay_details_embed import ReplayDetailsEmbed
 from src.bot.config import GLOBAL_TIMEOUT
 from src.bot.utils.message_helpers import (
     queue_user_send,
@@ -319,9 +318,6 @@ def format_player_state(state: dict, discord_user: discord.User = None) -> disco
     if alt_ids:
         basic_info_parts.append(f"- **Alt IDs:** {', '.join(alt_ids)}")
     
-    # Admin-specific: Remaining aborts
-    basic_info_parts.append(f"- **Remaining Aborts:** {info.get('remaining_aborts', 0)}/3")
-    
     basic_info = "\n".join(basic_info_parts)
     embed.add_field(name="📋 Basic Information", value=basic_info, inline=False)
     
@@ -463,7 +459,28 @@ def format_player_state(state: dict, discord_user: discord.User = None) -> disco
             
             sc2_emote = get_game_emote('starcraft_2')
             embed.add_field(name=f"{sc2_emote} StarCraft II MMR", value=sc2_text.strip(), inline=False)
+
+    # Account Status (matching /profile format)
+    embed.add_field(name="", value="\u3164", inline=False)
+    status_parts = []
     
+    if info.get('accepted_tos'):
+        status_parts.append("- ✅ Terms of Service accepted")
+    else:
+        status_parts.append("- ❌ Terms of Service not accepted")
+    
+    if info.get('completed_setup'):
+        status_parts.append("- ✅ Setup completed")
+    else:
+        status_parts.append("- ⚠️ Setup incomplete")
+    
+    # Remaining aborts
+    remaining_aborts = info.get('remaining_aborts', 3)
+    status_parts.append(f"- 🚫 {remaining_aborts}/3 match aborts remaining")
+    
+    status_text = "\n".join(status_parts)
+    embed.add_field(name="📊 Account Status", value=status_text, inline=False)
+
     # Admin-specific: Queue Status
     embed.add_field(name="", value="\u3164", inline=False)
     queue_status = f"**In Queue:** {'✅ Yes' if state['queue_status']['in_queue'] else '❌ No'}"
@@ -488,6 +505,9 @@ def format_player_state(state: dict, discord_user: discord.User = None) -> disco
             match_text += f"... and {len(state['active_matches']) - 5} more matches"
         
         embed.add_field(name="📜 Most Recent Matches", value=match_text.strip(), inline=False)
+    
+    # Footer with Discord ID
+    embed.set_footer(text=f"Discord ID: {info.get('player_name', 'Unknown')} • {info['discord_uid']}")
     
     return embed
 
@@ -679,6 +699,70 @@ class AdminConfirmationView(View):
         print(f"[AdminConfirmationView] View timed out for admin {self._original_admin_id}")
 
 
+class AdminDismissView(discord.ui.View):
+    """Simple dismissal view for informational admin commands."""
+    
+    def __init__(self, timeout: int = None):
+        """Initialize view with a timeout and interaction check."""
+        super().__init__(timeout=timeout or GLOBAL_TIMEOUT)
+        self._original_admin_id: Optional[int] = None
+        self._interaction_to_delete: Optional[discord.Interaction] = None
+    
+    def set_admin(self, admin_id: int):
+        """Set the admin who initiated this view (the only one who can interact with buttons)."""
+        self._original_admin_id = admin_id
+    
+    def set_interaction(self, interaction: discord.Interaction):
+        """Store the interaction for deletion purposes."""
+        self._interaction_to_delete = interaction
+    
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Ensure only the original admin can interact with buttons."""
+        if interaction.user.id != self._original_admin_id:
+            try:
+                await queue_interaction_defer(interaction, ephemeral=True)
+            except discord.errors.NotFound:
+                pass
+            
+            try:
+                await queue_followup(
+                    interaction,
+                    embed=discord.Embed(
+                        title="🚫 Admin Button Restricted",
+                        description=f"Only <@{self._original_admin_id}> can interact with these buttons.",
+                        color=discord.Color.red()
+                    ),
+                    ephemeral=True
+                )
+            except Exception as e:
+                print(f"[AdminDismissView] Failed to send rejection message: {e}")
+            
+            return False
+        
+        return True
+    
+    @discord.ui.button(label="Dismiss", style=discord.ButtonStyle.secondary, emoji="🗑️")
+    async def dismiss_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Dismiss and delete the admin info message."""
+        try:
+            await interaction.response.defer()
+            if self._interaction_to_delete:
+                await self._interaction_to_delete.delete_original_response()
+            else:
+                await interaction.message.delete()
+            self.stop()
+        except Exception as e:
+            print(f"[AdminDismissView] Failed to delete message: {e}")
+            try:
+                await queue_followup(
+                    interaction,
+                    content="❌ Failed to delete message.",
+                    ephemeral=True
+                )
+            except:
+                pass
+
+
 def register_admin_commands(tree: app_commands.CommandTree):
     """Register all admin commands."""
     
@@ -710,7 +794,12 @@ def register_admin_commands(tree: app_commands.CommandTree):
                 inline=field.get('inline', False)
             )
         
-        await queue_followup(interaction, embed=embed)
+        # Create dismiss view for this informational command
+        view = AdminDismissView()
+        view.set_admin(interaction.user.id)
+        view.set_interaction(interaction)
+        
+        await queue_followup(interaction, embed=embed, view=view)
     
     @admin_group.command(name="player", description="[Admin] View player state")
     @app_commands.describe(user="Player's @mention, username, or Discord ID")
@@ -740,7 +829,12 @@ def register_admin_commands(tree: app_commands.CommandTree):
         
         embed = format_player_state(state, discord_user)
         
-        await queue_followup(interaction, embed=embed)
+        # Create dismiss view for this informational command
+        view = AdminDismissView()
+        view.set_admin(interaction.user.id)
+        view.set_interaction(interaction)
+        
+        await queue_followup(interaction, embed=embed, view=view)
     
     @admin_group.command(name="match", description="[Admin] View match state")
     @app_commands.describe(match_id="Match ID")
@@ -761,10 +855,12 @@ def register_admin_commands(tree: app_commands.CommandTree):
         import json
         formatted = json.dumps(state, indent=2, default=str)
         
-        file = discord.File(
-            io.BytesIO(formatted.encode()),
-            filename=f"admin_match_{match_id}.json"
-        )
+        files_to_attach = [
+            discord.File(
+                io.BytesIO(formatted.encode()),
+                filename=f"admin_match_{match_id}.json"
+            )
+        ]
         
         match_data = state['match_data']
         p1_info = state['players']['player_1']
@@ -832,30 +928,74 @@ def register_admin_commands(tree: app_commands.CommandTree):
         p1_report = state['reports']['player_1']
         p2_report = state['reports']['player_2']
         
-        def format_report_code(code, reporter_name, opponent_name):
+        def format_report_code(code: int, p1_name: str, p2_name: str) -> str:
+            """Format a report code into human-readable text.
+            
+            Report codes:
+            1 = Player 1 won
+            2 = Player 2 won
+            0 = Draw
+            -3 = Manual abort
+            -4 = No response (automatic abandon)
+            """
             if code is None:
-                return "⏳ Not Reported"
+                return "Not Reported"
             elif code == 1:
-                return f"✅ {reporter_name} Won"
+                return f"{p1_name} Won"
             elif code == 2:
-                return f"❌ {opponent_name} Won"
+                return f"{p2_name} Won"
             elif code == 0:
-                return "⚖️ Draw"
+                return "Draw"
             elif code == -1:
-                return "🚫 Aborted"
+                return "Aborted"
             elif code == -3:
-                return f"🚫 {reporter_name} Aborted"
+                return "Aborted"
             elif code == -4:
-                return "⏰ No Response"
+                return "No Response"
             else:
-                return f"❓ Unknown ({code})"
+                return f"Unknown ({code})"
         
         embed.add_field(
-            name="📊 Player Reports",
+            name="📊 Original Player Reports",
             value=(
                 f"**{p1_name}:** {format_report_code(p1_report, p1_name, p2_name)}\n"
-                f"**{p2_name}:** {format_report_code(p2_report, p2_name, p1_name)}"
+                f"**{p2_name}:** {format_report_code(p2_report, p1_name, p2_name)}"
             ),
+            inline=True
+        )
+        
+        # Add admin resolution status
+        updated_at = match_data.get('updated_at')
+        if updated_at:
+            # Convert ISO timestamp to Unix timestamp for Discord formatting
+            from datetime import datetime
+            try:
+                # Handle both string ISO timestamps and numeric timestamps
+                if isinstance(updated_at, (int, float)):
+                    unix_timestamp = int(updated_at)
+                elif isinstance(updated_at, str):
+                    # Handle various string formats
+                    dt = datetime.fromisoformat(updated_at.replace('Z', '+00:00').replace('+00', '+00:00'))
+                    unix_timestamp = int(dt.timestamp())
+                else:
+                    # Fallback for unexpected types
+                    admin_status = f"✅ Yes\n{updated_at}"
+                    unix_timestamp = None
+                
+                if unix_timestamp:
+                    admin_status = f"✅ Yes\n<t:{unix_timestamp}:F>"
+                else:
+                    admin_status = f"✅ Yes\n{updated_at}"
+            except (ValueError, AttributeError, TypeError) as e:
+                # Fallback if parsing fails
+                admin_status = f"✅ Yes\n{updated_at}"
+                print(f"[Admin Match] Failed to parse updated_at: {e}, value: {updated_at}, type: {type(updated_at)}")
+        else:
+            admin_status = "❌ No"
+        
+        embed.add_field(
+            name="🛡️ Admin Resolved",
+            value=admin_status,
             inline=True
         )
         
@@ -875,19 +1015,28 @@ def register_admin_commands(tree: app_commands.CommandTree):
                     f"**{p1_name}:** `{mmr_sign_p1}{mmr_change}` ({int(p1_mmr)} → {int(p1_new_mmr)})\n"
                     f"**{p2_name}:** `{mmr_sign_p2}{-mmr_change}` ({int(p2_mmr)} → {int(p2_new_mmr)})"
                 ),
-                inline=True
+                inline=False
             )
         
         # Add raw match data for technical reference
         raw_data = {
             "match_id": match_id,
+            "player_1_discord_uid": match_data.get('player_1_discord_uid'),
+            "player_2_discord_uid": match_data.get('player_2_discord_uid'),
+            "player_1_name": p1_name,
+            "player_2_name": p2_name,
+            "player_1_race": p1_race,
+            "player_2_race": p2_race,
+            "player_1_country": p1_country,
+            "player_2_country": p2_country,
             "player_1_report": p1_report,
             "player_2_report": p2_report,
             "match_result": match_data.get('match_result'),
             "mmr_change": match_data.get('mmr_change'),
             "played_at": match_data.get('played_at'),
+            "updated_at": match_data.get('updated_at'),
             "map": match_data.get('map_played'),
-            "server": match_data.get('server_choice')
+            "server": match_data.get('server_used')
         }
         
         raw_data_str = json.dumps(raw_data, indent=2, default=str)
@@ -953,77 +1102,45 @@ def register_admin_commands(tree: app_commands.CommandTree):
                 inline=False
             )
         
-        # Prepare replay embeds for both players
+        # Get replay embeds with full verification (exactly as players see them)
+        replay_embed_data = await admin_service.get_replay_embeds_for_match(match_id)
+        
         replay_embeds = []
-        
-        def _process_replay_data(replay_data: dict) -> dict:
-            """Process replay data from database - parse JSON strings back to Python objects."""
-            # Parse observers from JSON string to list
-            if isinstance(replay_data.get('observers'), str):
-                try:
-                    replay_data['observers'] = json.loads(replay_data['observers'])
-                except (json.JSONDecodeError, TypeError):
-                    replay_data['observers'] = []
-            
-            # Ensure replay_date is in a format the embed can handle
-            # If it's a datetime object or properly formatted ISO string, keep it
-            # Otherwise, try to parse it
-            replay_date = replay_data.get('replay_date')
-            if replay_date and isinstance(replay_date, str):
-                # The date might already be ISO formatted, keep it as-is
-                # The embed will handle parsing
-                pass
-            
-            return replay_data
-        
-        # Get player 1 and player 2 replay data
-        p1_replay_path = match_data.get('player_1_replay_path')
-        p2_replay_path = match_data.get('player_2_replay_path')
-        
-        # Player 1 replay
-        if p1_replay_path:
-            try:
-                p1_replay_data = data_access_service.get_replay_by_path(p1_replay_path)
-                if p1_replay_data:
-                    p1_replay_data = _process_replay_data(p1_replay_data)
-                    p1_embed = ReplayDetailsEmbed.get_success_embed(p1_replay_data)
-                    # Customize title to show player
-                    p1_embed.title = f"📄 Player 1 Replay: {p1_name}"
-                    replay_embeds.append(p1_embed)
-            except Exception as e:
-                error_embed = discord.Embed(
-                    title=f"❌ Player 1 Replay Error",
-                    description=f"Failed to load Player 1 replay: {str(e)}",
-                    color=discord.Color.red()
-                )
-                replay_embeds.append(error_embed)
-        
-        # Player 2 replay
-        if p2_replay_path:
-            try:
-                p2_replay_data = data_access_service.get_replay_by_path(p2_replay_path)
-                if p2_replay_data:
-                    p2_replay_data = _process_replay_data(p2_replay_data)
-                    p2_embed = ReplayDetailsEmbed.get_success_embed(p2_replay_data)
-                    # Customize title to show player
-                    p2_embed.title = f"📄 Player 2 Replay: {p2_name}"
-                    replay_embeds.append(p2_embed)
-            except Exception as e:
-                error_embed = discord.Embed(
-                    title=f"❌ Player 2 Replay Error",
-                    description=f"Failed to load Player 2 replay: {str(e)}",
-                    color=discord.Color.red()
-                )
-                replay_embeds.append(error_embed)
+        if replay_embed_data['player_1_embed']:
+            replay_embeds.append(replay_embed_data['player_1_embed'])
+        if replay_embed_data['player_2_embed']:
+            replay_embeds.append(replay_embed_data['player_2_embed'])
         
         # Create embeds list - main embed first, then replay embeds
         all_embeds = [embed] + replay_embeds
+        
+        # Fetch replay files from backend service
+        replay_files = await admin_service.fetch_match_replay_files(match_id)
+        
+        # Add replay files to attachments if they exist
+        if replay_files['player_1_replay']:
+            files_to_attach.append(discord.File(
+                io.BytesIO(replay_files['player_1_replay']),
+                filename=f"match_{match_id}_{replay_files['player_1_name']}.SC2Replay"
+            ))
+        
+        if replay_files['player_2_replay']:
+            files_to_attach.append(discord.File(
+                io.BytesIO(replay_files['player_2_replay']),
+                filename=f"match_{match_id}_{replay_files['player_2_name']}.SC2Replay"
+            ))
+        
+        # Create dismiss view for this informational command
+        view = AdminDismissView()
+        view.set_admin(interaction.user.id)
+        view.set_interaction(interaction)
         
         await queue_followup(
             interaction,
             content=f"Match #{match_id} State",
             embeds=all_embeds if all_embeds else [embed],
-            file=file,
+            files=files_to_attach,  # Changed from file= to files=
+            view=view
         )
     
     # Helper function to create confirmation views
@@ -1075,8 +1192,33 @@ def register_admin_commands(tree: app_commands.CommandTree):
         winner_map = {1: 'player_1_win', 2: 'player_2_win', 0: 'draw', -1: 'invalidate'}
         resolution = winner_map[winner.value]
         
+        # Fetch match data first to get player names and UIDs for confirmation embed
+        from src.backend.services.app_context import data_access_service
+        match_data = data_access_service.get_match(match_id)
+        if not match_data:
+            await queue_interaction_response(
+                interaction,
+                embed=discord.Embed(
+                    title="❌ Match Not Found",
+                    description=f"Match #{match_id} does not exist.",
+                    color=discord.Color.red()
+                ),
+                ephemeral=True
+            )
+            return
+        
+        # Get player info
+        p1_info = data_access_service.get_player_info(match_data['player_1_discord_uid'])
+        p2_info = data_access_service.get_player_info(match_data['player_2_discord_uid'])
+        p1_name = p1_info.get('player_name', 'Unknown') if p1_info else 'Unknown'
+        p2_name = p2_info.get('player_name', 'Unknown') if p2_info else 'Unknown'
+        p1_uid = match_data['player_1_discord_uid']
+        p2_uid = match_data['player_2_discord_uid']
+        
         async def confirm_callback(button_interaction: discord.Interaction):
             await queue_interaction_defer(button_interaction)
+            
+            from src.backend.services.app_context import admin_service
             
             result = await admin_service.resolve_match_conflict(
                 match_id=match_id,
@@ -1210,6 +1352,12 @@ def register_admin_commands(tree: app_commands.CommandTree):
                     value=f"**Resolved by:** {interaction.user.name}\n**Reason:** {reason}",
                     inline=False
                 )
+                
+                # Forward resolution to admin channel
+                await admin_service.forward_match_completion_to_admin_channel(
+                    result_embed,
+                    match_id
+                )
             else:
                 result_embed = discord.Embed(
                     title="❌ Admin: Resolution Failed",
@@ -1219,10 +1367,20 @@ def register_admin_commands(tree: app_commands.CommandTree):
             
             await queue_edit_original(button_interaction, embed=result_embed, view=None)
         
+        # Create detailed confirmation message with player info
+        confirmation_description = (
+            f"**Match ID:** {match_id}\n"
+            f"**Player 1:** {p1_name} (`{p1_uid}`)\n"
+            f"**Player 2:** {p2_name} (`{p2_uid}`)\n\n"
+            f"**Resolution:** {winner.name}\n"
+            f"**Reason:** {reason}\n\n"
+            f"This will update the match result and MMR. Confirm?"
+        )
+        
         embed, view = _create_admin_confirmation(
             interaction,
             "⚠️ Admin: Confirm Match Resolution",
-            f"**Match ID:** {match_id}\n**Resolution:** {winner.name}\n**Reason:** {reason}\n\nThis will update the match result and MMR. Confirm?",
+            confirmation_description,
             confirm_callback
         )
         

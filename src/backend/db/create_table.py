@@ -105,6 +105,8 @@ def create_database(db_path: str = "evoladder.db") -> None:
             id                      INTEGER PRIMARY KEY AUTOINCREMENT,
             player_1_discord_uid    INTEGER NOT NULL,
             player_2_discord_uid    INTEGER NOT NULL,
+            player_1_race           TEXT NOT NULL,
+            player_2_race           TEXT NOT NULL,
             player_1_mmr            INTEGER NOT NULL,
             player_2_mmr            INTEGER NOT NULL,
             winner_discord_uid      INTEGER,
@@ -112,6 +114,10 @@ def create_database(db_path: str = "evoladder.db") -> None:
             map_played              TEXT NOT NULL,
             server_used             TEXT NOT NULL,
             played_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at              TIMESTAMP,          -- Set only by admin resolution
+            player_1_report         INTEGER,
+            player_2_report         INTEGER,
+            match_result            INTEGER,
             player_1_replay_path    TEXT,
             player_1_replay_time    TIMESTAMP,          -- stores the timestamp when player_1 uploaded
             player_2_replay_path    TEXT,
@@ -144,7 +150,13 @@ def create_database(db_path: str = "evoladder.db") -> None:
             player_2_handle         TEXT NOT NULL,
             observers               TEXT NOT NULL,
             map_name                TEXT NOT NULL,
-            duration                INTEGER NOT NULL
+            duration                INTEGER NOT NULL,
+            game_privacy            TEXT NOT NULL,
+            game_speed              TEXT NOT NULL,
+            game_duration_setting   TEXT NOT NULL,
+            locked_alliances        TEXT NOT NULL,
+            cache_handles           TEXT NOT NULL,
+            uploaded_at             TIMESTAMP NOT NULL
         )
     """)
     
