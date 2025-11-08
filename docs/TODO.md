@@ -20,6 +20,12 @@
 - ✅ Singleton pattern ensuring consistent data access across application
 - ✅ Service dependency injection with app_context.py
 - ✅ Performance monitoring with comprehensive timing and memory tracking
+- ✅ Memory leak fix: MatchFoundView lifecycle management
+  - ✅ Added synchronous `_cleanup_view()` method for deterministic cleanup
+  - ✅ Proper removal from tracking dictionaries (MatchFoundViewManager, channel_to_match_view_map)
+  - ✅ Break circular references with `clear_items()` to enable garbage collection
+  - ✅ Added telemetry tracking for leaked instances (RSS, view counts, GC metrics)
+  - ✅ Expected: Reduce 12h memory growth from 1GB to <150MB (90-95% improvement)
 - ✅ 99%+ performance improvement across all critical operations
   - ✅ Rank lookup: 280-316ms → 0.00ms (99.9% improvement)
   - ✅ Player info lookups: 500-800ms → <2ms (99.7% improvement)

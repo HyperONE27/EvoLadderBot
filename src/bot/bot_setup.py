@@ -266,6 +266,52 @@ class EvoLadderBot(commands.Bot):
                     # Log current memory usage
                     monitor.log_memory_usage("Periodic check")
                     
+                    # === ADD MEMORY LEAK TELEMETRY ===
+                    import psutil
+                    import os
+                    import gc
+                    from src.bot.commands.queue_command import (
+                        match_found_view_manager,
+                        channel_to_match_view_map,
+                        MatchFoundView
+                    )
+                    
+                    # Memory metrics
+                    proc = psutil.Process(os.getpid())
+                    rss_mb = proc.memory_info().rss / 1024**2
+                    
+                    # View tracking metrics
+                    manager_view_count = len(match_found_view_manager._views)
+                    channel_map_count = len(channel_to_match_view_map)
+                    active_views = sum(len(v) for v in match_found_view_manager._views.values())
+                    
+                    # Count leaked instances via GC
+                    leaked_instances = len([
+                        obj for obj in gc.get_objects() 
+                        if isinstance(obj, MatchFoundView)
+                    ])
+                    
+                    # Log metrics
+                    logger.info(
+                        f"[Memory] RSS={rss_mb:.1f}MB "
+                        f"manager_views={manager_view_count} "
+                        f"channel_map={channel_map_count} "
+                        f"active_views={active_views} "
+                        f"leaked_instances={leaked_instances}"
+                    )
+                    
+                    # Alert on high counts
+                    if manager_view_count > 10:
+                        logger.warning(f"[Memory] HIGH manager view count: {manager_view_count} matches")
+                    if leaked_instances > 10:
+                        logger.warning(f"[Memory] HIGH leaked instances: {leaked_instances} MatchFoundView objects")
+                    
+                    # Optional: GC hint when views cleared (non-intrusive)
+                    if manager_view_count == 0 and leaked_instances > 0:
+                        collected = gc.collect()
+                        logger.info(f"[Memory] GC collected {collected} objects after views cleared")
+                    # === END TELEMETRY ===
+                    
                     # Check for potential leak
                     if monitor.check_memory_leak(threshold_mb=100.0):
                         # Generate detailed report

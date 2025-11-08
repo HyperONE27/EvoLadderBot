@@ -866,6 +866,9 @@ class QueueSearchingView(discord.ui.View):
         if self.match_task:
             self.match_task.cancel()
             self.match_task = None
+        # Break circular references between view and UI components
+        self.clear_items()
+        print(f"🧹 [QueueSearchingView] Deactivated and cleaned up for player {self.player.discord_user_id}")
     
     def set_interaction(self, interaction: discord.Interaction):
         """Store the interaction so we can update the message later"""
@@ -1037,6 +1040,42 @@ class MatchFoundView(discord.ui.View):
         except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
             print(f"Failed to edit original message: {e}")
             return False
+    
+    def _cleanup_view(self):
+        """Deterministically free all references to this View."""
+        print(f"🧹 [CLEANUP] Starting cleanup for match {getattr(self.match_result, 'match_id', '?')}")
+        try:
+            self.stop()
+        except Exception:
+            # Rarely needed, but ensures cleanup continues if discord.py internals throw
+            logger.exception("[Cleanup] stop() raised unexpectedly")
+        
+        try:
+            self.clear_items()
+        except Exception:
+            logger.exception("[Cleanup] clear_items() raised unexpectedly")
+        
+        if not getattr(self, "channel", None):
+            logger.warning("[Cleanup] View had no channel; skipping map removals")
+            return
+        
+        channel_id = self.channel.id
+        channel_to_match_view_map.pop(channel_id, None)
+        
+        match_id = getattr(self.match_result, "match_id", None)
+        if match_id is None:
+            logger.warning("[Cleanup] match_result.match_id missing; partial cleanup only")
+            return
+        
+        views_list = match_found_view_manager._views.get(match_id, [])
+        match_found_view_manager._views[match_id] = [
+            (cid, v) for (cid, v) in views_list if cid != channel_id
+        ]
+        
+        if not match_found_view_manager._views.get(match_id):
+            match_found_view_manager._views.pop(match_id, None)
+        
+        logger.info(f"[Cleanup] View cleaned: match={match_id}, channel={channel_id}")
     
     def _update_dropdown_states(self):
         """Update the state of the dropdowns based on the current view state"""
@@ -1417,7 +1456,7 @@ class MatchFoundView(discord.ui.View):
             flow.checkpoint("send_final_embed_complete")
             
             # The view's work is done for a completed match
-            self.stop()
+            self._cleanup_view()
             flow.complete("success")
             
         elif status == "abort":
@@ -1453,7 +1492,7 @@ class MatchFoundView(discord.ui.View):
             flow.checkpoint("send_abort_embed_complete")
             
             # The view's work is done for an aborted match
-            self.stop()
+            self._cleanup_view()
             flow.complete("success")
             
         elif status == "conflict":
@@ -1478,7 +1517,7 @@ class MatchFoundView(discord.ui.View):
             flow.checkpoint("send_conflict_embed_complete")
             
             # The view's work is done for a conflict
-            self.stop()
+            self._cleanup_view()
             flow.complete("success")
 
         elif status == "confirmation_timeout":

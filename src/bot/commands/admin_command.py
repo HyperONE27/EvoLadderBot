@@ -716,7 +716,8 @@ class AdminConfirmationView(View):
         Note: We can't edit the message here as we don't have a reference to it,
         but the buttons will automatically be disabled by Discord.
         """
-        print(f"[AdminConfirmationView] View timed out for admin {self._original_admin_id}")
+        self.clear_items()
+        print(f"🧹 [AdminConfirmationView] Timed out and cleaned up for admin {self._original_admin_id}")
 
 
 class AdminDismissView(discord.ui.View):
@@ -771,6 +772,8 @@ class AdminDismissView(discord.ui.View):
             else:
                 await interaction.message.delete()
             self.stop()
+            self.clear_items()
+            print(f"🧹 [AdminDismissView] Cleaned up for admin {self._original_admin_id}")
         except Exception as e:
             print(f"[AdminDismissView] Failed to delete message: {e}")
             try:
