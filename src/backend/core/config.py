@@ -74,13 +74,13 @@ EXPECTED_LOCKED_ALLIANCES = "Yes"
 MM_ACTIVITY_WINDOW_SECONDS = 15 * 60
 
 # How often to prune the recent_activity list, in seconds
-MM_PRUNE_INTERVAL_SECONDS = 60
+MM_PRUNE_INTERVAL_SECONDS = 30
 
 # Global matchmaking interval (matchwave) in seconds
-MM_MATCH_INTERVAL_SECONDS = 10
+MM_MATCH_INTERVAL_SECONDS = 60
 
 # Time window in seconds for players to abort a match after it's found
-MM_ABORT_TIMER_SECONDS = 180
+MM_ABORT_TIMER_SECONDS = 120
 
 # The number of matchmaking waves before the MMR window expands
 MM_MMR_EXPANSION_STEP = 1
