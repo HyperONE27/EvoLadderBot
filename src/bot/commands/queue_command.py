@@ -1191,6 +1191,17 @@ class MatchFoundView(discord.ui.View):
         p1_info_line = f"- {p1_rank_emote} {p1_flag} {p1_race_emote} {p1_display_name} ({p1_race_name})"
         p2_info_line = f"- {p2_rank_emote} {p2_flag} {p2_race_emote} {p2_display_name} ({p2_race_name})"
 
+        # Add Discord mention
+        p1_info_line += f"\n  - Discord: <@{self.match_result.player_1_discord_id}>"
+        p2_info_line += f"\n  - Discord: <@{self.match_result.player_2_discord_id}>"
+
+        # Add battletag if available
+        if p1_info and p1_info.get('battletag'):
+            p1_info_line += f"\n  - BattleTag: `{p1_info.get('battletag')}`"
+        if p2_info and p2_info.get('battletag'):
+            p2_info_line += f"\n  - BattleTag: `{p2_info.get('battletag')}`"
+
+        # Add alt IDs
         if p1_info:
             alt_ids_1 = []
             if p1_info.get('alt_player_name_1'):
@@ -1223,6 +1234,8 @@ class MatchFoundView(discord.ui.View):
             inline=False
         )
         
+        embed.add_field(name="", value="\u3164", inline=False)
+
         # Match Information section
         map_name = self.match_result.map_choice
         

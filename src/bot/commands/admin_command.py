@@ -209,7 +209,8 @@ def format_queue_embed(snapshot: dict) -> discord.Embed:
     """
     Format queue players into a separate embed with description (not fields).
     
-    Returns discord.Embed showing up to 40 players in queue.
+    Returns discord.Embed showing up to 50 players in queue (X=25, 2X players).
+    Character budget: 63 chars per player, 3150 chars for 50 players.
     """
     queue_size = snapshot['queue']['size']
     embed = discord.Embed(
@@ -223,15 +224,15 @@ def format_queue_embed(snapshot: dict) -> discord.Embed:
         players = snapshot['queue'].get('players', [])
         player_count = len(players)
         
-        # Show up to 40 players
-        displayed_players = players[:40]
+        # Show up to 50 players
+        displayed_players = players[:50]
         player_lines = [f"  • {p}" for p in displayed_players]
         
         description = f"**Players in Queue:** {queue_size}\n" + "\n".join(player_lines)
         
         # Add "... and X more" if truncated
-        if player_count > 40:
-            description += f"\n_... and {player_count - 40} more_"
+        if player_count > 50:
+            description += f"\n_... and {player_count - 50} more_"
         
         embed.description = description
     
@@ -242,7 +243,9 @@ def format_matches_embed(snapshot: dict) -> discord.Embed:
     """
     Format active matches into a separate embed with description (not fields).
     
-    Returns discord.Embed showing up to 20 active matches.
+    Returns discord.Embed showing up to 25 active matches (X=25).
+    Character budget: 68 chars per match, 1700 chars for 25 matches.
+    Total 3 embeds: ~5501 chars (stays under 6000 char limit with buffer).
     """
     match_count = snapshot['matches']['active']
     embed = discord.Embed(
@@ -256,15 +259,15 @@ def format_matches_embed(snapshot: dict) -> discord.Embed:
         matches = snapshot['matches'].get('match_list', [])
         match_list_count = len(matches)
         
-        # Show up to 20 matches
-        displayed_matches = matches[:20]
+        # Show up to 25 matches
+        displayed_matches = matches[:25]
         match_lines = [f"  • {m}" for m in displayed_matches]
         
         description = f"**Active Matches:** {match_count}\n" + "\n".join(match_lines)
         
         # Add "... and X more" if truncated
-        if match_list_count > 20:
-            description += f"\n_... and {match_list_count - 20} more_"
+        if match_list_count > 25:
+            description += f"\n_... and {match_list_count - 25} more_"
         
         embed.description = description
     
