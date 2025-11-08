@@ -3,32 +3,59 @@
         {
             "code": "bw_terran",
             "name": "BW Terran",
-            "short_name": "T1"
+            "short_name": "T1",
+            "aliases": [
+                "스1 테란",
+                "SC1人类"
+            ]
         },
         {
             "code": "bw_zerg",
             "name": "BW Zerg",
-            "short_name": "Z1"
+            "short_name": "Z1",
+            "aliases": [
+                "스1 저그",
+                "SC1异虫"
+            ]
         },
         {
             "code": "bw_protoss",
             "name": "BW Protoss",
-            "short_name": "P1"
+            "short_name": "P1",
+            "aliases": [
+                "스1 토스",
+                "SC1星灵"
+            ]
         },
         {
             "code": "sc2_terran",
             "name": "SC2 Terran",
-            "short_name": "T2"
+            "short_name": "T2",
+            "aliases": [
+                "테란",
+                "人类",
+                "Терраны"
+            ]
         },
         {
             "code": "sc2_zerg",
             "name": "SC2 Zerg",
-            "short_name": "Z2"
+            "short_name": "Z2",
+            "aliases": [
+                "저그",
+                "异虫",
+                "Зерги"
+            ]
         },
         {
             "code": "sc2_protoss",
             "name": "SC2 Protoss",
-            "short_name": "P2"
+            "short_name": "P2",
+            "aliases": [
+                "토스",
+                "星灵",
+                "Протоссы"
+            ]
         }
     ]
 }

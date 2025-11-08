@@ -287,8 +287,8 @@ class ReplayDetailsEmbed:
         if all_ok:
             lines.append(
                 "✅ **Verification Complete:** All checks passed.\n"
-                "ℹ️ This embed is provided for informational purposes only. Please report the match result manually."
-                "🔓 Match reporting unlocked. Please report the match result using the dropdown menus above."
+                "ℹ️ This embed is provided for informational purposes only. Please report the match result manually.\n"
+                "🔓 Match reporting unlocked. Please report the match result **using the dropdown menus above.**"
             )
         elif critical_checks_failed:
             lines.append(
@@ -300,7 +300,7 @@ class ReplayDetailsEmbed:
             lines.append(
                 "⚠️ **Verification Issues:** One or more checks failed.\n"
                 "⚠️ Please review the issues above and ensure match parameters are correct for future games.\n"
-                "🔓 Match reporting unlocked. Please report the match result using the dropdown menus above."
+                "🔓 Match reporting unlocked. Please report the match result **using the dropdown menus above.**"
             )
         
         return "\n".join(lines)

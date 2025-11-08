@@ -609,18 +609,42 @@ class DataAccessService:
                 )
             
             elif job.job_type == WriteJobType.UPDATE_MMR:
-                # Use update_mmr_after_match for MMR updates
-                from functools import partial
-                update_func = partial(
-                    self._db_writer.update_mmr_after_match,
-                    job.data['discord_uid'],
-                    job.data['race'],
-                    int(job.data['new_mmr']),
-                    won=job.data.get('games_won') is not None,
-                    lost=job.data.get('games_lost') is not None,
-                    drawn=job.data.get('games_drawn') is not None
-                )
-                await loop.run_in_executor(None, update_func)
+                # Check if this is a full stats update or MMR-only update
+                if 'games_played' in job.data:
+                    # Full stats update (from match completion) - use create_or_update_mmr_1v1
+                    player_info = self.get_player_info(job.data['discord_uid'])
+                    player_name = player_info.get('player_name', f"Player{job.data['discord_uid']}") if player_info else f"Player{job.data['discord_uid']}"
+                    
+                    await loop.run_in_executor(
+                        None,
+                        self._db_writer.create_or_update_mmr_1v1,
+                        job.data['discord_uid'],
+                        player_name,
+                        job.data['race'],
+                        int(job.data['new_mmr']),
+                        job.data['games_played'],
+                        job.data['games_won'],
+                        job.data['games_lost'],
+                        job.data['games_drawn']
+                    )
+                else:
+                    # MMR-only update (from admin) - only update MMR, not game stats
+                    from src.backend.db.db_reader_writer import get_timestamp
+                    await loop.run_in_executor(
+                        None,
+                        self._db_writer.adapter.execute_write,
+                        """
+                        UPDATE mmrs_1v1
+                        SET mmr = :mmr, last_played = :last_played
+                        WHERE discord_uid = :discord_uid AND race = :race
+                        """,
+                        {
+                            'discord_uid': job.data['discord_uid'],
+                            'race': job.data['race'],
+                            'mmr': int(job.data['new_mmr']),
+                            'last_played': get_timestamp()
+                        }
+                    )
             
             elif job.job_type == WriteJobType.CREATE_MMR:
                 # Use create_or_update_mmr_1v1 for upserts
@@ -1349,89 +1373,99 @@ class DataAccessService:
         # Get current time
         now = datetime.now(timezone.utc)
         
-        # Define time periods
+        # Define time periods (in days)
         periods = {
-            '14d': now - timedelta(days=14),
-            '30d': now - timedelta(days=30),
-            '90d': now - timedelta(days=90)
+            '14d': 14,
+            '30d': 30,
+            '90d': 90
         }
         
-        # Process each time period
-        for period_key, cutoff in periods.items():
-            # Check if played_at is already datetime or needs parsing
-            played_at_dtype = self._matches_1v1_df.schema.get("played_at")
+        # Get ALL matches for this player (no time filtering - table is chronologically sorted)
+        # This avoids datetime parsing issues
+        player_matches = self._matches_1v1_df.filter(
+            (pl.col("player_1_discord_uid") == discord_uid) | 
+            (pl.col("player_2_discord_uid") == discord_uid)
+        )
+        
+        if len(player_matches) == 0:
+            return {}
+        
+        # Process each match and categorize by time period
+        for row in player_matches.iter_rows(named=True):
+            player_1_uid = row['player_1_discord_uid']
+            player_2_uid = row['player_2_discord_uid']
+            match_result = row.get('match_result')
+            played_at = row.get('played_at')
             
-            # Filter by time and player
-            # If played_at is already datetime, use it directly; otherwise parse from string
-            if played_at_dtype == pl.Datetime or str(played_at_dtype).startswith("Datetime"):
-                # Already a datetime column, use directly
-                period_matches = self._matches_1v1_df.filter(
-                    (pl.col("played_at") > cutoff) &
-                    ((pl.col("player_1_discord_uid") == discord_uid) | 
-                     (pl.col("player_2_discord_uid") == discord_uid))
-                )
-            else:
-                # String column, parse on-the-fly
-                period_matches = self._matches_1v1_df.with_columns(
-                    pl.col("played_at").str.to_datetime(strict=False).alias("played_at_dt")
-                ).filter(
-                    (pl.col("played_at_dt") > cutoff) &
-                    ((pl.col("player_1_discord_uid") == discord_uid) | 
-                     (pl.col("player_2_discord_uid") == discord_uid))
-                )
-            
-            if len(period_matches) == 0:
+            # Skip matches without valid result
+            if match_result is None or match_result < 0:
                 continue
             
-            # Process each match to calculate stats per race
-            for row in period_matches.iter_rows(named=True):
-                player_1_uid = row['player_1_discord_uid']
-                player_2_uid = row['player_2_discord_uid']
-                match_result = row.get('match_result')
-                
-                # Determine which player we are and get the race
-                if player_1_uid == discord_uid:
-                    race = row['player_1_race']
-                    # match_result: 1 = player 1 won, 2 = player 2 won, 0 = draw
-                    if match_result == 1:
-                        outcome = 'win'
-                    elif match_result == 2:
-                        outcome = 'loss'
-                    elif match_result == 0:
-                        outcome = 'draw'
+            # Determine match age (in days)
+            match_age_days = None
+            if played_at:
+                try:
+                    if isinstance(played_at, datetime):
+                        match_dt = played_at
+                    elif isinstance(played_at, (int, float)):
+                        match_dt = datetime.fromtimestamp(played_at, tz=timezone.utc)
                     else:
-                        continue  # Skip invalid results
+                        match_dt = datetime.fromisoformat(str(played_at).replace('Z', '+00:00').replace('+00', '+00:00'))
+                    
+                    if match_dt.tzinfo is None:
+                        match_dt = match_dt.replace(tzinfo=timezone.utc)
+                    
+                    match_age_days = (now - match_dt).days
+                except Exception:
+                    pass
+            
+            # Determine which player we are and get the race/outcome
+            if player_1_uid == discord_uid:
+                race = row['player_1_race']
+                # match_result: 1 = player 1 won, 2 = player 2 won, 0 = draw
+                if match_result == 1:
+                    outcome = 'win'
+                elif match_result == 2:
+                    outcome = 'loss'
+                elif match_result == 0:
+                    outcome = 'draw'
                 else:
-                    race = row['player_2_race']
-                    # match_result: 1 = player 1 won, 2 = player 2 won, 0 = draw
-                    if match_result == 2:
-                        outcome = 'win'
-                    elif match_result == 1:
-                        outcome = 'loss'
-                    elif match_result == 0:
-                        outcome = 'draw'
-                    else:
-                        continue  # Skip invalid results
-                
-                # Initialize race structure if not exists
-                if race not in stats:
-                    stats[race] = {}
-                if period_key not in stats[race]:
-                    stats[race][period_key] = {
-                        'wins': 0,
-                        'losses': 0,
-                        'draws': 0,
-                        'total': 0
-                    }
-                
-                # Update stats
-                stats[race][period_key]['total'] += 1
-                if outcome == 'win':
-                    stats[race][period_key]['wins'] += 1
-                elif outcome == 'loss':
-                    stats[race][period_key]['losses'] += 1
-                elif outcome == 'draw':
-                    stats[race][period_key]['draws'] += 1
+                    continue
+            else:
+                race = row['player_2_race']
+                # match_result: 1 = player 1 won, 2 = player 2 won, 0 = draw
+                if match_result == 2:
+                    outcome = 'win'
+                elif match_result == 1:
+                    outcome = 'loss'
+                elif match_result == 0:
+                    outcome = 'draw'
+                else:
+                    continue
+            
+            # Initialize race structure if not exists
+            if race not in stats:
+                stats[race] = {}
+            
+            # Update stats for each applicable time period
+            for period_key, period_days in periods.items():
+                # If we couldn't determine age, include in all periods (fail-safe)
+                if match_age_days is None or match_age_days <= period_days:
+                    if period_key not in stats[race]:
+                        stats[race][period_key] = {
+                            'wins': 0,
+                            'losses': 0,
+                            'draws': 0,
+                            'total': 0
+                        }
+                    
+                    stats[race][period_key]['total'] += 1
+                    if outcome == 'win':
+                        stats[race][period_key]['wins'] += 1
+                    elif outcome == 'loss':
+                        stats[race][period_key]['losses'] += 1
+                    elif outcome == 'draw':
+                        stats[race][period_key]['draws'] += 1
         
         # Ensure all races have all periods (fill with zeros if missing)
         all_races = list(stats.keys())
@@ -2725,16 +2759,28 @@ class DataAccessService:
         """
         Update the MMR change for a match.
         
-        Queues async database write for match MMR change.
+        Updates in-memory DataFrame immediately and queues async database write.
         
         Args:
             match_id: Match ID
             mmr_change: MMR change amount (positive = player 1 gained)
             
         Returns:
-            True if queued successfully
+            True if successfully updated in memory and queued
         """
         try:
+            # Update in-memory DataFrame immediately
+            import polars as pl
+            if self._matches_1v1_df is not None:
+                self._matches_1v1_df = self._matches_1v1_df.with_columns(
+                    pl.when(pl.col("id") == match_id)
+                      .then(pl.lit(mmr_change))
+                      .otherwise(pl.col("mmr_change"))
+                      .alias("mmr_change")
+                )
+                print(f"[DataAccessService] Updated mmr_change={mmr_change} in memory for match {match_id}")
+            
+            # Queue database write
             job = WriteJob(
                 job_type=WriteJobType.UPDATE_MATCH_MMR_CHANGE,
                 data={
