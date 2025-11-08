@@ -140,6 +140,41 @@ class MatchCompletionService:
             self.match_confirmations[match_id].add(player_discord_uid)
             self.logger.info(f"Player {player_discord_uid} confirmed match {match_id}")
             
+            # Notify the other player that their opponent confirmed
+            from src.backend.services.data_access_service import DataAccessService
+            from src.backend.services.process_pool_health import get_bot_instance
+            from src.bot.utils.message_helpers import queue_user_send
+            import discord
+            
+            data_service = DataAccessService()
+            match_data = data_service.get_match(match_id)
+            
+            if match_data:
+                # Determine which player is the opponent
+                player_1_uid = match_data['player_1_discord_uid']
+                player_2_uid = match_data['player_2_discord_uid']
+                
+                opponent_uid = player_2_uid if player_discord_uid == player_1_uid else player_1_uid
+                
+                # Get bot instance to fetch user
+                bot = get_bot_instance()
+                if bot:
+                    try:
+                        opponent_user = await bot.fetch_user(opponent_uid)
+                        
+                        # Create notification embed
+                        notification_embed = discord.Embed(
+                            title=f"Match #{match_id} - ✅ Your Opponent Confirmed The Match!",
+                            description=f"Your opponent, <@{player_discord_uid}>, confirmed the match!\nIt is safe to proceed with your lobby game.",
+                            color=discord.Color.green()
+                        )
+                        
+                        # Send via message queue (low priority, delayed delivery)
+                        await queue_user_send(opponent_user, embed=notification_embed)
+                        self.logger.info(f"Sent confirmation notification to player {opponent_uid} for match {match_id}")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to send confirmation notification to player {opponent_uid}: {e}")
+            
             # Cancel ALL reminder tasks for this match (both players)
             tasks_to_cancel = [
                 key for key in self.reminder_tasks.keys() 

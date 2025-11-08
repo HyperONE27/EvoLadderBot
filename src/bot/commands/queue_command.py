@@ -524,6 +524,13 @@ class QueueView(discord.ui.View):
             color=discord.Color.blue()
         )
         
+        # Add quick start guide link (impossible to miss)
+        embed.add_field(
+            name="⚠️ NEW PLAYERS START HERE ⚠️",
+            value="**QUICK START GUIDE:** https://rentry.co/evoladderbot-quickstartguide\n\nRead this before your first match!",
+            inline=False
+        )
+        
         # Add race selection info
         selected_codes = self.get_selected_race_codes()
         if selected_codes:
@@ -1229,7 +1236,7 @@ class MatchFoundView(discord.ui.View):
         
         # Player Information section
         embed.add_field(
-            name="**👥 Player Information:**",
+            name="**👥 Player and Contact Information:**",
             value=f"{p1_info_line}\n{p2_info_line}",
             inline=False
         )

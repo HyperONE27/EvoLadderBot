@@ -227,7 +227,7 @@
 - ❌ Use `matches_1v1` table for W-L-D records instead of the less reliable `mmrs_1v1`
   - ❌ `/profile` and `/admin player` total W-L-D looks wrong
   - ✅ `mmrs_1v1` table game counts periodically synchronize using `matches_1v1` table as truth
-- ⏰ Add something to let people know their opponent confirmed a match
+- ✅ Add something to let people know their opponent confirmed a match
 - ✅ Shorten the Confirm Match/Abort Match timer
 - ⏰ ADD REMINDERS TO CONFIRM AND UPLOAD REPLAYS
 - ✅ Fix leaderboard `player_name` field
