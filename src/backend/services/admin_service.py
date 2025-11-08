@@ -335,16 +335,17 @@ class AdminService:
         Returns:
             Dict with all player state information including basic info, enriched MMRs,
             queue status, active matches, and recent match history. All data is ready
-            for display (names resolved, ranks calculated, etc.).
+            for display (names resolved, ranks calculated, etc.). Includes time_stats.
         """
         from src.backend.services.queue_service import get_queue_service
         from src.backend.services.app_context import (
-            countries_service, regions_service, races_service, ranking_service
+            countries_service, regions_service, races_service, ranking_service, user_info_service
         )
         
         queue_service = get_queue_service()
         
-        player_info = self.data_service.get_player_info(discord_uid)
+        # Get player info with time-stratified stats
+        player_info = user_info_service.get_player_with_time_stats(discord_uid)
         
         # Enrich player_info with display-ready data
         if player_info:

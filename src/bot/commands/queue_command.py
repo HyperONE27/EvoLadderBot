@@ -2582,20 +2582,20 @@ async def on_message(message: discord.Message, bot=None):
             
             if all_valid:
                 # All validations passed - unlock dropdowns
-        unix_epoch = int(time.time())
-        match_view.match_result.replay_uploaded = "Yes"
-        match_view.match_result.replay_upload_time = unix_epoch
-        
+                unix_epoch = int(time.time())
+                match_view.match_result.replay_uploaded = "Yes"
+                match_view.match_result.replay_upload_time = unix_epoch
+                
                 # Update the view for the player who uploaded the replay
-        match_view._update_dropdown_states()
-        
-        # FIX: Ensure abort button remains disabled if the confirmation window is closed
-        if match_view.confirmation_window_closed:
-            match_view.abort_button.disabled = True
-            
-        # Edit the original message using bot token (never expires!)
-        embed = match_view.get_embed()
-        await match_view._edit_original_message(embed, match_view)
+                match_view._update_dropdown_states()
+                
+                # FIX: Ensure abort button remains disabled if the confirmation window is closed
+                if match_view.confirmation_window_closed:
+                    match_view.abort_button.disabled = True
+                
+                # Edit the original message using bot token (never expires!)
+                embed = match_view.get_embed()
+                await match_view._edit_original_message(embed, match_view)
                 
                 print(f"✅ Replay verified and dropdowns unlocked for match {match_view.match_result.match_id}")
             else:
@@ -2604,7 +2604,7 @@ async def on_message(message: discord.Message, bot=None):
                 
                 # Re-lock dropdowns to handle case where valid replay was uploaded first
                 match_view._update_dropdown_states()
-        
+                
                 # Update the embed to show invalid status
                 embed = match_view.get_embed()
                 await match_view._edit_original_message(embed, match_view)

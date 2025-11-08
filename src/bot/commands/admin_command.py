@@ -413,6 +413,16 @@ def format_player_state(state: dict, discord_user: discord.User = None) -> disco
                     win_rate = (games_won / games_played * 100) if games_played > 0 else 0
                     bw_text += f" • {games_won}W-{games_lost}L-{games_drawn}D ({win_rate:.1f}%)\n"
                     
+                    # Add time-stratified stats if available
+                    if info.get('time_stats') and race_code in info['time_stats']:
+                        time_stats = info['time_stats'][race_code]
+                        for period in ['14d', '30d', '90d']:
+                            stats = time_stats.get(period, {'wins': 0, 'losses': 0, 'draws': 0, 'total': 0})
+                            w, l, d, total = stats['wins'], stats['losses'], stats['draws'], stats['total']
+                            wr = (w / total * 100) if total > 0 else 0.0
+                            period_label = {'14d': 'Last 14 days', '30d': 'Last 30 days', '90d': 'Last 90 days'}[period]
+                            bw_text += f"  - **{period_label}:** {w}W-{l}L-{d}D ({wr:.1f}%)\n"
+                    
                     last_played_dt = mmr_entry.get('last_played')
                     if last_played_dt:
                         if last_played_dt.tzinfo is None:
@@ -449,6 +459,16 @@ def format_player_state(state: dict, discord_user: discord.User = None) -> disco
                     sc2_text += f"- {rank_emote} {race_emote} **{race_name}:** {mmr_value} MMR"
                     win_rate = (games_won / games_played * 100) if games_played > 0 else 0
                     sc2_text += f" • {games_won}W-{games_lost}L-{games_drawn}D ({win_rate:.1f}%)\n"
+                    
+                    # Add time-stratified stats if available
+                    if info.get('time_stats') and race_code in info['time_stats']:
+                        time_stats = info['time_stats'][race_code]
+                        for period in ['14d', '30d', '90d']:
+                            stats = time_stats.get(period, {'wins': 0, 'losses': 0, 'draws': 0, 'total': 0})
+                            w, l, d, total = stats['wins'], stats['losses'], stats['draws'], stats['total']
+                            wr = (w / total * 100) if total > 0 else 0.0
+                            period_label = {'14d': 'Last 14 days', '30d': 'Last 30 days', '90d': 'Last 90 days'}[period]
+                            sc2_text += f"  - **{period_label}:** {w}W-{l}L-{d}D ({wr:.1f}%)\n"
                     
                     last_played_dt = mmr_entry.get('last_played')
                     if last_played_dt:

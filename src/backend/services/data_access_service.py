@@ -1320,6 +1320,133 @@ class DataAccessService:
         
         return mmrs
     
+    def get_player_time_stratified_stats(self, discord_uid: int) -> Dict[str, Dict[str, Dict]]:
+        """
+        Get time-stratified win/loss/draw stats for a player across all races.
+        
+        Args:
+            discord_uid: Discord user ID
+            
+        Returns:
+            Dict mapping race code to time period stats:
+            {
+                'sc2_terran': {
+                    '14d': {'wins': 5, 'losses': 2, 'draws': 1, 'total': 8},
+                    '30d': {'wins': 12, 'losses': 8, 'draws': 2, 'total': 22},
+                    '90d': {'wins': 25, 'losses': 20, 'draws': 3, 'total': 48}
+                },
+                'sc2_zerg': { ... }
+            }
+        """
+        from datetime import datetime, timedelta, timezone
+        
+        if self._matches_1v1_df is None or len(self._matches_1v1_df) == 0:
+            return {}
+        
+        # Initialize result structure
+        stats = {}
+        
+        # Get current time
+        now = datetime.now(timezone.utc)
+        
+        # Define time periods
+        periods = {
+            '14d': now - timedelta(days=14),
+            '30d': now - timedelta(days=30),
+            '90d': now - timedelta(days=90)
+        }
+        
+        # Process each time period
+        for period_key, cutoff in periods.items():
+            # Check if played_at is already datetime or needs parsing
+            played_at_dtype = self._matches_1v1_df.schema.get("played_at")
+            
+            # Filter by time and player
+            # If played_at is already datetime, use it directly; otherwise parse from string
+            if played_at_dtype == pl.Datetime or str(played_at_dtype).startswith("Datetime"):
+                # Already a datetime column, use directly
+                period_matches = self._matches_1v1_df.filter(
+                    (pl.col("played_at") > cutoff) &
+                    ((pl.col("player_1_discord_uid") == discord_uid) | 
+                     (pl.col("player_2_discord_uid") == discord_uid))
+                )
+            else:
+                # String column, parse on-the-fly
+                period_matches = self._matches_1v1_df.with_columns(
+                    pl.col("played_at").str.to_datetime(strict=False).alias("played_at_dt")
+                ).filter(
+                    (pl.col("played_at_dt") > cutoff) &
+                    ((pl.col("player_1_discord_uid") == discord_uid) | 
+                     (pl.col("player_2_discord_uid") == discord_uid))
+                )
+            
+            if len(period_matches) == 0:
+                continue
+            
+            # Process each match to calculate stats per race
+            for row in period_matches.iter_rows(named=True):
+                player_1_uid = row['player_1_discord_uid']
+                player_2_uid = row['player_2_discord_uid']
+                match_result = row.get('match_result')
+                
+                # Determine which player we are and get the race
+                if player_1_uid == discord_uid:
+                    race = row['player_1_race']
+                    # match_result: 1 = player 1 won, 2 = player 2 won, 0 = draw
+                    if match_result == 1:
+                        outcome = 'win'
+                    elif match_result == 2:
+                        outcome = 'loss'
+                    elif match_result == 0:
+                        outcome = 'draw'
+                    else:
+                        continue  # Skip invalid results
+                else:
+                    race = row['player_2_race']
+                    # match_result: 1 = player 1 won, 2 = player 2 won, 0 = draw
+                    if match_result == 2:
+                        outcome = 'win'
+                    elif match_result == 1:
+                        outcome = 'loss'
+                    elif match_result == 0:
+                        outcome = 'draw'
+                    else:
+                        continue  # Skip invalid results
+                
+                # Initialize race structure if not exists
+                if race not in stats:
+                    stats[race] = {}
+                if period_key not in stats[race]:
+                    stats[race][period_key] = {
+                        'wins': 0,
+                        'losses': 0,
+                        'draws': 0,
+                        'total': 0
+                    }
+                
+                # Update stats
+                stats[race][period_key]['total'] += 1
+                if outcome == 'win':
+                    stats[race][period_key]['wins'] += 1
+                elif outcome == 'loss':
+                    stats[race][period_key]['losses'] += 1
+                elif outcome == 'draw':
+                    stats[race][period_key]['draws'] += 1
+        
+        # Ensure all races have all periods (fill with zeros if missing)
+        all_races = list(stats.keys())
+        for race in all_races:
+            for period_key in ['14d', '30d', '90d']:
+                if period_key not in stats[race]:
+                    stats[race][period_key] = {
+                        'wins': 0,
+                        'losses': 0,
+                        'draws': 0,
+                        'total': 0
+                    }
+        
+        return stats
+    
     def get_leaderboard_dataframe(self) -> Optional[pl.DataFrame]:
         """
         Get the leaderboard DataFrame with joined player and MMR data.

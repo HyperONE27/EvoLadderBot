@@ -121,6 +121,27 @@ class UserInfoService:
         """
         return self.data_service.get_player_info(discord_uid)
     
+    def get_player_with_time_stats(self, discord_uid: int) -> Optional[Dict[str, Any]]:
+        """
+        Get player info with time-stratified stats merged in.
+        
+        Args:
+            discord_uid: Discord user ID
+            
+        Returns:
+            Player data with additional 'time_stats' key containing
+            the time-stratified win/loss/draw data per race, or None if player not found.
+        """
+        player_data = self.get_player(discord_uid)
+        if not player_data:
+            return None
+        
+        # Get time-stratified stats from data access service
+        time_stats = self.data_service.get_player_time_stratified_stats(discord_uid)
+        player_data['time_stats'] = time_stats
+        
+        return player_data
+    
     def player_exists(self, discord_uid: int) -> bool:
         """
         Check if a player exists.

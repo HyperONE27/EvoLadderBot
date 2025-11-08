@@ -175,21 +175,21 @@
 - ❌ Make admin commands DM-only???
 - ✅ Actually, do send all match results to a dedicated channel
 - ✅ Add the bot to the official server
-- ⏰ Test and tidy up every command (DO LAST)
+- ✅ Test and tidy up every command (DO LAST)
   - ❌ /help
     - ✅ Unregistered for now
   - ✅ /leaderboard
-  - ⏰ /profile
+  - ✅ /profile
   - ✅ /queue
   - ✅ /setcountry
   - ✅ /setup
   - ✅ /termsofservice
   - ✅ /admin adjust_mmr
   - ✅ /admin ban
-  - ⏰ /admin snapshot
+  - ✅ /admin snapshot
   - ✅ /admin clear_queue
-  - ⏰ /admin match
-  - ⏰ /admin player
+  - ✅ /admin match
+  - ✅ /admin player
   - ✅ /admin resolve
   - ✅ /admin remove_queue
   - ✅ /admin reset_aborts

@@ -135,8 +135,8 @@ class MatchCompletionService:
             ]
             for task_key in tasks_to_cancel:
                 reminder_task = self.reminder_tasks.pop(task_key, None)
-            if reminder_task and not reminder_task.done():
-                reminder_task.cancel()
+                if reminder_task and not reminder_task.done():
+                    reminder_task.cancel()
                     self.logger.info(f"Cancelled confirmation reminder for match {match_id}, player {task_key[1]}")
             
             # Check if both players have confirmed

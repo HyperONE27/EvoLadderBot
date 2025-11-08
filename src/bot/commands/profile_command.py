@@ -35,9 +35,9 @@ async def profile_command(interaction: discord.Interaction):
         await send_ephemeral_response(interaction, embed=error_embed, view=error_view)
         return
     
-    # Get player data
+    # Get player data with time-stratified stats
     flow.checkpoint("fetch_player_data_start")
-    player_data = user_info_service.get_player(interaction.user.id)
+    player_data = user_info_service.get_player_with_time_stats(interaction.user.id)
     if not player_data:
         flow.complete("player_not_found")
         error_embed = discord.Embed(
@@ -245,6 +245,16 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
                     # Win/Loss record
                     win_rate = (games_won / games_played * 100) if games_played > 0 else 0
                     bw_text += f" • {games_won}W-{games_lost}L-{games_drawn}D ({win_rate:.1f}%)"
+                    
+                    # Add time-stratified stats if available
+                    if player_data.get('time_stats') and race_code in player_data['time_stats']:
+                        time_stats = player_data['time_stats'][race_code]
+                        for period in ['14d', '30d', '90d']:
+                            stats = time_stats.get(period, {'wins': 0, 'losses': 0, 'draws': 0, 'total': 0})
+                            w, l, d, total = stats['wins'], stats['losses'], stats['draws'], stats['total']
+                            wr = (w / total * 100) if total > 0 else 0.0
+                            period_label = {'14d': 'Last 14 days', '30d': 'Last 30 days', '90d': 'Last 90 days'}[period]
+                            bw_text += f"\n  - **{period_label}:** {w}W-{l}L-{d}D ({wr:.1f}%)"
                 
                 # Add last played information if available
                 last_played_dt = mmr_entry.get('last_played')
@@ -291,6 +301,16 @@ def create_profile_embed(user: discord.User, player_data: dict, mmr_data: list) 
                     # Win/Loss record
                     win_rate = (games_won / games_played * 100) if games_played > 0 else 0
                     sc2_text += f" • {games_won}W-{games_lost}L-{games_drawn}D ({win_rate:.1f}%)"
+                    
+                    # Add time-stratified stats if available
+                    if player_data.get('time_stats') and race_code in player_data['time_stats']:
+                        time_stats = player_data['time_stats'][race_code]
+                        for period in ['14d', '30d', '90d']:
+                            stats = time_stats.get(period, {'wins': 0, 'losses': 0, 'draws': 0, 'total': 0})
+                            w, l, d, total = stats['wins'], stats['losses'], stats['draws'], stats['total']
+                            wr = (w / total * 100) if total > 0 else 0.0
+                            period_label = {'14d': 'Last 14 days', '30d': 'Last 30 days', '90d': 'Last 90 days'}[period]
+                            sc2_text += f"\n  - **{period_label}:** {w}W-{l}L-{d}D ({wr:.1f}%)"
 
                 # Add last played information if available
                 last_played_dt = mmr_entry.get('last_played')
