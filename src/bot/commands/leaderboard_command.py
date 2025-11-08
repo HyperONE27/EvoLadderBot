@@ -480,8 +480,8 @@ class LeaderboardView(discord.ui.View):
                     # Format rank with backticks and proper alignment (4 chars + period)
                     rank_padded = f"{player['rank']:>4d}"
                     
-                    # Format player name with padding to 12 chars (12 max)
-                    player_name = player['player_name']
+                    # Format player name: truncate to 12 chars, then pad to 12 chars
+                    player_name = player['player_name'][:12]
                     player_name_padded = f"{player_name:<12}"
                     
                     # Format MMR
