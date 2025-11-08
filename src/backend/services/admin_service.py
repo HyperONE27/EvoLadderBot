@@ -116,9 +116,17 @@ class AdminService:
             
             # Search in DataAccessService players
             if self.data_service._players_df is not None:
+                # First try discord_username
                 matches = self.data_service._players_df.filter(
                     pl.col('discord_username').str.to_lowercase() == username.lower()
                 )
+                
+                # If no match, try player_name field
+                if len(matches) == 0:
+                    matches = self.data_service._players_df.filter(
+                        pl.col('player_name').str.to_lowercase() == username.lower()
+                    )
+                
                 if len(matches) > 0:
                     discord_uid = matches[0, 'discord_uid']
         
@@ -156,13 +164,13 @@ class AdminService:
         queue_players_raw = self._get_queue_snapshot(queue_service) if queue_service else []
         queue_player_strings = [
             f"<@{p['discord_id']}> ({', '.join(p['races'])}) - {p['wait_time']:.0f}s"
-            for p in queue_players_raw[:10]  # Limit to 10 for display
+            for p in queue_players_raw[:40]  # Limit to 40 for display
         ]
         
         # Get active match details for display
         active_matches = list(match_completion_service.monitored_matches) if match_completion_service else []
         match_strings = []
-        for match_id in active_matches[:10]:  # Limit to 10 for display
+        for match_id in active_matches[:20]:  # Limit to 20 for display
             match_data = self.data_service.get_match(match_id)
             if match_data:
                 status = match_data.get('status')
@@ -170,7 +178,8 @@ class AdminService:
                 p2_name = self.data_service.get_player_info(match_data['player_2_discord_uid'])
                 p1_display = p1_name.get('player_name', 'Player1') if p1_name else 'Player1'
                 p2_display = p2_name.get('player_name', 'Player2') if p2_name else 'Player2'
-                match_strings.append(f"Match #{match_id}: {p1_display} vs {p2_display} ({status})")
+                map_name = match_data.get('map_name', 'Unknown')
+                match_strings.append(f"Match #{match_id}: {p1_display} vs {p2_display} @ {map_name} ({status})")
         
         return {
             'timestamp': datetime.now(timezone.utc).isoformat(),

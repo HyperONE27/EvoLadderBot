@@ -167,65 +167,108 @@ async def send_player_notification(discord_uid: int, embed: discord.Embed) -> bo
 
 # ========== FORMATTING UTILITIES ==========
 
-def format_system_snapshot(snapshot: dict) -> dict:
+def format_system_stats_embed(snapshot: dict) -> discord.Embed:
     """
-    Format system snapshot into structured embed fields.
+    Format system stats into an embed (Memory, DataFrames, Write Queue, Process Pool).
     
-    Returns dict with 'timestamp' and 'fields' list.
+    Returns discord.Embed with system stats only.
     """
-    fields = []
+    embed = discord.Embed(
+        title="🔍 Admin System Snapshot",
+        description=f"**Timestamp:** {snapshot['timestamp']}",
+        color=discord.Color.blue()
+    )
     
     # Memory field
     if 'error' in snapshot['memory']:
         memory_text = snapshot['memory']['error']
     else:
         memory_text = f"RSS: {snapshot['memory']['rss_mb']:.1f} MB\nUsage: {snapshot['memory']['percent']:.1f}%"
-    fields.append({'name': '💾 Memory', 'value': memory_text, 'inline': True})
+    embed.add_field(name='💾 Memory', value=memory_text, inline=True)
     
     # DataFrames field
     df_lines = []
     for df_name, df_stats in snapshot['data_frames'].items():
         df_lines.append(f"**{df_name}**: {df_stats['rows']:,} rows ({df_stats['size_mb']:.2f} MB)")
-    fields.append({'name': '📊 DataFrames', 'value': '\n'.join(df_lines), 'inline': False})
-    
-    # Queue field (with details)
-    queue_size = snapshot['queue']['size']
-    queue_text = f"**Players in Queue:** {queue_size}"
-    if queue_size > 0 and 'players' in snapshot['queue']:
-        # Add first few players
-        players = snapshot['queue'].get('players', [])[:5]
-        if players:
-            queue_text += "\n" + "\n".join([f"  • {p}" for p in players])
-            if len(snapshot['queue'].get('players', [])) > 5:
-                queue_text += f"\n  ... and {len(snapshot['queue']['players']) - 5} more"
-    fields.append({'name': '🎮 Queue Status', 'value': queue_text, 'inline': False})
-    
-    # Matches field (with details)
-    match_count = snapshot['matches']['active']
-    match_text = f"**Active Matches:** {match_count}"
-    if match_count > 0 and 'match_list' in snapshot['matches']:
-        # Add first few matches
-        matches = snapshot['matches'].get('match_list', [])[:5]
-        if matches:
-            match_text += "\n" + "\n".join([f"  • {m}" for m in matches])
-            if len(snapshot['matches'].get('match_list', [])) > 5:
-                match_text += f"\n  ... and {len(snapshot['matches']['match_list']) - 5} more"
-    fields.append({'name': '⚔️ Active Matches', 'value': match_text, 'inline': False})
+    embed.add_field(name='📊 DataFrames', value='\n'.join(df_lines), inline=False)
     
     # Write Queue field
     wq = snapshot['write_queue']
     success_rate = (wq['total_completed'] / wq['total_queued'] * 100) if wq['total_queued'] > 0 else 100.0
     wq_text = f"Depth: {wq['depth']}\nCompleted: {wq['total_completed']}\nSuccess: {success_rate:.1f}%"
-    fields.append({'name': '📝 Write Queue', 'value': wq_text, 'inline': True})
+    embed.add_field(name='📝 Write Queue', value=wq_text, inline=True)
     
     # Process Pool field
     pp_text = f"Workers: {snapshot['process_pool'].get('workers', 0)}\nRestarts: {snapshot['process_pool'].get('restart_count', 0)}"
-    fields.append({'name': '⚙️ Process Pool', 'value': pp_text, 'inline': True})
+    embed.add_field(name='⚙️ Process Pool', value=pp_text, inline=True)
     
-    return {
-        'timestamp': snapshot['timestamp'],
-        'fields': fields
-    }
+    return embed
+
+
+def format_queue_embed(snapshot: dict) -> discord.Embed:
+    """
+    Format queue players into a separate embed with description (not fields).
+    
+    Returns discord.Embed showing up to 40 players in queue.
+    """
+    queue_size = snapshot['queue']['size']
+    embed = discord.Embed(
+        title="🎮 Queue Status",
+        color=discord.Color.green()
+    )
+    
+    if queue_size == 0:
+        embed.description = "No players currently in queue."
+    else:
+        players = snapshot['queue'].get('players', [])
+        player_count = len(players)
+        
+        # Show up to 40 players
+        displayed_players = players[:40]
+        player_lines = [f"  • {p}" for p in displayed_players]
+        
+        description = f"**Players in Queue:** {queue_size}\n" + "\n".join(player_lines)
+        
+        # Add "... and X more" if truncated
+        if player_count > 40:
+            description += f"\n_... and {player_count - 40} more_"
+        
+        embed.description = description
+    
+    return embed
+
+
+def format_matches_embed(snapshot: dict) -> discord.Embed:
+    """
+    Format active matches into a separate embed with description (not fields).
+    
+    Returns discord.Embed showing up to 20 active matches.
+    """
+    match_count = snapshot['matches']['active']
+    embed = discord.Embed(
+        title="⚔️ Active Matches",
+        color=discord.Color.orange()
+    )
+    
+    if match_count == 0:
+        embed.description = "No active matches."
+    else:
+        matches = snapshot['matches'].get('match_list', [])
+        match_list_count = len(matches)
+        
+        # Show up to 20 matches
+        displayed_matches = matches[:20]
+        match_lines = [f"  • {m}" for m in displayed_matches]
+        
+        description = f"**Active Matches:** {match_count}\n" + "\n".join(match_lines)
+        
+        # Add "... and X more" if truncated
+        if match_list_count > 20:
+            description += f"\n_... and {match_list_count - 20} more_"
+        
+        embed.description = description
+    
+    return embed
 
 
 def format_conflict_match(conflict: dict) -> str:
@@ -801,28 +844,19 @@ def register_admin_commands(tree: app_commands.CommandTree):
         await queue_interaction_defer(interaction)
         
         snapshot = admin_service.get_system_snapshot()
-        formatted = format_system_snapshot(snapshot)
         
-        embed = discord.Embed(
-            title="🔍 Admin System Snapshot",
-            description=f"**Timestamp:** {formatted['timestamp']}",
-            color=discord.Color.blue()
-        )
-        
-        # Add all fields
-        for field in formatted['fields']:
-            embed.add_field(
-                name=field['name'],
-                value=field['value'],
-                inline=field.get('inline', False)
-            )
+        # Create 3 separate embeds
+        embed_stats = format_system_stats_embed(snapshot)
+        embed_queue = format_queue_embed(snapshot)
+        embed_matches = format_matches_embed(snapshot)
         
         # Create dismiss view for this informational command
         view = AdminDismissView()
         view.set_admin(interaction.user.id)
         view.set_interaction(interaction)
         
-        await queue_followup(interaction, embed=embed, view=view)
+        # Send all 3 embeds
+        await queue_followup(interaction, embeds=[embed_stats, embed_queue, embed_matches], view=view)
     
     @admin_group.command(name="player", description="[Admin] View player state")
     @app_commands.describe(user="Player's @mention, username, or Discord ID")

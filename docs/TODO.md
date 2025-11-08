@@ -217,15 +217,20 @@
 - ⏰ Add an image explaining that you need to upload a replay
 - ⏰ Add an image explaining how to report once you upload a replay
 - ⏰ Display BattleTag and Discord UID (via mention) in MatchFoundViewEmbed so players can reach out to each other
-- ⏰ Fix `/admin match` not showing replay embeds
-- ⏰ Fix `/admin snapshot` not showing enough players
+- ❓ Fix `/admin match` not showing replay embeds
+- ⏰ Fix `/admin snapshot` not showing enough players queueing and matches (gets truncated at too low of a number)
+- ⏰ Fix `/admin snapshot` so it triple-backtick (code block) escapes players queueing and matches in-progress, and do it separately
+- ⏰ Fix `/admin snapshot` showing {p1_name} vs {p2_name} (None) (is this supposed to be a map???)
 - ⏰ Fix `/admin` commands not being able to use `player_name` instead of `@mention`, `discord_username`, or `discord_uid`
-- ⏰ `/profile` and `/admin player` total W-L-D looks wrong
+  - ⏰ Implement a helper method that all `/admin` commands needing a player input can use
+- ❌ Use `matches_1v1` table for W-L-D records instead of the less reliable `mmrs_1v1`
+  - ❌ `/profile` and `/admin player` total W-L-D looks wrong
+  - ✅ `mmrs_1v1` table game counts periodically synchronize using `matches_1v1` table as truth
 - ⏰ Add something to let people know their opponent confirmed a match
 - ⏰ Shorten the Confirm Match/Abort Match timer
 - ⏰ ADD REMINDERS TO CONFIRM AND UPLOAD REPLAYS
 - ✅ Fix leaderboard `player_name` field
-- ⏰ Use `matches_1v1` table for W-L-D records instead of the less reliable `mmrs_1v1`
+- ✅ Fix a million memory leaks(?)
 - ⏰ Write up announcement explaining fixes
 - ⏰ Write up announcement asking for Korean/Simplified Chinese/Spanish admins
 
