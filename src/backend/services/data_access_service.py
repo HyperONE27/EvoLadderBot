@@ -613,7 +613,20 @@ class DataAccessService:
                 if 'games_played' in job.data:
                     # Full stats update (from match completion) - use create_or_update_mmr_1v1
                     player_info = self.get_player_info(job.data['discord_uid'])
-                    player_name = player_info.get('player_name', f"Player{job.data['discord_uid']}") if player_info else f"Player{job.data['discord_uid']}"
+                    if not player_info or not player_info.get('player_name'):
+                        # Fallback to database if in-memory lookup fails
+                        db_result = await loop.run_in_executor(
+                            None,
+                            self._db_reader.adapter.execute_query,
+                            "SELECT player_name FROM players WHERE discord_uid = :discord_uid",
+                            {'discord_uid': job.data['discord_uid']}
+                        )
+                        if db_result and len(db_result) > 0:
+                            player_name = db_result[0]['player_name']
+                        else:
+                            raise ValueError(f"Player {job.data['discord_uid']} not found in database or in-memory cache")
+                    else:
+                        player_name = player_info.get('player_name')
                     
                     await loop.run_in_executor(
                         None,
