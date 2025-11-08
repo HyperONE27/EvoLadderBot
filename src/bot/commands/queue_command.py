@@ -355,12 +355,19 @@ class JoinQueueButton(discord.ui.Button):
         await self.view.persist_preferences()
         
         flow.checkpoint("create_queue_preferences")
+        # Get actual player name from database
+        from src.backend.services.app_context import data_access_service
+        player_info = data_access_service.get_player_info(user_id)
+        display_name = "Player" + str(user_id)  # Default fallback
+        if player_info:
+            display_name = player_info.get('player_name') or player_info.get('discord_username') or display_name
+        
         # Create queue preferences
         preferences = QueuePreferences(
             selected_races=self.view.get_selected_race_codes(),
             vetoed_maps=self.view.vetoed_maps,
             discord_user_id=user_id,
-            user_id="Player" + str(user_id)  # TODO: Get actual user ID from database
+            user_id=display_name
         )
         
         flow.checkpoint("create_player_object")
@@ -871,6 +878,13 @@ class QueueSearchingView(discord.ui.View):
         """Store the interaction so we can update the message later"""
         self.last_interaction = interaction
 
+    def _cleanup(self):
+        """Stop the view and remove it from the global map to prevent memory leaks."""
+        self.stop()
+        if self.channel and self.channel.id in channel_to_match_view_map:
+            print(f"[MatchFoundView] Cleaning up view for channel {self.channel.id}")
+            del channel_to_match_view_map[self.channel.id]
+            
 
 class CancelQueueButton(discord.ui.Button):
     """Cancel button to exit the queue and return to original view"""
@@ -1016,6 +1030,16 @@ class MatchFoundView(discord.ui.View):
 
         # Update dropdown states based on initial data
         self._update_dropdown_states()
+
+    def __repr__(self) -> str:
+        return f"<MatchFoundView match_id={self.match_result.match_id}>"
+
+    def _cleanup(self):
+        """Stop the view and remove it from the global map to prevent memory leaks."""
+        self.stop()
+        if self.channel and self.channel.id in channel_to_match_view_map:
+            print(f"[MatchFoundView] Cleaning up view for channel {self.channel.id}")
+            del channel_to_match_view_map[self.channel.id]
     
     async def _edit_original_message(self, embed: discord.Embed, view: discord.ui.View = None) -> bool:
         """
@@ -1139,7 +1163,7 @@ class MatchFoundView(discord.ui.View):
         print(f"  [MatchEmbed PERF] Match data lookup: {(checkpoint6-checkpoint5)*1000:.2f}ms")
         
         # Create title with new format: rank, flag, race, name, MMR
-        title = f"Match #{self.match_result.match_id}:\n{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_display_name} ({p1_mmr}) vs {p2_rank_emote} {p2_flag} {p2_race_emote} {p2_display_name} ({p2_mmr})"
+        title = f"Match #{self.match_result.match_id}:\\n{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_display_name} ({p1_mmr}) vs {p2_rank_emote} {p2_flag} {p2_race_emote} {p2_display_name} ({p2_mmr})"
         
         # Get race names for display using races service
         p1_race_name = race_service.get_race_name(p1_race)
@@ -1159,7 +1183,7 @@ class MatchFoundView(discord.ui.View):
             if p1_info.get('alt_player_name_2'):
                 alt_ids_1.append(p1_info.get('alt_player_name_2'))
             if alt_ids_1:
-                p1_info_line += f"\n  - (a.k.a. {', '.join(alt_ids_1)})"
+                p1_info_line += f"\\n  - (a.k.a. {', '.join(alt_ids_1)})"
         if p2_info:
             alt_ids_2 = []
             if p2_info.get('alt_player_name_1'):
@@ -1167,7 +1191,7 @@ class MatchFoundView(discord.ui.View):
             if p2_info.get('alt_player_name_2'):
                 alt_ids_2.append(p2_info.get('alt_player_name_2'))
             if alt_ids_2:
-                p2_info_line += f"\n  - (a.k.a. {', '.join(alt_ids_2)})"
+                p2_info_line += f"\\n  - (a.k.a. {', '.join(alt_ids_2)})"
 
         embed = discord.Embed(
             title=title,
@@ -1175,12 +1199,12 @@ class MatchFoundView(discord.ui.View):
             color=discord.Color.teal()
         )
 
-        embed.add_field(name="\u3164", value="\u3164", inline=False)
+        embed.add_field(name="\\u3164", value="\\u3164", inline=False)
         
         # Player Information section
         embed.add_field(
             name="**👥 Player Information:**",
-            value=f"{p1_info_line}\n{p2_info_line}",
+            value=f"{p1_info_line}\\n{p2_info_line}",
             inline=False
         )
         
@@ -1230,11 +1254,11 @@ class MatchFoundView(discord.ui.View):
         embed.add_field(
             name="**🌐 Match Information and Settings:**",
             value=(
-                f"- Map: `{map_name}`\n"
-                f"  - Map Link: `{map_link_display}`\n"
-                f"  - Author: `{map_author}`\n"
-                f"- Mod: `{mod_name}`\n"
-                f"  - Mod Link: `{mod_link_display}`\n"
+                f"- Map: `{map_name}`\\n"
+                f"  - Map Link: `{map_link_display}`\\n"
+                f"  - Author: `{map_author}`\\n"
+                f"- Mod: `{mod_name}`\\n"
+                f"  - Mod Link: `{mod_link_display}`\\n"
                 f"  - Author: `{mod_author}`"
             ),
             inline=False
@@ -1243,8 +1267,8 @@ class MatchFoundView(discord.ui.View):
         embed.add_field(
             name="",
             value=(
-                f"- Server: `{server_display}`\n"
-                f"- In-Game Channel: `{self.match_result.in_game_channel}`\n"
+                f"- Server: `{server_display}`\\n"
+                f"- In-Game Channel: `{self.match_result.in_game_channel}`\\n"
                 f"- Locked Alliances: `{EXPECTED_LOCKED_ALLIANCES}`"
             ),
             inline=True
@@ -1253,8 +1277,8 @@ class MatchFoundView(discord.ui.View):
         embed.add_field(
             name="",
             value=(
-                f"- Game Privacy: `{EXPECTED_GAME_PRIVACY}`\n"
-                f"- Game Speed: `{EXPECTED_GAME_SPEED}`\n"
+                f"- Game Privacy: `{EXPECTED_GAME_PRIVACY}`\\n"
+                f"- Game Speed: `{EXPECTED_GAME_SPEED}`\\n"
                 f"- Game Duration: `{EXPECTED_GAME_DURATION}`"
             ),
             inline=True
@@ -1305,7 +1329,7 @@ class MatchFoundView(discord.ui.View):
         embed.add_field(
             name="**📊 Match Result:**",
             value= (
-                f"- Result: `{result_display}`\n"
+                f"- Result: `{result_display}`\\n"
                 f"{mmr_display}"
             ),
             inline=True
@@ -1313,7 +1337,7 @@ class MatchFoundView(discord.ui.View):
         
         # Replay section
         replay_status_value = (
-            f"- Replay Uploaded: `{self.match_result.replay_uploaded}`\n"
+            f"- Replay Uploaded: `{self.match_result.replay_uploaded}`\\n"
             f"- Replay Uploaded At: {format_discord_timestamp(self.match_result.replay_upload_time)}"
             if self.match_result.replay_uploaded == "Yes"
             else f"- Replay Uploaded: `{self.match_result.replay_uploaded}`"
@@ -1331,18 +1355,18 @@ class MatchFoundView(discord.ui.View):
         checkpoint8 = time.perf_counter()
         print(f"  [MatchEmbed PERF] Abort count lookup: {(checkpoint8-checkpoint7)*1000:.2f}ms")
         
-        embed.add_field(name="\u3164", value="\u3164", inline=False)
+        embed.add_field(name="\\u3164", value="\\u3164", inline=False)
 
         abort_validity_value = (
-            f"You can use the 🛑 **Abort Match** button if you are unable to play.\n"
-            f"Aborting matches has no MMR penalty, but you have a limited number per month.\n" 
+            f"You can use the 🛑 **Abort Match** button if you are unable to play.\\n"
+            f"Aborting matches has no MMR penalty, but you have a limited number per month.\\n" 
             f"**Abusing this feature (e.g., dodging matchups/opponents, repeatedly aborting at "
-            f"the last second, wasting the time of others, etc.) will result in a BAN.**\n"
+            f"the last second, wasting the time of others, etc.) will result in a BAN.**\\n"
             f"You can only abort the match before <t:{self.abort_deadline}:T> (<t:{self.abort_deadline}:R>)."
         )
         embed.add_field(name="**💨 Can't play? Need to leave? Abort the match!**", value=abort_validity_value, inline=False)
 
-        embed.add_field(name="\u3164", value="\u3164", inline=False)
+        embed.add_field(name="\\u3164", value="\\u3164", inline=False)
 
         embed.add_field(
             name="⚠️ YOU MUST CONFIRM THE MATCH BELOW, BEFORE IT STARTS! ⚠️",
@@ -1417,45 +1441,75 @@ class MatchFoundView(discord.ui.View):
             flow.checkpoint("send_final_embed_complete")
             
             # The view's work is done for a completed match
-            self.stop()
+            self._cleanup()
             flow.complete("success")
             
-        elif status == "abort":
-            print(f"📬 [DEBUG] Processing 'abort' status for match {self.match_result.match_id}")
-            flow.checkpoint("process_abort_status")
-            # Update the view's internal state to reflect the abort
-            self.match_result.match_result = "aborted"
-            self.match_result.match_result_confirmation_status = "Aborted"
-            print(f"📬 [DEBUG] Updated match_result to 'aborted' for match {self.match_result.match_id}")
-
-            flow.checkpoint("disable_components")
-            # Immediately disable all components to prevent further actions
-            self.disable_all_components()
-            print(f"📬 [DEBUG] Disabled all components for match {self.match_result.match_id}")
-
-            flow.checkpoint("update_abort_embed_start")
-            # Update the embed with the abort information using bot token (persistent)
-            async with self.edit_lock:
-                embed = self.get_embed()
-                await self._edit_original_message(embed, self)
-            print(f"📬 [DEBUG] Updated embed with abort info for match {self.match_result.match_id}")
-            flow.checkpoint("update_abort_embed_complete")
-
-            flow.checkpoint("send_abort_embed_start")
-            # Send a follow-up notification to ensure the user sees the final state
-            # Pass the report codes from the data payload
-            print(f"📬 [DEBUG] About to send abort notification embed for match {self.match_result.match_id}")
-            await self._send_abort_notification_embed(
-                p1_report=data.get('p1_report'),
-                p2_report=data.get('p2_report')
-            )
-            print(f"📬 [DEBUG] Abort notification embed sent for match {self.match_result.match_id}")
-            flow.checkpoint("send_abort_embed_complete")
-            
+        elif status == "aborted":
+            print(f"📬 [DEBUG] Processing 'aborted' status for match {self.match_result.match_id}")
             # The view's work is done for an aborted match
-            self.stop()
+            self.disable_all_components()
+            embed = self.get_embed()
+            async with self.edit_lock:
+                await self._edit_original_message(embed, self)
+            
+            self._cleanup()
+            flow.complete("success")
+        
+        elif status == "autocompleted_no_replay":
+            # Handle auto-completion due to no replay upload
+            print(f"📬 [DEBUG] Processing 'autocompleted_no_replay' for match {self.match_result.match_id}")
+            self.disable_all_components()
+            embed = self.get_embed()  # Embed will show "Aborted"
+            async with self.edit_lock:
+                await self._edit_original_message(embed, self)
+
+            # Send a follow-up embed explaining the auto-completion
+            follow_up_embed = discord.Embed(
+                title="Match Aborted (No Replay)",
+                description="This match was automatically aborted because no replay was uploaded within the time limit.",
+                color=discord.Color.orange()
+            )
+            await queue_channel_send(self.channel, embed=follow_up_embed)
+            
+            self._cleanup()
             flow.complete("success")
             
+        elif status == "autocompleted_inactivity":
+            # Handle auto-completion due to inactivity
+            print(f"📬 [DEBUG] Processing 'autocompleted_inactivity' for match {self.match_result.match_id}")
+            self.disable_all_components()
+            embed = self.get_embed()  # Embed will show "Aborted"
+            async with self.edit_lock:
+                await self._edit_original_message(embed, self)
+
+            follow_up_embed = discord.Embed(
+                title="Match Aborted (Inactivity)",
+                description="This match was automatically aborted because players did not confirm their results in time.",
+                color=discord.Color.orange()
+            )
+            await queue_channel_send(self.channel, embed=follow_up_embed)
+
+            self._cleanup()
+            flow.complete("success")
+
+        elif status == "autocompleted_mmr_thresh":
+             # Handle auto-completion due to MMR threshold being met
+            print(f"📬 [DEBUG] Processing 'autocompleted_mmr_thresh' for match {self.match_result.match_id}")
+            self.disable_all_components()
+            embed = self.get_embed()  # Embed will show "Aborted"
+            async with self.edit_lock:
+                await self._edit_original_message(embed, self)
+
+            follow_up_embed = discord.Embed(
+                title="Match Aborted (MMR Threshold)",
+                description="This match was automatically aborted because one of the players' MMR changed significantly, making the match unfair.",
+                color=discord.Color.orange()
+            )
+            await queue_channel_send(self.channel, embed=follow_up_embed)
+            
+            self._cleanup()
+            flow.complete("success")
+
         elif status == "conflict":
             print(f"📬 [DEBUG] Processing 'conflict' status for match {self.match_result.match_id}")
             flow.checkpoint("process_conflict_status")
@@ -1478,7 +1532,7 @@ class MatchFoundView(discord.ui.View):
             flow.checkpoint("send_conflict_embed_complete")
             
             # The view's work is done for a conflict
-            self.stop()
+            self._cleanup()
             flow.complete("success")
 
         elif status == "confirmation_timeout":
@@ -1499,344 +1553,41 @@ class MatchFoundView(discord.ui.View):
             print(f"📬 [DEBUG] 'confirmation_timeout' processing COMPLETE for match {self.match_result.match_id}")
             flow.complete("success")
             
-        # The view's work is done
-        self.stop()
+    async def on_timeout(self):
+        """Handle view timeout"""
+        # Note: Timeout logic is now primarily handled by MatchCompletionService
+        # This callback is a safety net.
+        print(f"⏰ Match view for match {self.match_result.match_id} timed out.")
         
-    async def _send_final_notification_embed(self, final_results: dict):
-        """Creates and sends the final gold embed notification."""
-        if not self.channel:
-            return
-
-        p1_info = final_results['p1_info']
-        p2_info = final_results['p2_info']
-        p1_name = final_results['p1_name']
-        p2_name = final_results['p2_name']
-
-        p1_flag = get_flag_emote(p1_info['country'])
-        p2_flag = get_flag_emote(p2_info['country'])
-        p1_race = final_results['p1_race']
-        p2_race = final_results['p2_race']
-        p1_race_emote = get_race_emote(p1_race)
-        p2_race_emote = get_race_emote(p2_race)
-
-        # Get rank emotes for both players
-        from src.backend.services.app_context import ranking_service
+        # Disable all components and edit the message
+        self.disable_all_components()
+        embed = self.get_embed()
+        async with self.edit_lock:
+            await self._edit_original_message(embed, self)
         
-        p1_rank = ranking_service.get_letter_rank(final_results['player_1_discord_uid'], p1_race)
-        p2_rank = ranking_service.get_letter_rank(final_results['player_2_discord_uid'], p2_race)
+        # Clean up from the global map
+        self._cleanup()
         
-        p1_rank_emote = get_rank_emote(p1_rank)
-        p2_rank_emote = get_rank_emote(p2_rank)
-
-        p1_current_mmr = final_results['p1_current_mmr']
-        p2_current_mmr = final_results['p2_current_mmr']
-        p1_mmr_change = final_results['p1_mmr_change']
-        p2_mmr_change = final_results['p2_mmr_change']
-        p1_new_mmr = p1_current_mmr + p1_mmr_change
-        p2_new_mmr = p2_current_mmr + p2_mmr_change
-
-        p1_mmr_rounded = mmr_service.round_mmr_change(p1_mmr_change)
-        p2_mmr_rounded = mmr_service.round_mmr_change(p2_mmr_change)
-
-        notification_embed = discord.Embed(
-            title=f"🏆 Match #{self.match_result.match_id} Result Finalized",
-            description=f"**{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_name} ({int(p1_current_mmr)} → {int(p1_new_mmr)})** vs **{p2_rank_emote} {p2_flag} {p2_race_emote} {p2_name} ({int(p2_current_mmr)} → {int(p2_new_mmr)})**",
-            color=discord.Color.gold()
-        )
-
-        p1_sign = "+" if p1_mmr_rounded >= 0 else ""
-        p2_sign = "+" if p2_mmr_rounded >= 0 else ""
-
-        # Build dynamic result field based on match outcome
-        match_result_raw = final_results['match_result_raw']
-        if match_result_raw == 1:
-            # Player 1 won
-            result_value = f"🏆 **{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_name}**"
-        elif match_result_raw == 2:
-            # Player 2 won
-            result_value = f"🏆 **{p2_rank_emote} {p2_flag} {p2_race_emote} {p2_name}**"
-        elif match_result_raw == 0:
-            # Draw
-            result_value = f"⚖️ **Draw**"
-        else:
-            # Aborted or Conflict
-            result_value = final_results['result_text']
-
-        notification_embed.add_field(name="", value="\u3164", inline=False)
-
-        notification_embed.add_field(
-            name="**Result:**",
-            value=result_value,
-            inline=True
-        )
-
-        notification_embed.add_field(
-            name="**MMR Changes:**",
-            value=f"- {p1_name}: `{p1_sign}{p1_mmr_rounded} ({int(p1_current_mmr)} → {int(p1_new_mmr)})`\n- {p2_name}: `{p2_sign}{p2_mmr_rounded} ({int(p2_current_mmr)} → {int(p2_new_mmr)})`",
-            inline=True
-        )
-        
-        try:
-            await queue_channel_send(self.channel, embed=notification_embed)
-        except discord.HTTPException as e:
-            print(f"Error sending final notification for match {self.match_result.match_id}: {e}")
-        
-        # Forward to admin channel (only from player 1's view to avoid duplication)
-        if self.is_player1:
-            from src.backend.services.app_context import admin_service
-            await admin_service.forward_match_completion_to_admin_channel(
-                notification_embed,
-                self.match_result.match_id
-            )
-
-    async def _send_conflict_notification_embed(self):
-        """Sends a rich follow-up message indicating a match conflict with full details."""
-        if not self.channel:
-            return
-        
-        # Get match data from DataAccessService (in-memory, instant)
-        from src.backend.services.data_access_service import DataAccessService
-        data_service = DataAccessService()
-        match_data = data_service.get_match(self.match_result.match_id)
-        if not match_data:
-            print(f"❌ [DEBUG] Match {self.match_result.match_id} not found in DataAccessService for conflict notification")
-            return
-        
-        p1_uid = match_data['player_1_discord_uid']
-        p2_uid = match_data['player_2_discord_uid']
-        p1_info = data_service.get_player_info(p1_uid)
-        p2_info = data_service.get_player_info(p2_uid)
-        
-        p1_name = p1_info.get('player_name') if p1_info else str(p1_uid)
-        p2_name = p2_info.get('player_name') if p2_info else str(p2_uid)
-        
-        p1_report = match_data.get("player_1_report")
-        p2_report = match_data.get("player_2_report")
-        
-        # Get visual elements
-        p1_flag = get_flag_emote(p1_info['country']) if p1_info else '🏳️'
-        p2_flag = get_flag_emote(p2_info['country']) if p2_info else '🏳️'
-        p1_race = match_data.get('player_1_race')
-        p2_race = match_data.get('player_2_race')
-        p1_race_emote = get_race_emote(p1_race)
-        p2_race_emote = get_race_emote(p2_race)
-        
-        # Get rank emotes for both players
-        from src.backend.services.app_context import ranking_service
-        
-        p1_rank = ranking_service.get_letter_rank(p1_uid, p1_race)
-        p2_rank = ranking_service.get_letter_rank(p2_uid, p2_race)
-        
-        p1_rank_emote = get_rank_emote(p1_rank)
-        p2_rank_emote = get_rank_emote(p2_rank)
-        
-        p1_current_mmr = match_data['player_1_mmr']
-        p2_current_mmr = match_data['player_2_mmr']
-        map_name = match_data.get('map_played')
-        
-        if not map_name:
-            print(f"⚠️ [WARNING] Match {self.match_result.match_id} has no map_played field in conflict embed")
-            map_name = 'Unknown'
-        
-        # Decode what each player reported
-        # Report codes: 1 = Player 1 won, 2 = Player 2 won, 0 = Draw, -3 = Abort, -4 = No response
-        def decode_report(report_code: int, p1_name: str, p2_name: str) -> str:
-            if report_code == 1:
-                return f"{p1_name} won"
-            elif report_code == 2:
-                return f"{p2_name} won"
-            elif report_code == 0:
-                return "Draw"
-            elif report_code == -3:
-                return "Abort"
-            elif report_code == -4:
-                return "No response"
-            else:
-                return f"Unknown ({report_code})"
-        
-        p1_reported = decode_report(p1_report, p1_name, p2_name) if p1_report is not None else "No response"
-        p2_reported = decode_report(p2_report, p1_name, p2_name) if p2_report is not None else "No response"
-        
-        conflict_embed = discord.Embed(
-            title=f"⚠️ Match #{self.match_result.match_id} Result Conflict",
-            description=f"**{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_name} ({int(p1_current_mmr)})** vs **{p2_rank_emote} {p2_flag} {p2_race_emote} {p2_name} ({int(p2_current_mmr)})**",
-            color=discord.Color.orange()
-        )
-        
-        conflict_embed.add_field(
-            name="**Map:**",
-            value=map_name,
-            inline=False
-        )
-        
-        conflict_embed.add_field(
-            name="**Reported Results:**",
-            value=f"- {p1_name}: **{p1_reported}**\n- {p2_name}: **{p2_reported}**",
-            inline=False
-        )
-        
-        conflict_embed.add_field(
-            name="**MMR Changes:**",
-            value=f"- {p1_name}: `+0 ({int(p1_current_mmr)})`\n- {p2_name}: `+0 ({int(p2_current_mmr)})`",
-            inline=False
-        )
-        
-        conflict_embed.add_field(
-            name="**Status:**",
-            value="⚠️ The reported results do not agree. **No MMR changes have been applied.**\n\nLadder staff have been alerted of this conflict. Please contact them to resolve this dispute.",
-            inline=False
-        )
-        
-        try:
-            await queue_channel_send(self.channel, embed=conflict_embed)
-        except discord.HTTPException as e:
-            print(f"Error sending conflict notification for match {self.match_result.match_id}: {e}")
-        
-        # Forward to admin channel (only from player 1's view to avoid duplication)
-        if self.is_player1:
-            from src.backend.services.app_context import admin_service
-            await admin_service.forward_match_completion_to_admin_channel(
-                conflict_embed,
-                self.match_result.match_id,
-                content="<@&1432573890898559036>"  # Mention ladder staff role
-            )
-
-    async def _send_abort_notification_embed(self, p1_report: Optional[int] = None, p2_report: Optional[int] = None):
-        """
-        Sends a follow-up message indicating the match was aborted.
-        
-        Args:
-            p1_report: Player 1's report code (optional, will be fetched if not provided)
-            p2_report: Player 2's report code (optional, will be fetched if not provided)
-        """
-        print(f"📨 [DEBUG] _send_abort_notification_embed START for match {self.match_result.match_id}, p1_report={p1_report}, p2_report={p2_report}")
-        if not self.channel:
-            print(f"❌ [DEBUG] No channel available, cannot send abort notification for match {self.match_result.match_id}")
-            return
-
-        # Get match data from DataAccessService (in-memory, instant)
-        from src.backend.services.data_access_service import DataAccessService
-        data_service = DataAccessService()
-        match_data = data_service.get_match(self.match_result.match_id)
-        if not match_data:
-            print(f"❌ [DEBUG] Match {self.match_result.match_id} not found in DataAccessService")
-            raise ValueError(f"[MatchFoundView] Match {self.match_result.match_id} not found in DataAccessService memory")
-
-        print(f"📨 [DEBUG] Got match data for match {self.match_result.match_id}")
-
-        p1_info = data_service.get_player_info(match_data['player_1_discord_uid'])
-        p2_info = data_service.get_player_info(match_data['player_2_discord_uid'])
-
-        p1_name = p1_info.get('player_name') if p1_info else str(match_data['player_1_discord_uid'])
-        p2_name = p2_info.get('player_name') if p2_info else str(match_data['player_2_discord_uid'])
-
-        # Use provided report codes or fetch from match data
-        if p1_report is None:
-            p1_report = match_data.get("player_1_report")
-        if p2_report is None:
-            p2_report = match_data.get("player_2_report")
-
-        print(f"📨 [DEBUG] Report codes (final): p1={p1_report}, p2={p2_report}")
-
-        aborted_by = "Unknown"
-        reason = "The match was aborted. No MMR changes were applied."
-        is_automatic_abandon = False
-
-        # Determine the specific abort reason based on report codes
-        # Report code -4 = no confirmation (automatic abandon)
-        # Report code -3 = manual abort by player
-        if p1_report == -4 and p2_report == -4:
-            aborted_by = "System"
-            reason = "The match was automatically abandoned because neither player confirmed in time."
-            is_automatic_abandon = True
-        elif p1_report == -4 and p2_report is None:
-            aborted_by = "System"
-            reason = f"The match was automatically abandoned because **{p1_name}** did not confirm in time."
-            is_automatic_abandon = True
-        elif p2_report == -4 and p1_report is None:
-            aborted_by = "System"
-            reason = f"The match was automatically abandoned because **{p2_name}** did not confirm in time."
-            is_automatic_abandon = True
-        elif p1_report == -4:
-            aborted_by = "System"
-            reason = f"The match was automatically abandoned because **{p1_name}** did not confirm in time."
-            is_automatic_abandon = True
-        elif p2_report == -4:
-            aborted_by = "System"
-            reason = f"The match was automatically abandoned because **{p2_name}** did not confirm in time."
-            is_automatic_abandon = True
-        elif p1_report == -3:
-            aborted_by = p1_name
-            reason = f"The match was aborted by **{aborted_by}**. No MMR changes were applied."
-        elif p2_report == -3:
-            aborted_by = p2_name
-            reason = f"The match was aborted by **{aborted_by}**. No MMR changes were applied."
-
-        print(f"📨 [DEBUG] Abort reason determined: {reason}")
-            
-        p1_flag = get_flag_emote(p1_info['country']) if p1_info else '🏳️'
-        p2_flag = get_flag_emote(p2_info['country']) if p2_info else '🏳️'
-        p1_race = match_data.get('player_1_race')
-        p2_race = match_data.get('player_2_race')
-        p1_race_emote = get_race_emote(p1_race)
-        p2_race_emote = get_race_emote(p2_race)
-
-        # Get rank emotes for both players
-        from src.backend.services.app_context import ranking_service
-        
-        p1_rank = ranking_service.get_letter_rank(match_data['player_1_discord_uid'], p1_race)
-        p2_rank = ranking_service.get_letter_rank(match_data['player_2_discord_uid'], p2_race)
-        
-        p1_rank_emote = get_rank_emote(p1_rank)
-        p2_rank_emote = get_rank_emote(p2_rank)
-
-        p1_current_mmr = match_data['player_1_mmr']
-        p2_current_mmr = match_data['player_2_mmr']
-
-        # Use "Abandoned" for automatic abandons, "Aborted" for manual aborts
-        title_action = "Abandoned" if is_automatic_abandon else "Aborted"
-        abort_embed = discord.Embed(
-            title=f"🛑 Match #{self.match_result.match_id} {title_action}",
-            description=f"**{p1_rank_emote} {p1_flag} {p1_race_emote} {p1_name} ({int(p1_current_mmr)})** vs **{p2_rank_emote} {p2_flag} {p2_race_emote} {p2_name} ({int(p2_current_mmr)})**",
-            color=discord.Color.red()
-        )
-
-        abort_embed.add_field(
-            name="**MMR Changes:**",
-            value=f"- {p1_name}: `+0 ({int(p1_current_mmr)})`\n- {p2_name}: `+0 ({int(p2_current_mmr)})`",
-            inline=False
-        )
-        
-        abort_embed.add_field(
-            name="**Reason:**",
-            value=reason,
-            inline=False
-        )
-
-        try:
-            print(f"📨 [DEBUG] Sending abort embed to channel for match {self.match_result.match_id}")
-            await queue_channel_send(self.channel, embed=abort_embed)
-            print(f"✅ [DEBUG] Abort notification embed successfully sent for match {self.match_result.match_id}")
-        except discord.HTTPException as e:
-            print(f"❌ [DEBUG] Error sending abort notification for match {self.match_result.match_id}: {e}")
-            print(f"Error sending abort notification for match {self.match_result.match_id}: {e}")
-        
-        # Forward to admin channel (only from player 1's view to avoid duplication)
-        if self.is_player1:
-            from src.backend.services.app_context import admin_service
-            await admin_service.forward_match_completion_to_admin_channel(
-                abort_embed,
-                self.match_result.match_id
-            )
-
     def disable_all_components(self):
         """Disables all components in the view."""
         for item in self.children:
             if isinstance(item, (discord.ui.Button, discord.ui.Select)):
                 item.disabled = True
 
-    async def on_timeout(self):
-        pass # Timeout is now handled by the match completion service
+    def deactivate(self) -> None:
+        if not self.is_active:
+            return
+        self.is_active = False
+        if self.status_task:
+            self.status_task.cancel()
+            self.status_task = None
+        if self.match_task:
+            self.match_task.cancel()
+            self.match_task = None
+    
+    def set_interaction(self, interaction: discord.Interaction):
+        """Store the interaction so we can update the message later"""
+        self.last_interaction = interaction
 
 
 class MatchConfirmButton(discord.ui.Button):
