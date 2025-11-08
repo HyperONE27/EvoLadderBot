@@ -348,8 +348,8 @@ Please read the **Terms of Service**, **User Conduct Guidelines**, and **Privacy
 
 ## 💬 Community & Support
 
-- Discuss ladder games in <#1432573813945532538>
+- Discuss the ladder and ask for help in <#1432573813945532538>
 - Report **bugs, cheaters, or other issues** in <#1432573800846725151>
-- Updates, notices, and un/schedule downtime will be announced in <#1432573777258217694>
+- Updates, notices, and un/scheduled downtime will be announced in <#1432573777258217694>
 
 ## 🔥 **Good luck, have fun!** 🏆

@@ -112,7 +112,21 @@ def parse_replay_data_blocking(replay_bytes: bytes) -> dict:
                 "BW Zerg": "bw_zerg",
                 "BW Protoss": "bw_protoss"
             }
-            return race_map.get(race, race)
+            
+            # First try the standard mapping
+            mapped = race_map.get(race)
+            if mapped:
+                return mapped
+            
+            # If not found, try alias resolution
+            from src.backend.services.app_context import races_service
+            if races_service:
+                normalized = races_service.normalize_race_code(race)
+                if normalized:
+                    return normalized
+            
+            # If still not found, return original
+            return race
         
         player_1_race = fix_race(player1.play_race)
         player_2_race = fix_race(player2.play_race)
@@ -534,14 +548,29 @@ class ReplayService:
         return player1.name, player2.name, player1.play_race, player2.play_race
 
     def _fix_race(self, race):
-        return {
+        race_map = {
             "Terran": "sc2_terran",
             "Zerg": "sc2_zerg",
             "Protoss": "sc2_protoss",
             "BW Terran": "bw_terran",
             "BW Zerg": "bw_zerg",
             "BW Protoss": "bw_protoss"
-        }.get(race, race)
+        }
+        
+        # First try the standard mapping
+        mapped = race_map.get(race)
+        if mapped:
+            return mapped
+        
+        # If not found, try alias resolution
+        from src.backend.services.app_context import races_service
+        if races_service:
+            normalized = races_service.normalize_race_code(race)
+            if normalized:
+                return normalized
+        
+        # If still not found, return original
+        return race
 
     def _get_winner(self, replay):
         if replay.winner is None:

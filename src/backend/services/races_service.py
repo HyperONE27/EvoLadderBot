@@ -95,3 +95,42 @@ class RacesService(BaseConfigService):
 
     def get_race_names(self) -> List[str]:
         return self.get_names()
+    
+    def resolve_race_alias(self, race_string: str) -> Optional[str]:
+        """
+        Check if a race string is an alias and return the corresponding race code.
+        
+        This method searches through all races' alias lists to find a match.
+        If found, returns the race code. If not found, returns None.
+        
+        Args:
+            race_string: The race string to check (case-sensitive)
+            
+        Returns:
+            The race code if the string is a known alias, None otherwise
+        """
+        for race in self.get_races():
+            aliases = race.get('aliases', [])
+            if race_string in aliases:
+                return race.get('code')
+        return None
+    
+    def normalize_race_code(self, race_string: str) -> Optional[str]:
+        """
+        Normalize a race string to a valid race code.
+        
+        First checks if it's already a valid race code.
+        If not, checks if it's an alias and returns the corresponding code.
+        
+        Args:
+            race_string: The race string to normalize
+            
+        Returns:
+            The normalized race code, or None if not recognized
+        """
+        # First check if it's already a valid code
+        if self.get_by_code(race_string) is not None:
+            return race_string
+        
+        # Check if it's an alias
+        return self.resolve_race_alias(race_string)
