@@ -294,81 +294,62 @@ Here’s a gently “emotified” version of your announcement — clean, energe
 
 ---
 
-📣 **@everyone** — the moment you’ve all been waiting for is here.
+**@everyone** — the moment you’ve all been waiting for is here.
 
-# 🧬 SC: Evo Complete — Ranked Ladder **OPEN ALPHA** is now **LIVE!**
+# SC: Evo Complete Ladder **OPEN ALPHA** is now **LIVE!**
 
-### 🎮 Alpha Access
+## 🎮 Alpha Access
 
-Alpha access is available **exclusively** on the official **SC: Evo Complete Discord server:**
-👉 [https://discord.gg/fDvwdnkDeB](https://discord.gg/fDvwdnkDeB)
+Alpha access is available **exclusively** on the official **SC: Evo Complete :Discord: Discord server:** https://discord.gg/fDvwdnkDeB
 
 > ⚠️ *Note:* Discord requires manual approval for new members. Please be patient — we’ll get to you soon!
 
----
-
-### 📜 Terms of Service & Policies
+## 📜 Terms of Service & Policies
 
 Please read the **Terms of Service**, **User Conduct Guidelines**, and **Privacy Policy** before playing:
 
 * 🌐 [**SCEvo.net**](https://www.scevo.net/ladder/tos)
 * 🪶 [**Rentry.co mirror**](https://rentry.co/evoladderbot-tos)
 
----
-
-### 🚀 Quick Start Guide
+## Quick Start Guide
 
 > 🧩 **All bot commands are DM-only!**
+- `/termsofservice` — Read and accept the Terms of Service.
+  - 🔒 *Required to access the ladder.*
+- `/setup` — Configure your ID, BattleTag, nationality, and region.
+- `/queue` — Enter the matchmaking queue and find opponents.
+- `/profile` — View your settings and MMRs.
+- `/leaderboard` — See who is on top! 
+- `/prune` — Keep your DMs clean by deleting old bot messages.
 
-* `/termsofservice` — Read and accept the Terms of Service.
-  🔒 *Required to access the ladder.*
-* `/setup` — Configure your ID, BattleTag, nationality, and region.
-* `/queue` — Enter the matchmaking queue and find opponents.
-* `/profile` — View your settings and MMRs.
-* `/prune` — Keep your DMs clean by deleting old bot messages.
+## ⚔️ Matchmaking Basics
 
----
+- **Queue Settings**
+  - Queue with **1 Brood War race**, **1 StarCraft II race**, or **both**.
+  - Veto up to **4 of 9** maps in the current map pool.
+- **Searching View**
+  - The bot searches for matches continuously.
+  - All matches are **Brood War vs StarCraft II only**.
+  - Matches are assigned **every 45 seconds.**
+  - You can view:
+    - Number of players active in the last 15 minutes
+    - Current queue size and race distribution
+- **Match Found**
+  - The bot will send a new message alerting you that a match is ready.
+  - You have **2 MINUTES** to ✅ **Confirm** if you’re available — or **🛑 Abort** if you can’t play.
+    - Matches will be dropped if one or both players fail to confirm in time.
+    - Players who drop too many matches will be penalized.
+  - Join the **in-game channel** provided to find your opponent.
+  - Set up your lobby **using the provided settings** and play your match.
+  - After playing, **upload the replay** to the channel and send it.
+    - The bot will automatically detect your upload and unlock match reporting.
+    - Report the match result using the provided dropdown menus.
+  - Once **both players** report results, **MMR changes** will be applied automatically.
 
-### ⚔️ Matchmaking Basics
+## 💬 Community & Support
 
-**Queue Settings**
+- Discuss ladder games in <#1432573813945532538>
+- Report **bugs, cheaters, or other issues** in <#1432573800846725151>
+- Updates, notices, and un/schedule downtime will be announced in <#1432573777258217694>
 
-* Queue with **1 Brood War race**, **1 StarCraft II race**, or **both**.
-* Veto up to **4 of 9** maps in the current map pool.
-
-**Searching View**
-
-* The bot searches for matches continuously.
-* All matches are **Brood War vs StarCraft II only**.
-* Matches are assigned at **the start of every minute**.
-* You can view:
-  * Number of players active in the last 15 minutes
-  * Current queue size and race distribution
-
-**Match Found**
-
-* The bot will send a new message alerting you that a match is ready.
-* ✅ **Confirm** quickly if you’re available — or **🛑 Abort** if you can’t play.
-  * Matches will be dropped if one or both players fail to confirm in time.
-  * Players who drop too many matches will be penalized.
-* Join the **in-game channel** provided to find your opponent.
-* Set up your lobby and play your match.
-* After playing, **upload the replay** to the channel and send it.
-  * The bot will automatically detect your upload and unlock match reporting.
-  * Report the match result using the provided dropdown menus.
-* Once **both players** report results, **MMR changes** will be applied automatically.
-
----
-
-### 💬 Community & Support
-
-* Discuss ladder games in <#1432573813945532538>
-* Report **bugs, cheaters, or other issues** in <#1432573800846725151>
-
----
-
-🔥 **Good luck, have fun — and welcome to the Evo Ladder Alpha!** 🏆
-
----
-
-Would you like me to make a compact version optimized for Discord’s 2000-character post limit (for announcement channels or embeds)?
+## 🔥 **Good luck, have fun!** 🏆
