@@ -170,10 +170,19 @@ class Matchmaker:
 				mmr_service = MMRService()
 				default_mmr = mmr_service.default_mmr()
 				
+				# Get actual player name from player_info
+				player_name = None
+				if player_info:
+					player_name = player_info.get('player_name') or player_info.get('discord_username')
+				
+				if not player_name:
+					player_name = f"Player{player.discord_user_id}"
+					print(f"[Matchmaker] WARNING: No player_name found for discord_uid={player.discord_user_id}, using fallback: {player_name}")
+				
 				# Create MMR using DataAccessService (async write to DB)
 				await data_service.create_or_update_mmr(
 					player.discord_user_id,
-					player.user_id,
+					player_name,
 					race,
 					default_mmr
 				)

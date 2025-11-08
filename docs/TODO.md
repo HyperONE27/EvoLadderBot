@@ -198,6 +198,44 @@
 - ✅ Clean up the /help command
 - ✅ Check every command to add a "❌ Clear/Cancel" button to it
 
+
+### November 8, 2025
+
+- ✅ Fix Holy World Korean typo
+- ✅ Fix map links linking to the wrong maps
+- ✅ Fix mod links linking to the wrong mods
+- ✅ Clear all BattleTags
+- ✅ Make BattleTag regex loose
+- ✅ Make alt nickname regex loose
+- ⏰ Add a short tutorial for new players queueing up
+- ⏰ Add an image explaining that you need to upload a replay
+- ⏰ Add an image explaining how to report once you upload a replay
+- ⏰ Display BattleTag and Discord UID (via mention) in MatchFoundViewEmbed so players can reach out to each other
+- ⏰ Fix `/admin match` not showing replay embeds
+- ⏰ Fix `/admin snapshot` not showing enough players
+- ⏰ Fix `/admin` commands not being able to use `player_name` instead of `@mention`, `discord_username`, or `discord_uid`
+- ⏰ `/profile` and `/admin player` total W-L-D looks wrong
+- ⏰ Add something to let people know their opponent confirmed a match
+- ⏰ Shorten the Confirm Match/Abort Match timer
+- ⏰ ADD REMINDERS TO CONFIRM AND UPLOAD REPLAYS
+- ✅ Fix leaderboard `player_name` field
+- ⏰ Use `matches_1v1` table for W-L-D records instead of the less reliable `mmrs_1v1`
+- ⏰ Write up announcement explaining fixes
+- ⏰ Write up announcement asking for Korean/Simplified Chinese/Spanish admins
+
+### Announcement
+
+**General Changes Made**
+
+**Bugs Fixed**
+- Fixed an issue where games played on `[SC:Evo] Holy World (홀리월드)` would not be recognized by the bot due to the Korean name being misspelled as `홀리울드`
+- Fixed an issue where the links for the map `[SC:Evo] Radeon (라데온)` were incorrect
+- Fixed an issue where the links for the mod `SC: Evo Complete` were incorrect
+- Fixed an issue where BattleTags could not be registered in non-Latin (non-English) characters
+- Fixed an issue where `/leaderboard` did 
+- Fixed an issue where `/profile` did not display total games/wins/losses/draws accurately
+
+
 ## PRE-BETA
 
 - Command timeouts:
@@ -226,130 +264,3 @@
   - ⏰ Wire up Paddle 
   - ❌ Add columns to `players` table for managing subscription status
   - ⏰ Create a new `subscriptions` table to handle subscription status management
-
-
-  ===
-
-Hi, all. Thanks for your ongoing patience and anticipation. The wait is almost over:
-# The SC: Evo Complete ranked ladder OPEN ALPHA launches this calendar week (Pacific Time).
-
-The core functionality for the alpha testing phase is already in place. I'm preparing a few final touches and tools so our bot team can quickly address any issues that occur during deployment without taking the bot down.
-## You can expect the following:
-- 🤖 **Automated Matchmaking:**
-  - The alpha boasts full support for 1v1.
-    - 2v2 and other gamemodes may be implemented for the beta testing phase and/or official release.
-  - You can queue with **up to two races** at once: one from Brood War and one from StarCraft II.
-  - Each of the six races has its **own separate MMR.**
-  - We're fine-tuning matchmaking algorithm parameters:
-    - During downtime, matches form quickly, even across wider skill gaps.
-    - During peak activity, opponents will be matched more closely in MMR.
-    - The matchmaker adjusts for players currently mid-match and those who have missed several rounds of matchmaking.
-  - Beginning in the beta, we'll experiment with **ping-weighted matchmaking** at lower MMRs, prioritizing smoother connections over absolute MMR proximity.
-- 🏆 **Global Leaderboard & Ranks**
-  - Ranks will be determined based on percentiles (:SRank: :ARank: :BRank: :CRank: :DRank: :ERank: :FRank:) and displayed on a global leaderboard.
-  - The leaderboard is filterable: you can view top players by race or country.
-- ⚔️ **Match Experience**
-  - The ladder bot automatically designates races, maps, and match settings based on player regions and preferences.
-  - The bot assigns a dedicated in-game channel for each match to help you find your opponents more easily.
-  - **Replay uploading** is required for match reporting:
-    - The bot parses and stores replay records.
-    - Due to technical limitations, reporting is manual for now — just click through a couple menus to confirm the winner.
-    - Semi-automatic verification is planned for the beta and beyond.
-  - **Mandatory match confirmation** ensures you're not stuck with an AFK opponent and can quickly queue again.
-  - **Limited match abortion** provides flexibility in the rare occasion you have to end a session early.
-- ⚖️ **Competitive Integrity**
-  - As a community-run project, the SC: Evo Complete ladder can enforce standards of fairness and integrity long absent from the official ladder.
-  - All bot interactions are logged and monitored for potential abuse.
-  - All replays are stored permanently and can be retrieved for future review or analysis.
-  - A dedicated team of volunteer admins will help investigate reports and uphold competitive integrity.
-  
-Please note:
-- The alpha and beta testing phases will be free for all players, but the ladder will transition to a **low-cost paid subscription model** for the official release.
-  - We want to ensure this cost is not a paywall, but a way to sustain what we’ve built together.
-  - It goes toward everything that makes SC: Evo Complete great:
-    - The servers that keep the ladder chugging.
-    - The maps and modeling you admire for hours.
-    - The tools that catch what breaks.
-    - The admins who keep matches fair.
-    - The developers who push update after update.
-    - The prize pools that serious tournaments deserve.
-  - We will strive to set the monthly cost as low as possible, at around **just a few dollars per month.**
-- Player stats and MMR **may or may not be** reset closer to the official launch date.
-
-This is an **alpha**, which means things **will** break! We're counting on your feedback to help us find and squash bugs, as well as report cheaters! We will have a dedicated channel for all reports.
-
-Thanks for tuning in. I will see you later this week!
-
-===
-
-Here’s a gently “emotified” version — enthusiastic and readable, but still professional and clean enough for an announcement post:
-
----
-
-Got it — here’s the **balanced** version: enthusiastic, structured, but still includes most of the original detail (just trimmed of repetition and clutter).
-
----
-
-Here’s a gently “emotified” version of your announcement — clean, energetic, and Discord-ready while keeping every detail intact:
-
----
-
-**@everyone** — the moment you’ve all been waiting for is here.
-
-# SC: Evo Complete Ladder **OPEN ALPHA** is now **LIVE!**
-
-## 🎮 Alpha Access
-
-Alpha access is available **exclusively** on the official **SC: Evo Complete :Discord: Discord server:** https://discord.gg/fDvwdnkDeB
-
-> ⚠️ *Note:* Discord requires manual approval for new members. Please be patient — we’ll get to you soon!
-
-## 📜 Terms of Service & Policies
-
-Please read the **Terms of Service**, **User Conduct Guidelines**, and **Privacy Policy** before playing:
-
-* 🌐 [**SCEvo.net**](https://www.scevo.net/ladder/tos)
-* 🪶 [**Rentry.co mirror**](https://rentry.co/evoladderbot-tos)
-
-## Quick Start Guide
-
-> 🧩 **All bot commands are DM-only!**
-- `/termsofservice` — Read and accept the Terms of Service.
-  - 🔒 *Required to access the ladder.*
-- `/setup` — Configure your ID, BattleTag, nationality, and region.
-- `/queue` — Enter the matchmaking queue and find opponents.
-- `/profile` — View your settings and MMRs.
-- `/leaderboard` — See who is on top! 
-- `/prune` — Keep your DMs clean by deleting old bot messages.
-
-## ⚔️ Matchmaking Basics
-
-- **Queue Settings**
-  - Queue with **1 Brood War race**, **1 StarCraft II race**, or **both**.
-  - Veto up to **4 of 9** maps in the current map pool.
-- **Searching View**
-  - The bot searches for matches continuously.
-  - All matches are **Brood War vs StarCraft II only**.
-  - Matches are assigned **every 45 seconds.**
-  - You can view:
-    - Number of players active in the last 15 minutes
-    - Current queue size and race distribution
-- **Match Found**
-  - The bot will send a new message alerting you that a match is ready.
-  - You have **2 MINUTES** to ✅ **Confirm** if you’re available — or **🛑 Abort** if you can’t play.
-    - Matches will be dropped if one or both players fail to confirm in time.
-    - Players who drop too many matches will be penalized.
-  - Join the **in-game channel** provided to find your opponent.
-  - Set up your lobby **using the provided settings** and play your match.
-  - After playing, **upload the replay** to the channel and send it.
-    - The bot will automatically detect your upload and unlock match reporting.
-    - Report the match result using the provided dropdown menus.
-  - Once **both players** report results, **MMR changes** will be applied automatically.
-
-## 💬 Community & Support
-
-- Discuss the ladder and ask for help in <#1432573813945532538>
-- Report **bugs, cheaters, or other issues** in <#1432573800846725151>
-- Updates, notices, and un/scheduled downtime will be announced in <#1432573777258217694>
-
-## 🔥 **Good luck, have fun!** 🏆
