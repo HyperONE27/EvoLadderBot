@@ -87,18 +87,6 @@ class MatchCompletionService:
         self.monitoring_tasks[match_id] = task
         print(f"👁️ Started monitoring match {match_id}")
     
-    def _cleanup_reminder_tasks(self, match_id: int):
-        """Cancel and remove all reminder tasks for a given match."""
-        tasks_to_cancel = [
-            key for key in self.reminder_tasks.keys() 
-            if key[0] == match_id
-        ]
-        for task_key in tasks_to_cancel:
-            reminder_task = self.reminder_tasks.pop(task_key, None)
-            if reminder_task and not reminder_task.done():
-                reminder_task.cancel()
-                self.logger.info(f"Cleaned up confirmation reminder for match {match_id}, player {task_key[1]}")
-
     def stop_monitoring_match(self, match_id: int):
         """Stop monitoring a match."""
         if match_id not in self.monitored_matches:
@@ -424,7 +412,6 @@ class MatchCompletionService:
             duration_ms = (time.perf_counter() - start_time) * 1000
             print(f"🏁 [MatchCompletion PERF] Total _handle_match_completion for match {match_id}: {duration_ms:.2f}ms")
             # Ensure cleanup is always performed
-            self._cleanup_reminder_tasks(match_id)
             self.stop_monitoring_match(match_id)
     
     async def _handle_match_abort(self, match_id: int, match_data: dict):
@@ -490,7 +477,6 @@ class MatchCompletionService:
             traceback.print_exc()
         finally:
             # Clean up monitoring for this match
-            self._cleanup_reminder_tasks(match_id)
             self.stop_monitoring_match(match_id)
     
     async def _handle_unconfirmed_abort(self, match_id: int, match_data: dict):
@@ -556,7 +542,6 @@ class MatchCompletionService:
             # Clean up monitoring for this match
             print(f"🧹 CLEANUP: Unregistering and stopping monitoring for conflict match {match_id}")
             # unregister_match_views_by_match_id(match_id) # REMOVED
-            self._cleanup_reminder_tasks(match_id)
             self.stop_monitoring_match(match_id)
             self.processing_locks.pop(match_id, None)
 

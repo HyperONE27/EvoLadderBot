@@ -18,7 +18,7 @@ class TestValidationService:
         return ValidationService()
     
     def test_validate_user_id_english_only(self, validation_service):
-        """Test user ID validation with English-only mode (now permissive, allows any characters)"""
+        """Test user ID validation with English-only mode (allow_international=False)"""
         
         test_cases = [
             # (user_id, expected_valid, expected_error_substring)
@@ -33,25 +33,25 @@ class TestValidationService:
             ("  ", False, "cannot be empty"),
             ("ab", False, "at least 3 characters"),
             ("ThisNameIsTooLongForValidation", False, "cannot exceed 12 characters"),
-            ("한글이름", True, None),  # Now allowed
-            ("中文名字", True, None),  # Now allowed
-            ("Русский", True, None),  # Now allowed
-            ("José", True, None),  # Now allowed
-            ("Müller", True, None),  # Now allowed
-            ("Test@User", True, None),  # Now allowed
-            ("User#123", True, None),  # Now allowed
-            ("Name$", True, None),  # Now allowed
-            ("Player.Name", True, None),  # Now allowed
-            ("User*Name", True, None),  # Now allowed
-            ("admin", True, None),  # No longer reserved
-            ("ADMIN", True, None),  # No longer reserved
-            ("Admin", True, None),  # No longer reserved
-            ("moderator", True, None),  # No longer reserved
-            ("mod", True, None),  # No longer reserved
-            ("bot", True, None),  # No longer reserved
-            ("discord", True, None),  # No longer reserved
-            ("null", True, None),  # No longer reserved
-            ("undefined", True, None),  # No longer reserved
+            ("한글이름", False, "English letters"),
+            ("中文名字", False, "English letters"),
+            ("Русский", False, "English letters"),
+            ("José", False, "English letters"),
+            ("Müller", False, "English letters"),
+            ("Test@User", False, "English letters"),
+            ("User#123", False, "English letters"),
+            ("Name$", False, "English letters"),
+            ("Player.Name", False, "English letters"),
+            ("User*Name", False, "English letters"),
+            ("admin", False, "reserved"),
+            ("ADMIN", False, "reserved"),
+            ("Admin", False, "reserved"),
+            ("moderator", False, "reserved"),
+            ("mod", False, "reserved"),
+            ("bot", False, "reserved"),
+            ("discord", False, "reserved"),
+            ("null", False, "reserved"),
+            ("undefined", False, "reserved"),
             ("   ValidName   ", True, None),  # Leading/trailing spaces should be stripped
         ]
         
@@ -65,7 +65,7 @@ class TestValidationService:
                 assert error is None, f"Failed for '{user_id}': expected no error, got '{error}'"
     
     def test_validate_user_id_international(self, validation_service):
-        """Test user ID validation with international character support (now permissive, allows any characters)"""
+        """Test user ID validation with international character support (allow_international=True)"""
         
         test_cases = [
             # (user_id, expected_valid, expected_error_substring)
@@ -86,17 +86,17 @@ class TestValidationService:
             ("ไทย", True, None),
             ("한", False, "at least 3 characters"),
             ("이것은매우긴이름입니다정말", False, "cannot exceed 12 characters"),
-            ("Test@User", True, None),  # Now allowed
-            ("User#123", True, None),  # Now allowed
-            ("Name$", True, None),  # Now allowed
-            ("Player<Name>", True, None),  # Now allowed
-            ("User|Name", True, None),  # Now allowed
+            ("Test@User", False, "invalid characters"),
+            ("User#123", False, "invalid characters"),
+            ("Name$", False, "invalid characters"),
+            ("Player<Name>", False, "invalid characters"),
+            ("User|Name", False, "invalid characters"),
             ("", False, "cannot be empty"),
             ("ab", False, "at least 3 characters"),
             ("ValidName_123", True, None),
             ("Valid-Name", True, None),
-            ("admin", True, None),  # No longer reserved
-            ("MOD", True, None),  # No longer reserved
+            ("admin", False, "reserved"),
+            ("MOD", False, "reserved"),
         ]
         
         for user_id, expected_valid, expected_error_substring in test_cases:
@@ -109,7 +109,7 @@ class TestValidationService:
                 assert error is None, f"Failed for '{user_id}': expected no error, got '{error}'"
     
     def test_validate_battle_tag(self, validation_service):
-        """Test BattleTag validation (now permissive, allows any characters and 3-12 digits)"""
+        """Test BattleTag validation"""
         
         test_cases = [
             # (battle_tag, expected_valid, expected_error_substring)
@@ -121,28 +121,25 @@ class TestValidationService:
             ("xyz#9999", True, None),
             ("", False, "cannot be empty"),
             ("  ", False, "cannot be empty"),
-            ("NoHashtag", False, "one '#'"),
-            ("Username", False, "one '#'"),
-            ("Username#", False, "only digits"),
-            ("Username#abc", False, "only digits"),
-            ("Username#12", False, "3-12 digits"),  # Now 3-12 instead of 4-12
-            ("Username#123", True, None),  # Now valid (3 digits)
-            ("Username#1234567890123", False, "3-12 digits"),
-            ("#1234", False, "1-12 characters"),  # Empty username not allowed
-            ("A#123", True, None),  # Minimum username length (1 character)
-            ("AB#1234", True, None),  # Now allowed (2 characters)
-            ("TooLongUsername#1234", False, "1-12 characters"),
-            ("User123#1234", True, None),  # Now allowed
-            ("User_Name#1234", True, None),  # Now allowed
-            ("한글이름#1234", True, None),  # Now allowed
-            ("Test@User#123", True, None),  # Now allowed
-            ("admin#1234", True, None),  # No longer reserved
-            ("moderator#1234", True, None),  # No longer reserved
-            ("mod#1234", True, None),  # No longer reserved
-            ("bot#1234", True, None),  # No longer reserved
-            ("discord#1234", True, None),  # No longer reserved
-            ("blizzard#1234", True, None),  # No longer reserved
-            ("battle#1234", True, None),  # No longer reserved
+            ("NoHashtag", False, "format"),
+            ("Username", False, "format"),
+            ("Username#", False, "format"),
+            ("Username#abc", False, "format"),
+            ("Username#12", False, "4-12 digits"),
+            ("Username#123", False, "4-12 digits"),
+            ("Username#1234567890123", False, "4-12 digits"),
+            ("#1234", False, "3-12 letters"),
+            ("AB#1234", False, "3-12 letters"),
+            ("TooLongUsername#1234", False, "3-12 characters"),
+            ("User123#1234", False, "3-12 letters"),
+            ("User_Name#1234", False, "3-12 letters"),
+            ("admin#1234", False, "reserved"),
+            ("moderator#1234", False, "reserved"),
+            ("mod#1234", False, "reserved"),
+            ("bot#1234", False, "reserved"),
+            ("discord#1234", False, "reserved"),
+            ("blizzard#1234", False, "reserved"),
+            ("battle#1234", False, "reserved"),
             ("   Username#1234   ", True, None),  # Should be stripped
         ]
         
@@ -156,7 +153,7 @@ class TestValidationService:
                 assert error is None, f"Failed for '{battle_tag}': expected no error, got '{error}'"
     
     def test_validate_alt_ids_english_only(self, validation_service):
-        """Test alternative IDs validation with English-only mode (now permissive, allows any characters)"""
+        """Test alternative IDs validation with English-only mode"""
         
         test_cases = [
             # (alt_ids_string, allow_international, expected_valid, expected_error_substring, expected_parsed_count)
@@ -173,10 +170,10 @@ class TestValidationService:
             ("ab", False, False, "at least 3 characters", 0),
             ("P1,ab,P3", False, False, "at least 3 characters", 0),
             ("TooLongName123", False, False, "cannot exceed 12 characters", 0),
-            ("한글이름", False, True, None, 1),  # Now allowed
-            ("P1,한글이름", False, True, None, 2),  # Now allowed
-            ("admin", False, True, None, 1),  # No longer reserved
-            ("P1,admin,P3", False, True, None, 3),  # No longer reserved
+            ("한글이름", False, False, "English letters", 0),
+            ("P1,한글이름", False, False, "English letters", 0),
+            ("admin", False, False, "reserved", 0),
+            ("P1,admin,P3", False, False, "reserved", 0),
         ]
         
         for alt_ids_string, allow_international, expected_valid, expected_error_substring, expected_parsed_count in test_cases:
@@ -191,7 +188,7 @@ class TestValidationService:
                 f"Failed for '{alt_ids_string}': expected {expected_parsed_count} parsed IDs, got {len(parsed_ids)}"
     
     def test_validate_alt_ids_international(self, validation_service):
-        """Test alternative IDs validation with international character support (now permissive, allows any characters)"""
+        """Test alternative IDs validation with international character support"""
         
         test_cases = [
             # (alt_ids_string, allow_international, expected_valid, expected_error_substring, expected_parsed_count)
@@ -205,9 +202,9 @@ class TestValidationService:
             ("한글이름,한글이름", True, False, "Duplicate", 0),
             ("한", True, False, "at least 3 characters", 0),
             ("이것은매우긴이름입니다", True, False, "cannot exceed 12 characters", 0),
-            ("Player@Name", True, True, None, 1),  # Now allowed
-            ("admin", True, True, None, 1),  # No longer reserved
-            ("한글이름,admin,中文", True, True, None, 3),  # No longer reserved
+            ("Player@Name", True, False, "invalid characters", 0),
+            ("admin", True, False, "reserved", 0),
+            ("한글이름,admin,中文", True, False, "reserved", 0),
         ]
         
         for alt_ids_string, allow_international, expected_valid, expected_error_substring, expected_parsed_count in test_cases:
@@ -231,10 +228,10 @@ class TestValidationService:
             ("validate_user_id", ["---"], {"allow_international": False}, True, None),  # Only hyphens
             ("validate_user_id", ["_-_"], {"allow_international": False}, True, None),  # Mix of allowed special chars
             ("validate_user_id", ["한글이름명칭호칭", {}], {"allow_international": True}, False, "exceed"),  # Exactly 13 chars
-            ("validate_battle_tag", ["A#123"], {}, True, None),  # Minimum username (1) and number length (3)
-            ("validate_battle_tag", ["ABCDEFGHIJKL#123"], {}, True, None),  # Maximum username length (12) with min digits
-            ("validate_battle_tag", ["Username#123"], {}, True, None),  # Minimum number length (3 digits now)
-            ("validate_battle_tag", ["Username#123456789012"], {}, True, None),  # Maximum number length (12 digits)
+            ("validate_battle_tag", ["ABC#1234"], {}, True, None),  # Minimum username length
+            ("validate_battle_tag", ["ABCDEFGHIJKL#1234"], {}, True, None),  # Maximum username length
+            ("validate_battle_tag", ["Username#1234"], {}, True, None),  # Minimum number length
+            ("validate_battle_tag", ["Username#123456789012"], {}, True, None),  # Maximum number length
         ]
         
         for method_name, args, kwargs, expected_valid, expected_error_substring in test_cases:

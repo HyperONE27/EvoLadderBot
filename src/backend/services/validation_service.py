@@ -14,7 +14,8 @@ class ValidationService:
         
         Args:
             user_id: The user ID to validate
-            allow_international: Kept for backwards compatibility but no longer enforced
+            allow_international: If True, allows international characters (Korean, Chinese, Cyrillic, etc.)
+                                If False, only allows English letters, numbers, underscores, and hyphens
             
         Returns:
             Tuple of (is_valid, error_message)
@@ -29,6 +30,25 @@ class ValidationService:
         
         if len(user_id) > 12:
             return False, "User ID cannot exceed 12 characters"
+        
+        # Check for valid characters
+        if allow_international:
+            # Allow international characters: letters from any language, numbers, underscores, hyphens
+            # \p{L} matches any Unicode letter (Korean, Chinese, Cyrillic, etc.)
+            # \p{N} matches any Unicode number
+            # Note: Python's re module doesn't support \p{L}, so we use a broader pattern
+            # This allows any character that is NOT a control character or special symbol
+            if not re.match(r'^[\w\u0080-\uFFFF_-]+$', user_id, re.UNICODE):
+                return False, "User ID contains invalid characters"
+        else:
+            # English-only: only allow ASCII letters, numbers, underscores, and hyphens
+            if not re.match(r'^[A-Za-z0-9_-]+$', user_id):
+                return False, "User ID can only contain English letters, numbers, underscores, and hyphens"
+        
+        # Check for reserved words or inappropriate content (case-insensitive for English)
+        reserved_words = ['admin', 'moderator', 'mod', 'bot', 'discord', 'null', 'undefined']
+        if user_id.lower() in reserved_words:
+            return False, "This user ID is reserved and cannot be used"
         
         return True, None
 
@@ -47,26 +67,28 @@ class ValidationService:
         
         battle_tag = battle_tag.strip()
         
-        # Check that it contains exactly one "#"
-        if battle_tag.count('#') != 1:
-            return False, "BattleTag must contain exactly one '#' separator"
+        # Check basic format: 3-12 letters + # + 4-12 digits
+        pattern = r'^[A-Za-z]{3,12}#[0-9]{4,12}$'
+        if not re.match(pattern, battle_tag):
+            return False, "BattleTag must be in format: 3-12 letters + # + 4-12 digits (e.g., Username#1234)"
         
-        # Split into username and numbers parts
+        # Additional validation
         parts = battle_tag.split('#')
         username = parts[0]
         numbers = parts[1]
         
-        # Check username length (any characters allowed)
-        if len(username) < 1 or len(username) > 12:
-            return False, "Username part must be 1-12 characters"
-        
-        # Check numbers part (must be digits only)
-        if not numbers.isdigit():
-            return False, "Numbers part must contain only digits"
+        # Check username length
+        if len(username) < 3 or len(username) > 12:
+            return False, "Username part must be 3-12 characters"
         
         # Check numbers length
-        if len(numbers) < 3 or len(numbers) > 12:
-            return False, "Numbers part must be 3-12 digits"
+        if len(numbers) < 4 or len(numbers) > 12:
+            return False, "Numbers part must be 4-12 digits"
+        
+        # Check for reserved usernames
+        reserved_usernames = ['admin', 'moderator', 'mod', 'bot', 'discord', 'blizzard', 'battle']
+        if username.lower() in reserved_usernames:
+            return False, "This username is reserved and cannot be used"
         
         return True, None
 

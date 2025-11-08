@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import aiosqlite
 import polars as pl
@@ -108,7 +108,6 @@ class DataAccessService:
         # System state
         self._shutdown_event = asyncio.Event()
         self._writer_task: Optional[asyncio.Task] = None
-        self._reconciliation_task: Optional[asyncio.Task] = None
         self._write_queue: asyncio.Queue = asyncio.Queue()
         self._write_event = asyncio.Event()  # Event-driven notification for write worker
         self._init_lock = asyncio.Lock()
@@ -149,18 +148,8 @@ class DataAccessService:
             # Load all hot tables into memory
             await self._load_all_tables()
             
-            # Run initial reconciliation on startup (only if in midnight-1AM UTC window and not already run)
-            if await self._should_run_startup_reconciliation():
-                await self.reconcile_mmr_stats_from_matches()
-                await self._save_reconciliation_timestamp()
-            else:
-                print("[MMR Reconciliation] Skipping startup reconciliation (outside window or already run)")
-            
             # Start background write worker
             self._writer_task = self._main_loop.create_task(self._db_writer_worker())
-            
-            # Start daily reconciliation background task
-            self._reconciliation_task = self._main_loop.create_task(self._reconciliation_worker())
             
             elapsed = (time.time() - start_time) * 1000
             print(f"[DataAccessService] Async initialization complete in {elapsed:.2f}ms")
@@ -204,16 +193,18 @@ class DataAccessService:
             })
         print(f"[DataAccessService]   Players loaded: {len(self._players_df)} rows, size: {self._players_df.estimated_size('mb'):.2f} MB")
         
-        # Load mmrs_1v1 table - FIRST load raw data to detect bad entries
+        # Load mmrs_1v1 table
         print("[DataAccessService]   Loading mmrs_1v1...")
-        mmrs_raw_data = await loop.run_in_executor(
-            None,
-            self._db_reader.adapter.execute_query,
-            "SELECT * FROM mmrs_1v1",
-            {}
+        mmrs_data = await loop.run_in_executor(
+            None, 
+            self._db_reader.get_leaderboard_1v1,
+            None,  # race filter
+            None,  # country filter
+            None,  # limit
+            0  # offset
         )
-        if mmrs_raw_data:
-            self._mmrs_1v1_df = pl.DataFrame(mmrs_raw_data, infer_schema_length=None)
+        if mmrs_data:
+            self._mmrs_1v1_df = pl.DataFrame(mmrs_data, infer_schema_length=None)
             print(f"[DataAccessService]   MMRs schema: {self._mmrs_1v1_df.schema}")
             print(f"[DataAccessService]   MMRs columns: {self._mmrs_1v1_df.columns}")
         else:
@@ -231,73 +222,6 @@ class DataAccessService:
                 "last_played": pl.Series([], dtype=pl.Datetime),
             })
         print(f"[DataAccessService]   MMRs loaded: {len(self._mmrs_1v1_df)} rows, size: {self._mmrs_1v1_df.estimated_size('mb'):.2f} MB")
-        
-        # Clean up bad player_name entries (player{discord_id} format)
-        if not self._mmrs_1v1_df.is_empty() and self._players_df is not None:
-            import re
-            print("[DataAccessService]   Checking for bad player_name entries in MMRs...")
-            
-            # Find rows with suspicious player names matching "Player123456" or "player123456"
-            bad_name_pattern = re.compile(r'^[Pp]layer\d+$')
-            corrections_made = []
-            
-            # Iterate over rows using to_dicts() for proper access
-            for row in self._mmrs_1v1_df.to_dicts():
-                player_name = row['player_name']
-                discord_uid = row['discord_uid']
-                race = row['race']
-                
-                if player_name and bad_name_pattern.match(str(player_name)):
-                    print(f"[DataAccessService]   Found bad entry: discord_uid={discord_uid}, race={race}, player_name='{player_name}'")
-                    
-                    # Found a bad entry - look up correct name from players table
-                    player_info_rows = self._players_df.filter(pl.col('discord_uid') == discord_uid)
-                    
-                    if len(player_info_rows) > 0:
-                        correct_name = player_info_rows[0, 'player_name']
-                        if correct_name is None or bad_name_pattern.match(str(correct_name)):
-                            # Fall back to discord_username if player_name is also bad/missing
-                            correct_name = player_info_rows[0, 'discord_username']
-                        
-                        if correct_name and not bad_name_pattern.match(str(correct_name)):
-                            # Update in-memory dataframe
-                            mask = (pl.col('discord_uid') == discord_uid) & (pl.col('race') == race)
-                            self._mmrs_1v1_df = self._mmrs_1v1_df.with_columns(
-                                pl.when(mask)
-                                .then(pl.lit(correct_name))
-                                .otherwise(pl.col('player_name'))
-                                .alias('player_name')
-                            )
-                            
-                            corrections_made.append({
-                                'discord_uid': discord_uid,
-                                'race': race,
-                                'old_name': player_name,
-                                'new_name': correct_name
-                            })
-                            
-                            print(f"[DataAccessService]   Fixed player_name: discord_uid={discord_uid}, race={race}, '{player_name}' -> '{correct_name}'")
-            
-            # Queue database writes to fix Supabase entries
-            if corrections_made:
-                print(f"[DataAccessService]   Queueing {len(corrections_made)} database corrections...")
-                for correction in corrections_made:
-                    job = WriteJob(
-                        job_type=WriteJobType.UPDATE_MMR,
-                        data={
-                            'discord_uid': correction['discord_uid'],
-                            'race': correction['race'],
-                            'player_name': correction['new_name']
-                        },
-                        timestamp=time.time()
-                    )
-                    # Queue the write (will be processed by write worker)
-                    self._write_queue.put_nowait(job)
-                
-                # Notify the write worker that there are jobs to process
-                self._write_event.set()
-                
-                print(f"[DataAccessService]   Corrected {len(corrections_made)} bad player_name entries")
         
         # Load preferences_1v1 table
         print("[DataAccessService]   Loading preferences_1v1...")
@@ -391,245 +315,6 @@ class DataAccessService:
                 "uploaded_at": pl.Series([], dtype=pl.Utf8),
             })
         print(f"[DataAccessService]   Replays loaded: {len(self._replays_df)} rows, size: {self._replays_df.estimated_size('mb'):.2f} MB")
-    
-    async def reconcile_mmr_stats_from_matches(self) -> None:
-        """
-        Reconcile mmrs_1v1 game statistics from matches_1v1 source of truth.
-        
-        Aggregates all finalized matches (match_result in 0,1,2) and overwrites:
-        - games_played, games_won, games_lost, games_drawn
-        - last_played timestamp
-        
-        Logs summary of changes to console.
-        """
-        start_time = time.time()
-        now_utc = datetime.now(timezone.utc)
-        print(f"[MMR Reconciliation] Starting reconciliation at {now_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-        
-        if self._matches_1v1_df is None or self._mmrs_1v1_df is None:
-            print("[MMR Reconciliation] DataFrames not loaded, skipping reconciliation")
-            return
-        
-        if self._matches_1v1_df.is_empty():
-            print("[MMR Reconciliation] No matches to process")
-            return
-        
-        # Filter to finalized matches only (0=draw, 1=player1 win, 2=player2 win)
-        finalized_matches = self._matches_1v1_df.filter(
-            pl.col("match_result").is_in([0, 1, 2])
-        )
-        
-        print(f"[MMR Reconciliation] Processing {len(finalized_matches)} finalized matches")
-        
-        if finalized_matches.is_empty():
-            print("[MMR Reconciliation] No finalized matches to process")
-            return
-        
-        # Build aggregation for player 1
-        p1_data = finalized_matches.select([
-            pl.col("player_1_discord_uid").alias("discord_uid"),
-            pl.col("player_1_race").alias("race"),
-            pl.col("played_at"),
-            pl.col("match_result")
-        ])
-        
-        # Build aggregation for player 2
-        p2_data = finalized_matches.select([
-            pl.col("player_2_discord_uid").alias("discord_uid"),
-            pl.col("player_2_race").alias("race"),
-            pl.col("played_at"),
-            pl.col("match_result")
-        ])
-        
-        # Combine both players' data
-        all_player_data = pl.concat([p1_data, p2_data])
-        
-        # For player 1: win=1, loss=2, draw=0
-        # For player 2: win=2, loss=1, draw=0
-        # We need to track which perspective each row is from
-        p1_data = p1_data.with_columns([
-            (pl.col("match_result") == 1).cast(pl.Int64).alias("won"),
-            (pl.col("match_result") == 2).cast(pl.Int64).alias("lost"),
-            (pl.col("match_result") == 0).cast(pl.Int64).alias("drawn")
-        ])
-        
-        p2_data = p2_data.with_columns([
-            (pl.col("match_result") == 2).cast(pl.Int64).alias("won"),
-            (pl.col("match_result") == 1).cast(pl.Int64).alias("lost"),
-            (pl.col("match_result") == 0).cast(pl.Int64).alias("drawn")
-        ])
-        
-        # Combine and aggregate
-        combined = pl.concat([p1_data, p2_data])
-        
-        aggregated = combined.group_by(["discord_uid", "race"]).agg([
-            pl.count().alias("games_played"),
-            pl.sum("won").alias("games_won"),
-            pl.sum("lost").alias("games_lost"),
-            pl.sum("drawn").alias("games_drawn"),
-            pl.max("played_at").alias("last_played")
-        ])
-        
-        print(f"[MMR Reconciliation] Aggregated stats for {len(aggregated)} (discord_uid, race) combinations")
-        
-        # Now update mmrs_1v1_df with these values
-        updates_made = 0
-        players_affected = set()
-        
-        async with self._mmr_lock:
-            for row in aggregated.iter_rows(named=True):
-                discord_uid = row["discord_uid"]
-                race = row["race"]
-                games_played = row["games_played"]
-                games_won = row["games_won"]
-                games_lost = row["games_lost"]
-                games_drawn = row["games_drawn"]
-                last_played = row["last_played"]
-                
-                # Find the corresponding row in mmrs_1v1_df
-                mask = (pl.col("discord_uid") == discord_uid) & (pl.col("race") == race)
-                matching_rows = self._mmrs_1v1_df.filter(mask)
-                
-                if len(matching_rows) > 0:
-                    # Update the existing row
-                    self._mmrs_1v1_df = self._mmrs_1v1_df.with_columns([
-                        pl.when(mask).then(pl.lit(games_played)).otherwise(pl.col("games_played")).alias("games_played"),
-                        pl.when(mask).then(pl.lit(games_won)).otherwise(pl.col("games_won")).alias("games_won"),
-                        pl.when(mask).then(pl.lit(games_lost)).otherwise(pl.col("games_lost")).alias("games_lost"),
-                        pl.when(mask).then(pl.lit(games_drawn)).otherwise(pl.col("games_drawn")).alias("games_drawn"),
-                        pl.when(mask).then(pl.lit(last_played)).otherwise(pl.col("last_played")).alias("last_played")
-                    ])
-                    
-                    # Queue database update
-                    player_name = matching_rows[0, "player_name"]
-                    mmr = matching_rows[0, "mmr"]
-                    
-                    job = WriteJob(
-                        job_type=WriteJobType.UPDATE_MMR,
-                        data={
-                            "discord_uid": discord_uid,
-                            "player_name": player_name,
-                            "race": race,
-                            "mmr": mmr,
-                            "games_played": games_played,
-                            "games_won": games_won,
-                            "games_lost": games_lost,
-                            "games_drawn": games_drawn
-                        },
-                        timestamp=time.time()
-                    )
-                    self._write_queue.put_nowait(job)
-                    
-                    updates_made += 1
-                    players_affected.add(discord_uid)
-        
-        # Notify write worker
-        if updates_made > 0:
-            self._write_event.set()
-        
-        elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[MMR Reconciliation] Updated {updates_made} mmrs_1v1 records ({len(players_affected)} players affected)")
-        print(f"[MMR Reconciliation] Completed in {elapsed_ms:.2f}ms")
-    
-    async def _should_run_startup_reconciliation(self) -> bool:
-        """
-        Determine if startup reconciliation should run.
-        
-        Only runs if current time is between midnight and 1 AM UTC.
-        Will run on EVERY startup during this window (useful for testing/restarts).
-        
-        Returns:
-            bool: True if reconciliation should run
-        """
-        now_utc = datetime.now(timezone.utc)
-        current_hour = now_utc.hour
-        
-        # Check if we're in the midnight-1AM UTC window
-        if current_hour != 0:
-            print(f"[MMR Reconciliation] Current hour is {current_hour} UTC, outside midnight-1AM window")
-            return False
-        
-        print(f"[MMR Reconciliation] In midnight-1AM UTC window, will run reconciliation")
-        return True
-    
-    async def _get_last_reconciliation_timestamp(self) -> Optional[datetime]:
-        """
-        Get the timestamp of the last reconciliation run.
-        
-        Returns:
-            datetime: Last reconciliation time, or None if never run
-        """
-        timestamp_file = Path("data/last_reconciliation.timestamp")
-        
-        if not timestamp_file.exists():
-            return None
-        
-        try:
-            timestamp_str = timestamp_file.read_text().strip()
-            return datetime.fromisoformat(timestamp_str)
-        except Exception as e:
-            print(f"[MMR Reconciliation] Error reading timestamp file: {e}")
-            return None
-    
-    async def _save_reconciliation_timestamp(self) -> None:
-        """Save the current timestamp as the last reconciliation time."""
-        timestamp_file = Path("data/last_reconciliation.timestamp")
-        timestamp_file.parent.mkdir(parents=True, exist_ok=True)
-        
-        now_utc = datetime.now(timezone.utc)
-        timestamp_file.write_text(now_utc.isoformat())
-        
-        # Calculate next run time (tomorrow at midnight UTC)
-        next_run = (now_utc + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        print(f"[MMR Reconciliation] Last run: {now_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-        print(f"[MMR Reconciliation] Next scheduled: {next_run.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-    
-    async def _reconciliation_worker(self) -> None:
-        """
-        Background task that runs reconciliation daily at midnight UTC.
-        """
-        print("[MMR Reconciliation] Background worker started")
-        
-        while not self._shutdown_event.is_set():
-            try:
-                # Calculate seconds until next midnight UTC
-                now_utc = datetime.now(timezone.utc)
-                next_midnight = (now_utc + timedelta(days=1)).replace(
-                    hour=0, minute=0, second=0, microsecond=0
-                )
-                seconds_until_midnight = (next_midnight - now_utc).total_seconds()
-                
-                print(f"[MMR Reconciliation] Next run scheduled for {next_midnight.strftime('%Y-%m-%d %H:%M:%S')} UTC "
-                      f"(in {seconds_until_midnight/3600:.1f} hours)")
-                
-                # Wait until midnight or shutdown
-                try:
-                    await asyncio.wait_for(
-                        self._shutdown_event.wait(),
-                        timeout=seconds_until_midnight
-                    )
-                    # Shutdown event was set
-                    break
-                except asyncio.TimeoutError:
-                    # Timeout reached - time to run reconciliation
-                    pass
-                
-                # Run reconciliation
-                await self.reconcile_mmr_stats_from_matches()
-                await self._save_reconciliation_timestamp()
-                
-            except Exception as e:
-                print(f"[MMR Reconciliation] Error in worker: {e}")
-                import traceback
-                traceback.print_exc()
-                # Wait 1 hour before retrying on error
-                try:
-                    await asyncio.wait_for(self._shutdown_event.wait(), timeout=3600)
-                    break
-                except asyncio.TimeoutError:
-                    pass
-        
-        print("[MMR Reconciliation] Background worker stopped")
     
     # ========== Write-Ahead Log (WAL) Methods ==========
     
@@ -924,27 +609,8 @@ class DataAccessService:
                 )
             
             elif job.job_type == WriteJobType.UPDATE_MMR:
-                # Check if this is a player_name-only update (from cleanup)
-                if 'player_name' in job.data and 'new_mmr' not in job.data:
-                    # Player name correction - update only the player_name field
-                    from src.backend.db.db_reader_writer import get_timestamp
-                    await loop.run_in_executor(
-                        None,
-                        self._db_writer.adapter.execute_write,
-                        """
-                        UPDATE mmrs_1v1
-                        SET player_name = :player_name, last_played = :last_played
-                        WHERE discord_uid = :discord_uid AND race = :race
-                        """,
-                        {
-                            'discord_uid': job.data['discord_uid'],
-                            'race': job.data['race'],
-                            'player_name': job.data['player_name'],
-                            'last_played': get_timestamp()
-                        }
-                    )
                 # Check if this is a full stats update or MMR-only update
-                elif 'games_played' in job.data:
+                if 'games_played' in job.data:
                     # Full stats update (from match completion) - use create_or_update_mmr_1v1
                     player_info = self.get_player_info(job.data['discord_uid'])
                     if not player_info or not player_info.get('player_name'):
@@ -1302,25 +968,6 @@ class DataAccessService:
                 print(f"[DataAccessService] ERROR waiting for writer task: {e}")
         
         print("[DataAccessService] Writer task confirmed stopped")
-        
-        # Wait for reconciliation task to finish gracefully
-        if self._reconciliation_task and not self._reconciliation_task.done():
-            print("[DataAccessService] Waiting for reconciliation task to finish...")
-            try:
-                await asyncio.wait_for(self._reconciliation_task, timeout=10.0)
-            except asyncio.TimeoutError:
-                print("[DataAccessService] WARN: Reconciliation task did not exit cleanly, cancelling...")
-                self._reconciliation_task.cancel()
-                try:
-                    await asyncio.wait_for(self._reconciliation_task, timeout=5.0)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
-                    print("[DataAccessService] Reconciliation task forcefully stopped")
-            except asyncio.CancelledError:
-                print("[DataAccessService] Reconciliation task was cancelled")
-            except Exception as e:
-                print(f"[DataAccessService] ERROR waiting for reconciliation task: {e}")
-        
-        print("[DataAccessService] Reconciliation task confirmed stopped")
         
         # Now that the writer task is fully stopped, safely close resources
         if self._wal_db:
@@ -2431,35 +2078,6 @@ class DataAccessService:
         if self._mmrs_1v1_df is None:
             print("[DataAccessService] WARNING: MMRs DataFrame not initialized")
             return False
-        
-        # Validate player_name to prevent bad entries
-        import re
-        bad_name_pattern = re.compile(r'^[Pp]layer\d+$')
-        if bad_name_pattern.match(str(player_name)):
-            print(f"[DataAccessService] WARNING: Suspicious player_name detected: '{player_name}' for discord_uid={discord_uid}")
-            
-            # Attempt to auto-correct by looking up actual name from players table
-            if self._players_df is not None:
-                player_info_rows = self._players_df.filter(pl.col('discord_uid') == discord_uid)
-                
-                if len(player_info_rows) > 0:
-                    correct_name = player_info_rows[0, 'player_name']
-                    if correct_name is None or bad_name_pattern.match(str(correct_name)):
-                        # Fall back to discord_username if player_name is also bad/missing
-                        correct_name = player_info_rows[0, 'discord_username']
-                    
-                    if correct_name and not bad_name_pattern.match(str(correct_name)):
-                        print(f"[DataAccessService] Auto-corrected player_name: '{player_name}' -> '{correct_name}'")
-                        player_name = correct_name
-                    else:
-                        print(f"[DataAccessService] ERROR: Cannot find valid player_name for discord_uid={discord_uid}")
-                        return False
-                else:
-                    print(f"[DataAccessService] ERROR: No player record found for discord_uid={discord_uid}")
-                    return False
-            else:
-                print(f"[DataAccessService] ERROR: Players DataFrame not initialized, cannot validate player_name")
-                return False
         
         # Ensure MMR is an integer
         mmr = int(mmr)
