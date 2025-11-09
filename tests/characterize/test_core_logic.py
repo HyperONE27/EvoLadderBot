@@ -176,7 +176,7 @@ async def test_profile_for_player_with_no_matches():
          patch("src.bot.commands.profile_command.user_info_service") as mock_user_service, \
          patch("src.backend.services.data_access_service.DataAccessService") as mock_das:
         
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": True}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": True})
         mock_guard.require_tos_accepted.return_value = None
         
         # Return minimal player data
@@ -290,7 +290,7 @@ async def test_guard_service_blocks_user_without_tos():
     
     # Mock guard service to indicate TOS not accepted
     with patch("src.bot.commands.queue_command.guard_service") as mock_guard:
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": False}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": False})
         
         # Mock require_tos_accepted to send TOS modal
         async def mock_tos_check(interaction, player_record):

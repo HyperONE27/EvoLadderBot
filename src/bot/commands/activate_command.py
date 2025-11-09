@@ -74,7 +74,7 @@ def register_activate_command(tree: app_commands.CommandTree):
     async def activate(interaction: discord.Interaction):
         print(f"[TERMINAL] /activate started by {interaction.user.id}")
         try:
-            player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+            player = await guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
             guard_service.require_tos_accepted(player)
         except CommandGuardError as exc:
             error_embed, error_view = create_command_guard_error_embed(exc)

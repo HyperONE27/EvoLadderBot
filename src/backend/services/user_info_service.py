@@ -156,7 +156,7 @@ class UserInfoService:
         """
         return self.data_service.player_exists(discord_uid)
     
-    def ensure_player_exists(self, discord_uid: int, discord_username: str) -> Dict[str, Any]:
+    async def ensure_player_exists(self, discord_uid: int, discord_username: str) -> Dict[str, Any]:
         """
         Ensure a player record exists in memory and database.
         
@@ -180,16 +180,14 @@ class UserInfoService:
         
         if player is None:
             # Create minimal player record with discord username
-            # Note: create_player is sync but will queue async write
-            self.create_player(discord_uid=discord_uid, discord_username=discord_username)
+            await self.create_player(discord_uid=discord_uid, discord_username=discord_username)
             player = self.get_player(discord_uid)
         else:
             # Check if username has changed
             current_username = player.get('discord_username')
             if current_username != discord_username:
                 # Update username and log the change
-                # Note: update_player is sync but will queue async write
-                self.update_player(
+                await self.update_player(
                     discord_uid=discord_uid,
                     discord_username=discord_username,
                     log_changes=True
@@ -199,7 +197,7 @@ class UserInfoService:
         
         return player
     
-    def create_player(
+    async def create_player(
         self,
         discord_uid: int,
         discord_username: str = "Unknown",
@@ -213,6 +211,7 @@ class UserInfoService:
         Create a new player.
         
         Uses DataAccessService for instant in-memory creation + async DB write.
+        Includes post-creation cache sync guard to ensure visibility.
         
         Args:
             discord_uid: Discord user ID.
@@ -227,32 +226,35 @@ class UserInfoService:
         Returns:
             The discord_uid (for backwards compatibility).
         """
-        # Run async create in sync context
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If called from async context, just schedule it
-            asyncio.create_task(self.data_service.create_player(
+        try:
+            await self.data_service.create_player(
                 discord_uid=discord_uid,
                 discord_username=discord_username,
                 player_name=player_name,
                 battletag=battletag,
                 country=country,
                 region=region
-            ))
+            )
+        except Exception as e:
+            # Handle race condition: player created by parallel coroutine
+            if "already exists" in str(e).lower() or "unique" in str(e).lower():
+                print(f"[UserInfoService] Player {discord_uid} created in parallel task")
+            else:
+                raise
+        
+        # Post-creation cache sync: ensure player is visible in _players_df
+        # This guards against Polars DataFrame mutation timing issues
+        for attempt in range(3):
+            player = self.get_player(discord_uid)
+            if player is not None:
+                break
+            await asyncio.sleep(0)  # Yield to event loop
         else:
-            # If called from sync context, run it
-            loop.run_until_complete(self.data_service.create_player(
-                discord_uid=discord_uid,
-                discord_username=discord_username,
-                player_name=player_name,
-                battletag=battletag,
-                country=country,
-                region=region
-            ))
+            print(f"[UserInfoService] WARNING: Player {discord_uid} not visible after creation")
         
         return discord_uid
     
-    def update_player(
+    async def update_player(
         self,
         discord_uid: int,
         discord_username: Optional[str] = None,
@@ -300,17 +302,13 @@ class UserInfoService:
         update_payload = {k: v for k, v in update_payload.items() if v is not None}
 
         # Perform the update via DataAccessService (async)
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(
-                self.data_service.update_player_info(discord_uid, **update_payload)
-            )
-        else:
-            loop.run_until_complete(
-                self.data_service.update_player_info(discord_uid, **update_payload)
-            )
+        success = await self.data_service.update_player_info(
+            discord_uid=discord_uid,
+            changed_by="player",
+            **update_payload
+        )
 
-        # Log each field change individually
+        # Log each field change individually (fire-and-forget is acceptable for logging)
         if log_changes and old_player:
             current_player_name = (
                 player_name
@@ -336,7 +334,7 @@ class UserInfoService:
                         new_value=str(new_value) if new_value is not None else None,
                     ))
 
-        return True
+        return success
 
 
     def update_country(self, discord_uid: int, country: str) -> bool:

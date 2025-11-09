@@ -81,13 +81,14 @@ class TestCommandGuardService:
         # Should not raise
         guard_service.require_not_banned(player)
     
-    def test_ensure_player_record_checks_ban_status(self, guard_service):
+    @pytest.mark.asyncio
+    async def test_ensure_player_record_checks_ban_status(self, guard_service):
         """Test that ensure_player_record checks ban status."""
         with patch.object(guard_service, 'user_service') as mock_user_service:
-            mock_user_service.ensure_player_exists.return_value = {"is_banned": True}
+            mock_user_service.ensure_player_exists = AsyncMock(return_value={"is_banned": True})
             
             with pytest.raises(BannedError):
-                guard_service.ensure_player_record(123456, "testuser")
+                await guard_service.ensure_player_record(123456, "testuser")
 
 
 class TestBannedEmbed:

@@ -39,7 +39,7 @@ async def leaderboard_command(interaction: discord.Interaction):
     
     try:
         flow.checkpoint("guard_checks_start")
-        player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        player = await guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
         guard_service.require_tos_accepted(player)
         flow.checkpoint("guard_checks_complete")
     except CommandGuardError as exc:

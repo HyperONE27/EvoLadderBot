@@ -104,7 +104,7 @@ async def test_setup_modal_prefills_with_existing_data():
     with patch("src.bot.commands.setup_command.guard_service") as mock_guard, \
          patch("src.bot.commands.setup_command.user_info_service") as mock_user_service:
         
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": True}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": True})
         mock_guard.require_tos_accepted.return_value = None
         mock_user_service.get_player.return_value = existing_data
         
@@ -427,7 +427,7 @@ async def test_join_queue_button_rejects_without_race():
     mock_interaction.followup.send = AsyncMock()
     
     with patch("src.bot.commands.queue_command.guard_service") as mock_guard:
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": True}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": True})
         mock_guard.require_tos_accepted.return_value = None
         
         # Invoke the button callback
@@ -492,7 +492,7 @@ async def test_prune_command_protects_active_match_message():
     mock_interaction.followup.send = AsyncMock(return_value=MagicMock(id=111111, edit=AsyncMock()))
     
     with patch("src.bot.commands.prune_command.command_guard_service") as mock_guard:
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": True}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": True})
         mock_guard.require_tos_accepted.return_value = None
         
         # Call prune command
@@ -616,7 +616,7 @@ async def test_prune_command_cancel_button():
     mock_interaction.followup.send = AsyncMock(return_value=mock_initial_message)
     
     with patch("src.bot.commands.prune_command.command_guard_service") as mock_guard:
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": True}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": True})
         mock_guard.require_tos_accepted.return_value = None
         
         # Call prune command

@@ -208,7 +208,7 @@ async def prune_command(interaction: discord.Interaction):
     
     try:
         flow.checkpoint("guard_checks_start")
-        player = command_guard_service.ensure_player_record(
+        player = await command_guard_service.ensure_player_record(
             interaction.user.id, 
             interaction.user.name
         )

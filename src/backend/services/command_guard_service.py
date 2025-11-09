@@ -38,19 +38,19 @@ class CommandGuardService:
     def __init__(self, user_service: UserInfoService | None = None) -> None:
         self.user_service = user_service or UserInfoService()
 
-    def ensure_player_record(self, discord_user_id: int, discord_username: str) -> Dict[str, Any]:
+    async def ensure_player_record(self, discord_user_id: int, discord_username: str) -> Dict[str, Any]:
         """
         Ensure the player exists and return the record.
         
         Fetches directly from the in-memory DataAccessService via UserInfoService.
         """
-        player_record = self.user_service.ensure_player_exists(discord_user_id, discord_username)
+        player_record = await self.user_service.ensure_player_exists(discord_user_id, discord_username)
         self.require_not_banned(player_record)
         return player_record
 
-    def require_player_exists(self, discord_user_id: int, discord_username: str) -> Dict[str, Any]:
+    async def require_player_exists(self, discord_user_id: int, discord_username: str) -> Dict[str, Any]:
         """Alias kept for readability; returns the player record."""
-        return self.ensure_player_record(discord_user_id, discord_username)
+        return await self.ensure_player_record(discord_user_id, discord_username)
 
     def require_tos_accepted(self, player: Dict[str, Any]) -> None:
         if not player.get("accepted_tos"):

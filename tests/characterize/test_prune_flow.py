@@ -104,7 +104,7 @@ async def test_prune_sends_immediate_followup(mock_interaction, mock_bot_message
     
     with patch("src.bot.commands.prune_command.command_guard_service") as mock_guard:
         mock_player = {"discord_uid": 218147282875318274, "tos_accepted": True}
-        mock_guard.ensure_player_record.return_value = mock_player
+        mock_guard.ensure_player_record = AsyncMock(return_value=mock_player)
         mock_guard.require_tos_accepted.return_value = None
         
         await prune_command(mock_interaction)
@@ -128,7 +128,7 @@ async def test_prune_handles_no_messages(mock_interaction):
     
     with patch("src.bot.commands.prune_command.command_guard_service") as mock_guard:
         mock_player = {"discord_uid": 218147282875318274, "tos_accepted": True}
-        mock_guard.ensure_player_record.return_value = mock_player
+        mock_guard.ensure_player_record = AsyncMock(return_value=mock_player)
         mock_guard.require_tos_accepted.return_value = None
         
         await prune_command(mock_interaction)
@@ -174,7 +174,7 @@ async def test_prune_protects_queue_messages(mock_interaction, mock_bot_message)
     
     with patch("src.bot.commands.prune_command.command_guard_service") as mock_guard:
         mock_player = {"discord_uid": 218147282875318274, "tos_accepted": True}
-        mock_guard.ensure_player_record.return_value = mock_player
+        mock_guard.ensure_player_record = AsyncMock(return_value=mock_player)
         mock_guard.require_tos_accepted.return_value = None
         
         await prune_command(mock_interaction)
@@ -213,7 +213,7 @@ async def test_prune_confirmation_flow(mock_interaction, mock_bot_message):
     
     with patch("src.bot.commands.prune_command.command_guard_service") as mock_guard:
         mock_player = {"discord_uid": 218147282875318274, "tos_accepted": True}
-        mock_guard.ensure_player_record.return_value = mock_player
+        mock_guard.ensure_player_record = AsyncMock(return_value=mock_player)
         mock_guard.require_tos_accepted.return_value = None
         
         await prune_command(mock_interaction)
@@ -283,7 +283,7 @@ async def test_prune_protects_active_queue_message(mock_interaction, mock_bot_me
     
     with patch("src.bot.commands.prune_command.command_guard_service") as mock_guard:
         mock_player = {"discord_uid": 218147282875318274, "tos_accepted": True}
-        mock_guard.ensure_player_record.return_value = mock_player
+        mock_guard.ensure_player_record = AsyncMock(return_value=mock_player)
         mock_guard.require_tos_accepted.return_value = None
         
         await prune_command(mock_interaction)
@@ -330,7 +330,7 @@ async def test_prune_protects_very_old_queue_message(mock_interaction, mock_bot_
     
     with patch("src.bot.commands.prune_command.command_guard_service") as mock_guard:
         mock_player = {"discord_uid": 218147282875318274, "tos_accepted": True}
-        mock_guard.ensure_player_record.return_value = mock_player
+        mock_guard.ensure_player_record = AsyncMock(return_value=mock_player)
         mock_guard.require_tos_accepted.return_value = None
         
         await prune_command(mock_interaction)

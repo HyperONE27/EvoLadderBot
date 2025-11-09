@@ -22,7 +22,7 @@ BOT_ICON_URL = "https://images-ext-1.discordapp.net/external/RB5N__Tb9izV-SQ8txI
 async def termsofservice_command(interaction: discord.Interaction):
     """Show the terms of service"""
     try:
-        guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        await guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
     except CommandGuardError as exc:
         error_embed, error_view = create_command_guard_error_embed(exc)
         await send_ephemeral_response(interaction, embed=error_embed, view=error_view)

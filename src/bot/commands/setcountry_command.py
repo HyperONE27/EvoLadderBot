@@ -39,7 +39,7 @@ async def country_autocomplete(
 async def setcountry_command(interaction: discord.Interaction, country_code: str):
     """Set or update your country"""
     try:
-        player = guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
+        player = await guard_service.ensure_player_record(interaction.user.id, interaction.user.name)
         guard_service.require_tos_accepted(player)
     except CommandGuardError as exc:
         error_embed, error_view = create_command_guard_error_embed(exc)

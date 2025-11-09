@@ -156,7 +156,7 @@ async def test_player_queues_during_match_is_rejected():
         with patch("src.bot.commands.queue_command.guard_service") as mock_guard, \
              patch("src.bot.commands.queue_command.channel_to_match_view_map", mock_channel_map):
             mock_player = {"discord_uid": player_id, "tos_accepted": True}
-            mock_guard.ensure_player_record.return_value = mock_player
+            mock_guard.ensure_player_record = AsyncMock(return_value=mock_player)
             mock_guard.require_tos_accepted.return_value = None
             
             # Set the interaction channel ID to match our mock

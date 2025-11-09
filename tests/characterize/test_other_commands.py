@@ -51,7 +51,7 @@ async def test_leaderboard_command(mock_interaction):
     with patch("src.bot.commands.leaderboard_command.leaderboard_service") as mock_service, \
          patch("src.bot.commands.leaderboard_command.guard_service") as mock_guard:
         mock_service.get_leaderboard_data = AsyncMock(return_value=mock_leaderboard_data)
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": True}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": True})
         
         # Import and call the leaderboard command
         from src.bot.commands.leaderboard_command import leaderboard_command
@@ -81,7 +81,7 @@ async def test_leaderboard_empty_state(mock_interaction):
     with patch("src.bot.commands.leaderboard_command.leaderboard_service") as mock_service, \
          patch("src.bot.commands.leaderboard_command.guard_service") as mock_guard:
         mock_service.get_leaderboard_data = AsyncMock(return_value={"players": [], "total_pages": 1, "current_page": 1, "total_players": 0})
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": True}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": True})
         
         # Import and call the leaderboard command
         from src.bot.commands.leaderboard_command import leaderboard_command
@@ -128,7 +128,7 @@ async def test_profile_command(mock_interaction):
          patch("src.bot.commands.profile_command.guard_service") as mock_guard, \
          patch("src.backend.services.data_access_service.DataAccessService") as mock_das_class:
         mock_service.get_player = MagicMock(return_value=mock_profile_data)
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": True}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": True})
         # Mock DataAccessService instance
         mock_das_instance = MagicMock()
         mock_das_instance.get_all_player_mmrs.return_value = mock_mmr_data
@@ -162,7 +162,7 @@ async def test_profile_for_new_player(mock_interaction):
          patch("src.bot.commands.profile_command.guard_service") as mock_guard, \
          patch("src.backend.services.data_access_service.DataAccessService") as mock_das_class:
         mock_service.get_player = MagicMock(return_value=None)
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": True}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": True})
         # Mock DataAccessService instance for new player (empty MMR history)
         mock_das_instance = MagicMock()
         mock_das_instance.get_all_player_mmrs.return_value = []
@@ -207,7 +207,7 @@ async def test_setup_command(mock_interaction):
     # Import and call the setup command
     with patch("src.bot.commands.setup_command.guard_service") as mock_guard, \
          patch("src.bot.commands.setup_command.user_info_service") as mock_user_info:
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": True}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": True})
         mock_user_info.get_player_info.return_value = {
             "player_name": "TestUser",
             "alt_ids": ["alt1", "alt2"],
@@ -239,7 +239,7 @@ async def test_command_error_handling(mock_interaction):
     with patch("src.bot.commands.leaderboard_command.leaderboard_service") as mock_service, \
          patch("src.bot.commands.leaderboard_command.guard_service") as mock_guard:
         mock_service.get_leaderboard_data = AsyncMock(side_effect=Exception("Database error"))
-        mock_guard.ensure_player_record.return_value = {"discord_uid": 218147282875318274, "tos_accepted": True}
+        mock_guard.ensure_player_record = AsyncMock(return_value={"discord_uid": 218147282875318274, "tos_accepted": True})
         
         # Import and call the leaderboard command
         from src.bot.commands.leaderboard_command import leaderboard_command

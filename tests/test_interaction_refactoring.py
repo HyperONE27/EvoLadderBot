@@ -59,7 +59,7 @@ async def test_prune_sends_immediate_response(mock_flow_tracker, mock_guard_serv
     
     # Setup guard service mocks
     mock_player = {"discord_uid": TEST_USER_1, "player_name": "TestPlayer1", "tos_accepted": True}
-    mock_guard_service.ensure_player_record.return_value = mock_player
+    mock_guard_service.ensure_player_record = AsyncMock(return_value=mock_player)
     mock_guard_service.require_tos_accepted.return_value = None
     
     # Mock FlowTracker
@@ -112,7 +112,7 @@ async def test_queue_captures_message_ids(
     
     # Setup guard service
     mock_player = {"discord_uid": TEST_USER_1, "player_name": "TestPlayer1", "tos_accepted": True}
-    mock_guard_service.ensure_player_record.return_value = mock_player
+    mock_guard_service.ensure_player_record = AsyncMock(return_value=mock_player)
     
     # Setup DataAccessService
     mock_data_service = Mock()

@@ -89,7 +89,7 @@ async def test_queue_sends_initial_embed(mock_interaction, mock_player_data):
          patch("src.bot.commands.queue_command.QueueView") as mock_queue_view, \
          patch("src.bot.commands.queue_command.channel_to_match_view_map", {}):
         
-        mock_guard.ensure_player_record.return_value = mock_player_data
+        mock_guard.ensure_player_record = AsyncMock(return_value=mock_player_data)
         mock_guard.require_queue_access.return_value = None
         
         mock_das_instance = MagicMock()
@@ -352,7 +352,7 @@ async def test_player_cannot_double_queue(mock_interaction):
         with patch("src.bot.commands.queue_command.guard_service") as mock_guard, \
              patch("src.bot.commands.queue_command.channel_to_match_view_map", {}):
             mock_player = {"discord_uid": 218147282875318274, "tos_accepted": True}
-            mock_guard.ensure_player_record.return_value = mock_player
+            mock_guard.ensure_player_record = AsyncMock(return_value=mock_player)
             mock_guard.require_tos_accepted.return_value = None
             
             # Call the queue command
