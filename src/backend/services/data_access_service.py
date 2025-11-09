@@ -2919,7 +2919,7 @@ class DataAccessService:
     
     async def insert_replay(self, replay_data: Dict[str, Any]) -> bool:
         """
-        Insert a new replay record.
+        Insert a new replay record with immediate in-memory update.
         
         Args:
             replay_data: Replay data dictionary
@@ -2927,6 +2927,24 @@ class DataAccessService:
         Returns:
             True if the write was queued successfully
         """
+        # Update in-memory immediately
+        if self._replays_df is not None:
+            try:
+                # Create new row DataFrame
+                new_row = pl.DataFrame([replay_data], infer_schema_length=None)
+                
+                # Concatenate to add the new row (prepend for recent-first ordering)
+                self._replays_df = pl.concat([new_row, self._replays_df], how="diagonal_relaxed")
+                
+                print(f"[DataAccessService] Added replay to memory: {replay_data.get('replay_hash', 'unknown')}")
+            except Exception as e:
+                print(f"[DataAccessService] Error adding replay to memory: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("[DataAccessService] WARNING: Replays DataFrame not initialized")
+        
+        # Queue async write to database
         job = WriteJob(
             job_type=WriteJobType.INSERT_REPLAY,
             data=replay_data,

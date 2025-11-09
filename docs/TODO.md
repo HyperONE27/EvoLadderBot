@@ -265,7 +265,8 @@
 - ⏰ Services are instantiated several times, including `/queue` matchmaker
 - ⏰ Two separate `/queue` instances exist quietly
   - ✅ Merged the queues
-- ⏰ 
+- ✅ `/admin match` doesn't show replay details for matches completed in the current bot deployment sesion
+  - ✅ Fixed match resolution to add replay details to memory in addition to queuing a DB write
 - ⏰ 
 - ⏰ 
 - ⏰ 
