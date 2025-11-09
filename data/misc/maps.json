@@ -7,7 +7,8 @@
                 "author": "OfficialTLMC",
                 "am_link": "battlenet:://starcraft/map/1/368673",
                 "eu_link": "battlenet:://starcraft/map/2/259722",
-                "as_link": "battlenet:://starcraft/map/3/186202"
+                "as_link": "battlenet:://starcraft/map/3/186202",
+                "game": "sc2"
             },
             {
                 "name": "[SC:Evo] Death Valley (데스밸리)",
@@ -15,7 +16,8 @@
                 "author": "SCEvoLadder",
                 "am_link": "battlenet:://starcraft/map/1/367495",
                 "eu_link": "battlenet:://starcraft/map/2/258890",
-                "as_link": "battlenet:://starcraft/map/3/184685"
+                "as_link": "battlenet:://starcraft/map/3/184685",
+                "game": "bw"
             },
             {
                 "name": "[SC:Evo] Holy World (홀리월드)",
@@ -23,7 +25,8 @@
                 "author": "SCEvoLadder",
                 "am_link": "battlenet:://starcraft/map/1/367497",
                 "eu_link": "battlenet:://starcraft/map/2/258892",
-                "as_link": "battlenet:://starcraft/map/3/184687"
+                "as_link": "battlenet:://starcraft/map/3/184687",
+                "game": "bw"
             },
             {
                 "name": "Keres Passage SEL",
@@ -31,7 +34,8 @@
                 "author": "HyperONE",
                 "am_link": "battlenet:://starcraft/map/1/367550",
                 "eu_link": "battlenet:://starcraft/map/2/258950",
-                "as_link": "battlenet:://starcraft/map/3/184790"
+                "as_link": "battlenet:://starcraft/map/3/184790",
+                "game": "sc2"
             },
             {
                 "name": "Khione SEL",
@@ -39,7 +43,8 @@
                 "author": "HyperONE",
                 "am_link": "battlenet:://starcraft/map/1/367554",
                 "eu_link": "battlenet:://starcraft/map/2/258956",
-                "as_link": "battlenet:://starcraft/map/3/184800"
+                "as_link": "battlenet:://starcraft/map/3/184800",
+                "game": "sc2"
             },
             {
                 "name": "[TLMC21] Mothership",
@@ -47,7 +52,8 @@
                 "author": "OfficialTLMC",
                 "am_link": "battlenet:://starcraft/map/1/368676",
                 "eu_link": "battlenet:://starcraft/map/2/259724",
-                "as_link": "battlenet:://starcraft/map/3/186204"
+                "as_link": "battlenet:://starcraft/map/3/186204",
+                "game": "sc2"
             },
             {
                 "name": "[SC:Evo] Radeon (라데온)",
@@ -55,7 +61,8 @@
                 "author": "SCEvoLadder",
                 "am_link": "battlenet:://starcraft/map/1/367506",
                 "eu_link": "battlenet:://starcraft/map/2/258902",
-                "as_link": "battlenet:://starcraft/map/3/184696"
+                "as_link": "battlenet:://starcraft/map/3/184696",
+                "game": "bw"
             },
             {
                 "name": "[SC:Evo] Sylphid (실피드)",
@@ -63,7 +70,8 @@
                 "author": "SCEvoLadder",
                 "am_link": "battlenet:://starcraft/map/1/367510",
                 "eu_link": "battlenet:://starcraft/map/2/258906",
-                "as_link": "battlenet:://starcraft/map/3/184701"
+                "as_link": "battlenet:://starcraft/map/3/184701",
+                "game": "bw"
             },
             {
                 "name": "[SC:Evo] Vermeer (버미어)",
@@ -71,7 +79,8 @@
                 "author": "SCEvoLadder",
                 "am_link": "battlenet:://starcraft/map/1/367512",
                 "eu_link": "battlenet:://starcraft/map/2/258908",
-                "as_link": "battlenet:://starcraft/map/3/184704"
+                "as_link": "battlenet:://starcraft/map/3/184704",
+                "game": "bw"
             }
         ],
         "season_beta": [

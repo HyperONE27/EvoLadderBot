@@ -232,8 +232,8 @@
 - ⏰ ADD REMINDERS TO CONFIRM AND UPLOAD REPLAYS
 - ✅ Fix leaderboard `player_name` field
 - ✅ Fix a million memory leaks(?)
-- ⏰ Write up announcement explaining fixes
-- ⏰ Write up announcement asking for Korean/Simplified Chinese/Spanish admins
+- ✅ Write up announcement explaining fixes
+- ✅ Write up announcement asking for Korean/Simplified Chinese/Spanish admins
 
 ### Announcement
 
@@ -247,6 +247,28 @@
 - Fixed an issue where `/leaderboard` did 
 - Fixed an issue where `/profile` did not display total games/wins/losses/draws accurately
 
+
+### November 9, 2025
+- ✅ Singapore is displayed as being part of Asia server instead of Americas server
+  - ✅ Switched region code from "AS" to "AM"
+- ⏰ Matchmaker cycles are not sychronized with the itmers displayed to players in /queue
+- ✅ Discord IDs are not being cached by the bot since bot lacks member intents
+  - ✅ Added `intents.members = True`
+- ⏰ Main ID allows non-English characters
+  - ✅ Validator now only allows 3-12 English characters
+  - ⏰ Update `/setup` UI accordingly
+- ❌ Reset `/setup` for players with non-English player names
+  - ✅ Manually swapped their names
+- ✅ Prettify with the race emotes everywheree!
+  - ✅ Added race emotes to race select in `/queue`
+  - ✅ Added game emotes to map vetoes in `/queue`
+- ⏰ Services are instantiated several times, including `/queue` matchmaker
+- ⏰ Two separate `/queue` instances exist quietly
+  - ✅ Merged the queues
+- ⏰ 
+- ⏰ 
+- ⏰ 
+- ⏰ 
 
 ## PRE-BETA
 

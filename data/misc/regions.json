@@ -23,7 +23,7 @@
         {"code": "USE", "name": "Eastern United States","short_name": "US East",        "region_code": "AM"},
         {"code": "BRZ", "name": "Brazil",               "short_name": "South America",  "region_code": "AM"},
         {"code": "EUC", "name": "Central Europe",       "short_name": "Central EU",     "region_code": "EU"},
-        {"code": "SNG", "name": "Singapore",            "short_name": "Singapore",      "region_code": "AS"},
+        {"code": "SNG", "name": "Singapore",            "short_name": "Singapore",      "region_code": "AM"},
         {"code": "AUS", "name": "Australia",            "short_name": "Australia",      "region_code": "AM"},
         {"code": "KOR", "name": "Korea",                "short_name": "Korea",          "region_code": "AS"},
         {"code": "TWN", "name": "Taiwan",               "short_name": "Taiwan",         "region_code": "AS"}

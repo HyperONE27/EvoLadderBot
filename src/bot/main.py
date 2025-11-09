@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
+intents.members = True
 
 bot = EvoLadderBot(command_prefix="!", intents=intents)
 

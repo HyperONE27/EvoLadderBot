@@ -99,6 +99,52 @@ class MapsService(BaseConfigService):
         link_value = map_data.get(link_key)
         return str(link_value) if isinstance(link_value, str) and link_value else None
 
+    def get_map_game_emote(self, map_name: str) -> Optional[str]:
+        """Return the Discord emote for the game type of the given map.
+        
+        Args:
+            map_name: Full map name (e.g., "[SC:Evo] Death Valley (데스밸리)")
+            
+        Returns:
+            The Discord custom emote markdown string, or None if map not found
+            or game field is missing/invalid.
+        """
+        map_data = self.get_map_by_name(map_name)
+        if not map_data:
+            return None
+        
+        game = map_data.get("game")
+        if not game or not isinstance(game, str):
+            return None
+        
+        # Load emotes from emotes.json
+        emotes_path = "data/misc/emotes.json"
+        try:
+            with open(emotes_path, 'r', encoding='utf-8') as f:
+                emotes_data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            raise RuntimeError(f"Failed to load emotes from {emotes_path}: {e}")
+        
+        # Map game field to emote name
+        game_to_emote_name = {
+            "bw": "brood_war_logo",
+            "sc2": "starcraft_2_logo"
+        }
+        
+        emote_name = game_to_emote_name.get(game.lower())
+        if not emote_name:
+            return None
+        
+        # Find the emote in the data
+        for emote in emotes_data:
+            if emote.get("name") == emote_name:
+                markdown = emote.get("markdown")
+                if isinstance(markdown, str):
+                    return markdown
+                return None
+        
+        return None
+
     # ------------------------------------------------------------------
     # DEPRECATED: Short name methods (kept for backwards compatibility)
     # ------------------------------------------------------------------

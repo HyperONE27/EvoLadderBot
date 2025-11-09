@@ -52,7 +52,7 @@ from contextlib import suppress
 
 from src.backend.services.performance_service import FlowTracker
 from src.bot.components.replay_details_embed import ReplayDetailsEmbed
-from src.bot.config import QUEUE_TIMEOUT
+from src.bot.config import CURRENT_SEASON, QUEUE_TIMEOUT
 from src.backend.core.config import EXPECTED_GAME_PRIVACY, EXPECTED_GAME_SPEED, EXPECTED_GAME_DURATION, EXPECTED_LOCKED_ALLIANCES
 
 
@@ -261,6 +261,7 @@ class MapVetoSelect(discord.ui.Select):
             options.append(
                 discord.SelectOption(
                     label=map_data["short_name"],
+                    emoji=maps_service.get_map_game_emote(map_data["name"]),
                     value=map_data["name"],
                     default=map_data["name"] in (default_values or [])
                 )
@@ -632,16 +633,18 @@ class QueueView(discord.ui.View):
         if self.vetoed_maps:
             # Convert full names to short names for display
             short_names = []
+            full_name_map = {}
             for full_name in self.vetoed_maps:
                 short_name = maps_service.get_short_name_by_full_name(full_name)
                 short_names.append(short_name)
+                full_name_map[short_name] = full_name
             
             # Sort maps according to the service's defined order
             map_order = maps_service.get_map_short_names()
             sorted_maps = [map_name for map_name in map_order if map_name in short_names]
             # Add Discord number emotes
             number_emotes = [":one:", ":two:", ":three:", ":four:"]
-            map_list = "\n".join([f"{number_emotes[i]} {map_name}" for i, map_name in enumerate(sorted_maps)])
+            map_list = "\n".join([f"{number_emotes[i]} {maps_service.get_map_game_emote(full_name_map[map_name])} {map_name}" for i, map_name in enumerate(sorted_maps)])
             embed.add_field(
                 name=f"Vetoed Maps ({veto_count}/4)",
                 value=map_list,
@@ -2408,6 +2411,7 @@ class BroodWarRaceSelect(discord.ui.Select):
         options = [
             discord.SelectOption(
                 label=label,
+                emoji=get_race_emote(value),
                 value=value,
                 description=description,
                 default=value == default_value,
@@ -2433,6 +2437,7 @@ class StarCraftRaceSelect(discord.ui.Select):
         options = [
             discord.SelectOption(
                 label=label,
+                emoji=get_race_emote(value),
                 value=value,
                 description=description,
                 default=value == default_value,

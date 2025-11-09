@@ -14,7 +14,7 @@ class ValidationService:
         
         Args:
             user_id: The user ID to validate
-            allow_international: Kept for backwards compatibility but no longer enforced
+            allow_international: If True, allows any characters. If False, only A-Z a-z allowed.
             
         Returns:
             Tuple of (is_valid, error_message)
@@ -29,6 +29,11 @@ class ValidationService:
         
         if len(user_id) > 12:
             return False, "User ID cannot exceed 12 characters"
+        
+        # Enforce character restrictions based on allow_international flag
+        if not allow_international:
+            if not re.match(r'^[A-Za-z]{3,}$', user_id):
+                return False, "Main ID must contain only English letters (A-Z, a-z) and be at least 3 characters long"
         
         return True, None
 
