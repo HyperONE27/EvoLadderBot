@@ -280,6 +280,39 @@ class MapVetoSelect(discord.ui.Select):
         await self.view.update_embed(interaction)
 
 
+class ConfirmQuickStartGuideButton(discord.ui.Button):
+    """Button to confirm player has read the quick start guide"""
+    
+    def __init__(self):
+        super().__init__(
+            label="I've Read the Quick Start Guide",
+            emoji="📘",
+            style=discord.ButtonStyle.primary,
+            row=0
+        )
+    
+    async def callback(self, interaction: discord.Interaction):
+        if self.disabled:
+            return
+        
+        from src.backend.services.app_context import data_access_service
+        
+        await queue_interaction_defer(interaction)
+        
+        user_id = interaction.user.id
+        
+        await data_access_service.set_read_quick_start_guide(user_id, True)
+        
+        self.emoji = "✅"
+        self.style = discord.ButtonStyle.secondary
+        self.disabled = True
+        
+        self.view.has_read_guide = True
+        
+        embed = self.view.get_embed()
+        await queue_edit_original(interaction, embed=embed, view=self.view)
+
+
 class JoinQueueButton(discord.ui.Button):
     """Join queue button"""
     
@@ -298,6 +331,32 @@ class JoinQueueButton(discord.ui.Button):
         # Defer the interaction immediately to prevent timeouts
         await queue_interaction_defer(interaction)
         flow.checkpoint("defer_interaction_complete")
+
+        flow.checkpoint("validate_quick_start_guide")
+        # Validate that player has confirmed reading the quick start guide
+        if not self.view.has_read_guide:
+            error = ErrorEmbedException(
+                title="Quick Start Guide Not Confirmed",
+                description="You must read the [Quick Start Guide](https://rentry.co/evoladderbot-quickstartguide) and click the confirmation button before joining the queue.\n\nThis is required for all new players."
+            )
+            error_view = create_error_view_from_exception(error)
+            error_view.clear_items()
+            restart_buttons = ConfirmRestartCancelButtons.create_buttons(
+                reset_target=self.view,
+                include_confirm=False,
+                include_restart=True,
+                include_cancel=False
+            )
+            for button in restart_buttons:
+                error_view.add_item(button)
+            
+            flow.complete("validation_failed_guide_not_confirmed")
+            await followup_ephemeral_response(
+                interaction,
+                embed=error_view.embed,
+                view=error_view,
+            )
+            return
 
         flow.checkpoint("validate_race_selection")
         # Validate that at least one race is selected
@@ -474,6 +533,13 @@ class QueueView(discord.ui.View):
         self.selected_bw_race = next((race for race in default_races if race.startswith("bw_")), None)
         self.selected_sc2_race = next((race for race in default_races if race.startswith("sc2_")), None)
         self.vetoed_maps = default_maps or []
+        
+        from src.backend.services.app_context import data_access_service
+        self.has_read_guide = data_access_service.get_read_quick_start_guide(discord_user_id)
+        
+        if not self.has_read_guide:
+            self.add_item(ConfirmQuickStartGuideButton())
+        
         self.add_item(JoinQueueButton())
         self.add_item(ClearSelectionsButton())
         self.add_item(CancelQueueSetupButton())
@@ -520,14 +586,14 @@ class QueueView(discord.ui.View):
         """Get the embed for this view without requiring an interaction"""
         embed = discord.Embed(
             title="🎮 Matchmaking Queue",
-            description="Configure your queue preferences",
+            description="",
             color=discord.Color.blue()
         )
         
         # Add quick start guide link (impossible to miss)
         embed.add_field(
             name="⚠️ NEW PLAYERS START HERE ⚠️",
-            value="**QUICK START GUIDE:** https://rentry.co/evoladderbot-quickstartguide\n\nRead this before your first match!",
+            value="📘 **QUICK START GUIDE:**  [READ THIS BEFORE YOUR FIRST MATCH!](https://rentry.co/evoladderbot-quickstartguide)\n",
             inline=False
         )
         

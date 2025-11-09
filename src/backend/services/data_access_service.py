@@ -57,6 +57,7 @@ class WriteJobType(Enum):
     UPDATE_PLAYER_STATE = "update_player_state"
     UPDATE_SHIELD_BATTERY_BUG = "update_shield_battery_bug"
     UPDATE_IS_BANNED = "update_is_banned"
+    UPDATE_READ_QUICK_START_GUIDE = "update_read_quick_start_guide"
 
 
 @dataclass
@@ -201,6 +202,7 @@ class DataAccessService:
                 "player_state": pl.Series([], dtype=pl.Utf8),
                 "shield_battery_bug": pl.Series([], dtype=pl.Boolean),
                 "is_banned": pl.Series([], dtype=pl.Boolean),
+                "read_quick_start_guide": pl.Series([], dtype=pl.Boolean),
             })
         print(f"[DataAccessService]   Players loaded: {len(self._players_df)} rows, size: {self._players_df.estimated_size('mb'):.2f} MB")
         
@@ -1206,6 +1208,14 @@ class DataAccessService:
                     job.data['value']
                 )
             
+            elif job.job_type == WriteJobType.UPDATE_READ_QUICK_START_GUIDE:
+                await loop.run_in_executor(
+                    None,
+                    self._db_writer.set_read_quick_start_guide,
+                    job.data['discord_uid'],
+                    job.data['value']
+                )
+            
             # Add other job types as we implement them
             else:
                 print(f"[DataAccessService] WARNING: Unknown job type: {job.job_type}")
@@ -1597,6 +1607,72 @@ class DataAccessService:
             timestamp=time.time()
         )
         await self._queue_write(action_log_job)
+        
+        return True
+    
+    def get_read_quick_start_guide(self, discord_uid: int) -> bool:
+        """
+        Get whether player has confirmed reading the quick start guide.
+        
+        Args:
+            discord_uid: Player's Discord ID
+            
+        Returns:
+            True if player confirmed, False otherwise
+        """
+        if self._players_df is None or len(self._players_df) == 0:
+            return False
+        
+        if "read_quick_start_guide" not in self._players_df.columns:
+            return False
+        
+        player_row = self._players_df.filter(pl.col("discord_uid") == discord_uid)
+        if len(player_row) == 0:
+            return False
+        
+        return bool(player_row["read_quick_start_guide"][0])
+    
+    async def set_read_quick_start_guide(
+        self, 
+        discord_uid: int, 
+        value: bool
+    ) -> bool:
+        """
+        Set whether player has confirmed reading the quick start guide.
+        
+        Args:
+            discord_uid: Player's Discord ID
+            value: True if confirmed, False otherwise
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if self._players_df is None:
+            return False
+        
+        mask = pl.col("discord_uid") == discord_uid
+        if len(self._players_df.filter(mask)) == 0:
+            return False
+        
+        self._players_df = self._players_df.with_columns(
+            pl.when(mask).then(pl.lit(value)).otherwise(pl.col("read_quick_start_guide")).alias("read_quick_start_guide")
+        )
+        
+        if value:
+            logger.info(f"Player {discord_uid} confirmed Quick Start Guide")
+        
+        job = WriteJob(
+            job_type=WriteJobType.UPDATE_READ_QUICK_START_GUIDE,
+            data={
+                "discord_uid": discord_uid,
+                "value": value
+            },
+            timestamp=time.time()
+        )
+        await self._queue_write(job)
         
         return True
     

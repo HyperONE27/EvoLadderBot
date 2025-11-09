@@ -109,6 +109,24 @@ class DatabaseReader:
         """Get all players."""
         return self.adapter.execute_query("SELECT * FROM players")
     
+    def get_read_quick_start_guide(self, discord_uid: int) -> bool:
+        """
+        Get whether a player has confirmed reading the quick start guide.
+        
+        Args:
+            discord_uid: Discord user ID
+            
+        Returns:
+            True if player confirmed, False otherwise
+        """
+        results = self.adapter.execute_query(
+            "SELECT read_quick_start_guide FROM players WHERE discord_uid = :discord_uid",
+            {"discord_uid": discord_uid}
+        )
+        if not results:
+            return False
+        return bool(results[0]['read_quick_start_guide'])
+    
     # ========== Player Action Logs Table ==========
     
     def get_player_action_logs(
@@ -475,6 +493,27 @@ class DatabaseWriter:
             return rowcount > 0
         except Exception as e:
             print(f"Error updating ban status for {discord_uid}: {e}")
+            return False
+    
+    def set_read_quick_start_guide(self, discord_uid: int, value: bool) -> bool:
+        """
+        Update whether player has confirmed reading the quick start guide.
+        
+        Args:
+            discord_uid: Discord user ID
+            value: True if confirmed, False otherwise
+            
+        Returns:
+            True if update succeeded, False otherwise
+        """
+        try:
+            rowcount = self.adapter.execute_write(
+                "UPDATE players SET read_quick_start_guide = :value WHERE discord_uid = :discord_uid",
+                {"value": value, "discord_uid": discord_uid}
+            )
+            return rowcount > 0
+        except Exception as e:
+            print(f"Error updating read_quick_start_guide for {discord_uid}: {e}")
             return False
     
     def accept_terms_of_service(self, discord_uid: int) -> bool:
