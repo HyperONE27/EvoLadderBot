@@ -141,13 +141,12 @@ class MatchCompletionService:
             self.logger.info(f"Player {player_discord_uid} confirmed match {match_id}")
             
             # Notify the other player that their opponent confirmed
-            from src.backend.services.data_access_service import DataAccessService
+            from src.backend.services.app_context import data_access_service
             from src.backend.services.process_pool_health import get_bot_instance
             from src.bot.utils.message_helpers import queue_user_send
             import discord
             
-            data_service = DataAccessService()
-            match_data = data_service.get_match(match_id)
+            match_data = data_access_service.get_match(match_id)
             
             if match_data:
                 # Determine which player is the opponent

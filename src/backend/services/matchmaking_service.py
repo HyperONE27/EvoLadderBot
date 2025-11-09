@@ -1030,19 +1030,105 @@ class Matchmaker:
 				print(f"[Matchmaker] Cannot record result for match {match_id}: already terminal (result={match_result}, reports: p1={p1_report}, p2={p2_report})")
 				return False
 			
-			# Update in-memory match data immediately
-			success = data_service.update_match_report(match_id, player_discord_uid, report_value)
-			if not success:
-				print(f"[Matchmaker] Failed to update player report for match {match_id} in memory.")
-				return False
+		# Update in-memory match data immediately
+		success = data_service.update_match_report(match_id, player_discord_uid, report_value)
+		if not success:
+			print(f"[Matchmaker] Failed to update player report for match {match_id} in memory.")
+			return False
 		
-		# After any report, trigger an immediate check (outside the lock to avoid deadlock).
+		# Send notification to opponent if they haven't reported yet
+		# Only for win/loss/draw reports (not aborts)
+		if report_value in [0, 1, 2]:
+			await self._notify_opponent_of_report(
+				match_id, 
+				player_discord_uid, 
+				report_value, 
+				match_data
+			)
+	
+	# After any report, trigger an immediate check (outside the lock to avoid deadlock).
 		# This will pick up aborts, conflicts, or completions instantly.
 		import asyncio
 		print(f"[Matchmaker] Triggering immediate completion check for match {match_id} after a report.")
 		asyncio.create_task(match_completion_service.check_match_completion(match_id))
 		
 		return True
+	
+	async def _notify_opponent_of_report(
+		self, 
+		match_id: int, 
+		reporting_player_uid: int, 
+		report_value: int,
+		match_data: dict
+	) -> None:
+		"""
+		Notify the opponent that the reporting player has submitted their match result.
+		Only sends if the opponent has NOT yet reported.
+		
+		Args:
+			match_id: Match ID
+			reporting_player_uid: Discord UID of the player who just reported
+			report_value: The report value (0=draw, 1=player1 win, 2=player2 win)
+			match_data: Current match data from DataAccessService
+		"""
+		try:
+			from src.backend.services.process_pool_health import get_bot_instance
+			from src.bot.utils.message_helpers import queue_user_send
+			from src.backend.services.app_context import data_access_service
+			import discord
+			
+			# Determine opponent
+			player_1_uid = match_data['player_1_discord_uid']
+			player_2_uid = match_data['player_2_discord_uid']
+			p1_report = match_data.get('player_1_report')
+			p2_report = match_data.get('player_2_report')
+			
+			# Determine which player is the opponent
+			if reporting_player_uid == player_1_uid:
+				opponent_uid = player_2_uid
+				opponent_report = p2_report
+			else:
+				opponent_uid = player_1_uid
+				opponent_report = p1_report
+			
+			# Only send if opponent hasn't reported yet
+			if opponent_report is not None:
+				return
+			
+			# Get player names
+			reporting_player_info = data_access_service.get_player_info(reporting_player_uid)
+			reporting_player_name = reporting_player_info.get('player_name', f'<@{reporting_player_uid}>')
+			
+			# Format the report text as full sentence
+			if report_value == 0:
+				report_text = "The match was a draw"
+			elif report_value == 1:
+				player_1_info = data_access_service.get_player_info(player_1_uid)
+				player_1_name = player_1_info.get('player_name', f'<@{player_1_uid}>')
+				report_text = f"{player_1_name} wins"
+			else:  # report_value == 2
+				player_2_info = data_access_service.get_player_info(player_2_uid)
+				player_2_name = player_2_info.get('player_name', f'<@{player_2_uid}>')
+				report_text = f"{player_2_name} wins"
+			
+			# Get bot instance and send notification
+			bot = get_bot_instance()
+			if bot:
+				opponent_user = await bot.fetch_user(opponent_uid)
+				
+				# Create notification embed (blurple color)
+				notification_embed = discord.Embed(
+					title=f"Match #{match_id} - 📝 Your Opponent Reported",
+					description=f"{reporting_player_name} reported: **{report_text}**",
+					color=discord.Color.blurple()
+				)
+				
+				# Send via message queue (low priority, delayed delivery)
+				await queue_user_send(opponent_user, embed=notification_embed)
+				print(f"[Matchmaker] Sent opponent report notification to player {opponent_uid} for match {match_id}")
+		
+		except Exception as e:
+			print(f"[Matchmaker] Failed to send opponent report notification for match {match_id}: {e}")
 	
 	async def abort_match(self, match_id: int, player_discord_uid: int) -> bool:
 		"""

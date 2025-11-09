@@ -213,9 +213,9 @@
 - ✅ Clear all BattleTags
 - ✅ Make BattleTag regex loose
 - ✅ Make alt nickname regex loose
-- ⏰ Add a short tutorial for new players queueing up
-- ⏰ Add an image explaining that you need to upload a replay
-- ⏰ Add an image explaining how to report once you upload a replay
+- ✅ Add a short tutorial for new players queueing up
+- ❓ Add an image explaining that you need to upload a replay
+- ❓ Add an image explaining how to report once you upload a replay
 - ✅ Display BattleTag and Discord UID (via mention) in MatchFoundViewEmbed so players can reach out to each other
 - ❓ Fix `/admin match` not showing replay embeds
 - ✅ Fix `/admin snapshot` not showing enough players queueing and matches (gets truncated at too low of a number)
