@@ -1119,7 +1119,7 @@ class Matchmaker:
 				# Create notification embed (blurple color)
 				notification_embed = discord.Embed(
 					title=f"Match #{match_id} - 📝 Your Opponent Reported",
-					description=f"{reporting_player_name} reported: **{report_text}**",
+					description=f"{reporting_player_name} reported: **{report_text}**\n\nIf you're seeing this, it likely means you have not reported the match result yet. **Please do so as soon as possible.**",
 					color=discord.Color.blurple()
 				)
 				
