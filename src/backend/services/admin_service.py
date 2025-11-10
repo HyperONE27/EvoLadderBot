@@ -160,20 +160,32 @@ class AdminService:
         
         # Get queue player details for display
         queue_players_raw = self._get_queue_snapshot_from_matchmaker()
-        queue_player_strings = [
-            f"<@{p['discord_id']}> ({', '.join(p['races'])}) - {p['wait_time']:.0f}s"
-            for p in queue_players_raw[:50]  # Limit to 50 for display (X=25, 2X players)
-        ]
+        queue_player_strings = []
+        for p in queue_players_raw[:30]:  # Limit to 30 players for display
+            player_info = self.data_service.get_player_info(p['discord_id'])
+            player_name = player_info.get('player_name', 'Unknown') if player_info else 'Unknown'
+            discord_username = player_info.get('discord_username', 'Unknown') if player_info else 'Unknown'
+            queue_player_strings.append(
+                f"{player_name} ({discord_username}) ({', '.join(p['races'])}) - {p['wait_time']:.0f}s"
+            )
         
         # Get active match details for display
         active_matches = list(match_completion_service.monitored_matches) if match_completion_service else []
         match_strings = []
-        for match_id in active_matches[:25]:  # Limit to 25 for display (X=25, 68 chars per match)
+        for match_id in active_matches[:15]:  # Limit to 15 matches for display
             match_data = self.data_service.get_match(match_id)
             if match_data:
                 p1_uid = match_data['player_1_discord_uid']
                 p2_uid = match_data['player_2_discord_uid']
-                match_strings.append(f"Match #{match_id}: <@{p1_uid}> vs <@{p2_uid}>")
+                p1_info = self.data_service.get_player_info(p1_uid)
+                p2_info = self.data_service.get_player_info(p2_uid)
+                p1_name = p1_info.get('player_name', 'Unknown') if p1_info else 'Unknown'
+                p2_name = p2_info.get('player_name', 'Unknown') if p2_info else 'Unknown'
+                p1_discord_username = p1_info.get('discord_username', 'Unknown') if p1_info else 'Unknown'
+                p2_discord_username = p2_info.get('discord_username', 'Unknown') if p2_info else 'Unknown'
+                match_strings.append(
+                    f"Match #{match_id}: {p1_name} ({p1_discord_username}) vs {p2_name} ({p2_discord_username})"
+                )
         
         return {
             'timestamp': datetime.now(timezone.utc).isoformat(),

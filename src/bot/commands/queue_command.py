@@ -1266,9 +1266,11 @@ class MatchFoundView(discord.ui.View):
         p1_info_line = f"- {p1_rank_emote} {p1_flag} {p1_race_emote} {p1_display_name} ({p1_race_name})"
         p2_info_line = f"- {p2_rank_emote} {p2_flag} {p2_race_emote} {p2_display_name} ({p2_race_name})"
 
-        # Add Discord mention
-        p1_info_line += f"\n  - Discord: <@{self.match_result.player_1_discord_id}>"
-        p2_info_line += f"\n  - Discord: <@{self.match_result.player_2_discord_id}>"
+        # Add Discord username and ID
+        p1_discord_username = p1_info.get('discord_username') if p1_info else 'Unknown'
+        p2_discord_username = p2_info.get('discord_username') if p2_info else 'Unknown'
+        p1_info_line += f"\n  - Discord: {p1_discord_username} ({self.match_result.player_1_discord_id})"
+        p2_info_line += f"\n  - Discord: {p2_discord_username} ({self.match_result.player_2_discord_id})"
 
         # Add battletag if available
         if p1_info and p1_info.get('battletag'):
