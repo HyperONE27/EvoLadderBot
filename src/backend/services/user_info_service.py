@@ -531,7 +531,7 @@ class UserInfoService:
         
         # Update player information with logging enabled
         # This will log each field change as a separate row in player_action_logs
-        self.update_player(
+        await self.update_player(
             discord_uid=discord_uid,
             player_name=player_name,
             battletag=battletag,

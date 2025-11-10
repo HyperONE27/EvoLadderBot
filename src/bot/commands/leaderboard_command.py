@@ -298,7 +298,7 @@ class LeaderboardView(discord.ui.View):
         )
         
         data_fetch_time = time.perf_counter()
-        print(f"[Filter Perf] Data fetch: {(data_fetch_time - filter_start)*1000:.2f}ms")
+        # print(f"[Filter Perf] Data fetch: {(data_fetch_time - filter_start)*1000:.2f}ms")
         
         # Create a new view with current selections to maintain state
         new_view = LeaderboardView(
@@ -313,7 +313,7 @@ class LeaderboardView(discord.ui.View):
         )
         
         view_creation_time = time.perf_counter()
-        print(f"[Filter Perf] View creation: {(view_creation_time - data_fetch_time)*1000:.2f}ms")
+        # print(f"[Filter Perf] View creation: {(view_creation_time - data_fetch_time)*1000:.2f}ms")
         
         # Update button states based on data
         total_pages = data.get("total_pages", 1)
@@ -332,12 +332,12 @@ class LeaderboardView(discord.ui.View):
                 new_view.add_item(PageNavigationSelect(total_pages, current_page))
         
         button_update_time = time.perf_counter()
-        print(f"[Filter Perf] Button updates: {(button_update_time - view_creation_time)*1000:.2f}ms")
+        # print(f"[Filter Perf] Button updates: {(button_update_time - view_creation_time)*1000:.2f}ms")
         
         # Generate embed
         embed = new_view.get_embed(data)
         embed_generation_time = time.perf_counter()
-        print(f"[Filter Perf] Embed generation: {(embed_generation_time - button_update_time)*1000:.2f}ms")
+        # print(f"[Filter Perf] Embed generation: {(embed_generation_time - button_update_time)*1000:.2f}ms")
         
         # Discord API call - this is where the lag might be
         discord_api_start = time.perf_counter()
@@ -347,8 +347,8 @@ class LeaderboardView(discord.ui.View):
         discord_api_time = (discord_api_end - discord_api_start) * 1000
         total_time = (discord_api_end - filter_start) * 1000
         
-        print(f"[Filter Perf] Discord API call: {discord_api_time:.2f}ms")
-        print(f"[Filter Perf] TOTAL FILTER OPERATION: {total_time:.2f}ms")
+        # print(f"[Filter Perf] Discord API call: {discord_api_time:.2f}ms")
+        # print(f"[Filter Perf] TOTAL FILTER OPERATION: {total_time:.2f}ms")
         
         # Alert if Discord API is slow
         if discord_api_time > 100:
@@ -370,7 +370,7 @@ class LeaderboardView(discord.ui.View):
             }
         
         checkpoint_1 = time.perf_counter()
-        print(f"[Embed Perf] Data validation: {(checkpoint_1 - start_time)*1000:.2f}ms")
+        # print(f"[Embed Perf] Data validation: {(checkpoint_1 - start_time)*1000:.2f}ms")
         
         embed = discord.Embed(
             title="🏆 Player Leaderboard",
@@ -379,7 +379,7 @@ class LeaderboardView(discord.ui.View):
         )
         
         checkpoint_2 = time.perf_counter()
-        print(f"[Embed Perf] Embed creation: {(checkpoint_2 - checkpoint_1)*1000:.2f}ms")
+        # print(f"[Embed Perf] Embed creation: {(checkpoint_2 - checkpoint_1)*1000:.2f}ms")
         
         # Add filter information using backend service with VIEW state
         filter_info = self.leaderboard_service.get_filter_info(
@@ -389,7 +389,7 @@ class LeaderboardView(discord.ui.View):
         )
         
         checkpoint_3 = time.perf_counter()
-        print(f"[Embed Perf] Get filter info: {(checkpoint_3 - checkpoint_2)*1000:.2f}ms")
+        # print(f"[Embed Perf] Get filter info: {(checkpoint_3 - checkpoint_2)*1000:.2f}ms")
         
         # Race filter
         race_names = filter_info.get("race_names", [])
@@ -411,7 +411,7 @@ class LeaderboardView(discord.ui.View):
         embed.add_field(name="", value=race_text + "\n" + country_text, inline=False)
         
         checkpoint_4 = time.perf_counter()
-        print(f"[Embed Perf] Add filter fields: {(checkpoint_4 - checkpoint_3)*1000:.2f}ms")
+        # print(f"[Embed Perf] Add filter fields: {(checkpoint_4 - checkpoint_3)*1000:.2f}ms")
         
         # Add leaderboard content using backend service
         players = data.get("players", [])
@@ -422,7 +422,7 @@ class LeaderboardView(discord.ui.View):
         )
         
         checkpoint_5 = time.perf_counter()
-        print(f"[Embed Perf] Format players: {(checkpoint_5 - checkpoint_4)*1000:.2f}ms")
+        # print(f"[Embed Perf] Format players: {(checkpoint_5 - checkpoint_4)*1000:.2f}ms")
         
         if not formatted_players:
             embed.add_field(
@@ -436,7 +436,7 @@ class LeaderboardView(discord.ui.View):
             players_per_field = 5
             
             checkpoint_6 = time.perf_counter()
-            print(f"[Embed Perf] Prepare formatting: {(checkpoint_6 - checkpoint_5)*1000:.2f}ms")
+            # print(f"[Embed Perf] Prepare formatting: {(checkpoint_6 - checkpoint_5)*1000:.2f}ms")
             
             # OPTIMIZATION: Batch emote lookups to reduce function call overhead
             emote_fetch_start = time.perf_counter()
@@ -493,9 +493,9 @@ class LeaderboardView(discord.ui.View):
                 chunks.append(field_text)
             
             checkpoint_7 = time.perf_counter()
-            print(f"[Embed Perf] Generate chunks - Total: {(checkpoint_7 - checkpoint_6)*1000:.2f}ms")
-            print(f"[Embed Perf]   -> Emote fetching: {emote_fetch_time*1000:.2f}ms")
-            print(f"[Embed Perf]   -> Text formatting: {text_format_time*1000:.2f}ms")
+            # print(f"[Embed Perf] Generate chunks - Total: {(checkpoint_7 - checkpoint_6)*1000:.2f}ms")
+            # print(f"[Embed Perf]   -> Emote fetching: {emote_fetch_time*1000:.2f}ms")
+            # print(f"[Embed Perf]   -> Text formatting: {text_format_time*1000:.2f}ms")
             
             # Add fields in 2x4 grid layout
             # Left column gets titles (1-10, 11-20, etc), right column gets invisible names
@@ -527,7 +527,7 @@ class LeaderboardView(discord.ui.View):
                     )
             
             checkpoint_8 = time.perf_counter()
-            print(f"[Embed Perf] Add fields to embed: {(checkpoint_8 - checkpoint_7)*1000:.2f}ms")
+            # print(f"[Embed Perf] Add fields to embed: {(checkpoint_8 - checkpoint_7)*1000:.2f}ms")
         
         # Add page information using backend service
         total_pages = data.get("total_pages", 1)
@@ -548,10 +548,10 @@ class LeaderboardView(discord.ui.View):
         embed.set_footer(text=footer_text)
         
         checkpoint_9 = time.perf_counter()
-        print(f"[Embed Perf] Add footer: {(checkpoint_9 - checkpoint_8)*1000:.2f}ms")
+        # print(f"[Embed Perf] Add footer: {(checkpoint_9 - checkpoint_8)*1000:.2f}ms")
         
         total_time = (checkpoint_9 - start_time) * 1000
-        print(f"[Embed Perf] TOTAL EMBED GENERATION: {total_time:.2f}ms")
+        # print(f"[Embed Perf] TOTAL EMBED GENERATION: {total_time:.2f}ms")
         
         return embed
 
