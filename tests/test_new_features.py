@@ -96,11 +96,12 @@ class TestBannedEmbed:
     
     def test_create_banned_embed_has_correct_properties(self):
         """Test that banned embed has correct title and color."""
-        embed = create_banned_embed()
+        embed, view = create_banned_embed()
         
         assert "Banned" in embed.title
         assert embed.color == discord.Color.red()
         assert "banned" in embed.description.lower()
+        assert view is not None
 
 
 class TestShieldBatteryBugEmbed:

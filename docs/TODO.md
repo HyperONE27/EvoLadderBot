@@ -272,23 +272,23 @@
 - ⏰ 
 - ⏰ 
 - ⏰ Test and tidy up every command (DO LAST)
-  - ⏰ /leaderboard
-  - ⏰ /profile
-  - ⏰ /queue
-  - ⏰ /setcountry
-  - ⏰ /setup
-  - ⏰ /termsofservice
-  - ⏰ /admin adjust_mmr
-  - ⏰ /admin ban
-  - ⏰ /admin snapshot
-  - ⏰ /admin clear_queue
-  - ⏰ /admin match
-  - ⏰ /admin player
-  - ⏰ /admin resolve
-  - ⏰ /admin remove_queue
-  - ⏰ /admin reset_aborts
-  - ⏰ /admin unblock_queue
-  - ⏰ /owner admin
+  - ✅ /leaderboard
+  - ✅ /profile
+  - ✅ /queue
+  - ✅ /setcountry
+  - ✅ /setup
+  - ✅ /termsofservice
+  - ✅ /admin adjust_mmr
+  - ✅ /admin ban
+  - ✅ /admin snapshot
+  - ✅ /admin clear_queue
+  - ✅ /admin match
+  - ✅ /admin player
+  - ✅ /admin resolve
+  - ✅ /admin remove_queue
+  - ✅ /admin reset_aborts
+  - ✅ /admin unblock_queue
+  - ✅ /owner admin
 
 ## PRE-BETA
 
