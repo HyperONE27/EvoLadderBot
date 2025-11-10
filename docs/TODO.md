@@ -262,14 +262,33 @@
 - ✅ Prettify with the race emotes everywheree!
   - ✅ Added race emotes to race select in `/queue`
   - ✅ Added game emotes to map vetoes in `/queue`
-- ⏰ Services are instantiated several times, including `/queue` matchmaker
-- ⏰ Two separate `/queue` instances exist quietly
+- ✅ Services are instantiated several times, including `/queue` matchmaker
+- ✅ Two separate `/queue` instances exist quietly
   - ✅ Merged the queues
 - ✅ `/admin match` doesn't show replay details for matches completed in the current bot deployment sesion
   - ✅ Fixed match resolution to add replay details to memory in addition to queuing a DB write
+- ✅ New users may find the bot unresponsive on their first command use
+  - ✅ Creating new user profile should no longer be a blocking action 
 - ⏰ 
 - ⏰ 
-- ⏰ 
+- ⏰ Test and tidy up every command (DO LAST)
+  - ⏰ /leaderboard
+  - ⏰ /profile
+  - ⏰ /queue
+  - ⏰ /setcountry
+  - ⏰ /setup
+  - ⏰ /termsofservice
+  - ⏰ /admin adjust_mmr
+  - ⏰ /admin ban
+  - ⏰ /admin snapshot
+  - ⏰ /admin clear_queue
+  - ⏰ /admin match
+  - ⏰ /admin player
+  - ⏰ /admin resolve
+  - ⏰ /admin remove_queue
+  - ⏰ /admin reset_aborts
+  - ⏰ /admin unblock_queue
+  - ⏰ /owner admin
 
 ## PRE-BETA
 

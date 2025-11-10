@@ -536,13 +536,13 @@ class UnifiedSetupView(discord.ui.View):
                     super().__init__(timeout=GLOBAL_TIMEOUT)
                     self.original_view = original_view
                 
-                @discord.ui.button(emote="🔄", label="Try Again", style=discord.ButtonStyle.secondary)
+                @discord.ui.button(emoji="🔄", label="Try Again", style=discord.ButtonStyle.secondary)
                 async def restart(self, interaction: discord.Interaction, button: discord.ui.Button):
                     # Go back to the country/region selection view
                     embed = self.original_view.get_status_embed()
                     await queue_interaction_edit(interaction, embed=embed, view=self.original_view)
                 
-                @discord.ui.button(emote="❌", label="Cancel", style=discord.ButtonStyle.danger)
+                @discord.ui.button(emoji="❌", label="Cancel", style=discord.ButtonStyle.danger)
                 async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
                     await queue_interaction_edit(
                         interaction,
