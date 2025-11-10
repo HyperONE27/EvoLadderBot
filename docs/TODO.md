@@ -268,8 +268,10 @@
 - ✅ `/admin match` doesn't show replay details for matches completed in the current bot deployment sesion
   - ✅ Fixed match resolution to add replay details to memory in addition to queuing a DB write
 - ✅ New users may find the bot unresponsive on their first command use
-  - ✅ Creating new user profile should no longer be a blocking action  
-- ✅ Test and tidy up every command (DO LAST)
+  - ✅ Creating new user profile should no longer be a blocking action 
+- ⏰ 
+- ⏰ 
+- ⏰ Test and tidy up every command (DO LAST)
   - ✅ /leaderboard
   - ✅ /profile
   - ✅ /queue
@@ -287,23 +289,6 @@
   - ✅ /admin reset_aborts
   - ✅ /admin unblock_queue
   - ✅ /owner admin
-
-### November 10, 2025
-- ⏰ Fix Myulchiking name having `\n`
-- ⏰ Player name padding should strip whitespace and normalize before truncating and padding
-- ⏰ Cache all Discord user objects for `discord_uid` in `players` table on startup
-  - ⏰ Implement the cache in `discord_utils.py`
-- ⏰ 
-- ⏰ 
-- ⏰ 
-- ⏰ 
-- ⏰ 
-- ⏰ 
-- ⏰ 
-- ⏰ 
-- ⏰ 
-- ⏰ 
-- ⏰ 
 
 ## PRE-BETA
 
@@ -333,32 +318,3 @@
   - ⏰ Wire up Paddle 
   - ❌ Add columns to `players` table for managing subscription status
   - ⏰ Create a new `subscriptions` table to handle subscription status management
-
-
-===
-
-Hi @everyone, ladder bot maintenance is over and the bot is back up again.
-
-I will keep an eye on any emergencies and take the bot down in the next 2-3 hours for a fix if necessary.
-
-## General Changes Made
-- Main ID no longer allows non-alphabetical characters (A-Z, a-z)
-  - This was mistakenly enabled last maintenance
-  - Main IDs with non-alphabetical characters or containing Arabic numerals have been truncated or swapped with existing alternate IDs where applicable
-  - If you would prefer to use a different name, please run `/setup` again
-- Added race and game emotes to `/queue` select menu
-
-## Bugs Fixed
-- Fixed an issue where the Singapore server was assigned to the Asia region instead of the Americas region
-- Fixed an issue where players who had waited a long time sometimes did not get priority matchmaking
-- Fixed an issue where the matchmaking queue was duplicated, splitting players up
-- Fixed an issue where player mentions in embed could not be identified as a valid Discord user
-  - It should now always be possible to see your opponent's Discord profile correctly
-
-## Bugs Not Fixed/Features to be Implemented Later
-- In <1% of matches, players report not seeing the Confirm Match button or not seeing the Match Found notification whatsoever
-- Some players report the "Next match wave:" does not align with actual matchmaking waves
-- Semi/automatic replay reporting by name matching
-  - Not for another ⏰ 1 week?
-- Localization for koKR, zhCN, esMX, etc.
-  - Not for another ⏰ 1-3 weeks

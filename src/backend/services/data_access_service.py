@@ -396,20 +396,13 @@ class DataAccessService:
     
     async def reconcile_mmr_stats_from_matches(self) -> None:
         """
-        Reconcile mmrs_1v1 from matches_1v1 source of truth.
+        Reconcile mmrs_1v1 game statistics from matches_1v1 source of truth.
         
-        For each (player, race) combination:
-        1. Find their last finalized match
-        2. Calculate final MMR from: starting_mmr ± mmr_change
-        3. Aggregate W-L-D stats from ALL their matches
-        4. Update mmrs_1v1 with both MMR and stats
+        Aggregates all finalized matches (match_result in 0,1,2) and overwrites:
+        - games_played, games_won, games_lost, games_drawn
+        - last_played timestamp
         
-        This is idempotent and mathematically correct because matches_1v1 stores:
-        - player_1_mmr, player_2_mmr (starting MMRs when match began)
-        - mmr_change (delta applied to both players)
-        - match_result (who won)
-        
-        Final MMR after all matches = last_match_starting_mmr ± last_match_mmr_change
+        Logs summary of changes to console.
         """
         start_time = time.time()
         now_utc = datetime.now(timezone.utc)
@@ -434,71 +427,61 @@ class DataAccessService:
             print("[MMR Reconciliation] No finalized matches to process")
             return
         
-        # === PART 1: Build player perspectives with MMR calculation ===
-        
-        # Player 1 perspective: final_mmr = starting_mmr + mmr_change
-        p1_matches = finalized_matches.select([
+        # Build aggregation for player 1
+        p1_data = finalized_matches.select([
             pl.col("player_1_discord_uid").alias("discord_uid"),
             pl.col("player_1_race").alias("race"),
             pl.col("played_at"),
-            pl.col("player_1_mmr").alias("starting_mmr"),
-            pl.col("mmr_change"),
-            (pl.col("player_1_mmr") + pl.col("mmr_change")).alias("final_mmr"),
             pl.col("match_result")
-        ]).with_columns([
+        ])
+        
+        # Build aggregation for player 2
+        p2_data = finalized_matches.select([
+            pl.col("player_2_discord_uid").alias("discord_uid"),
+            pl.col("player_2_race").alias("race"),
+            pl.col("played_at"),
+            pl.col("match_result")
+        ])
+        
+        # Combine both players' data
+        all_player_data = pl.concat([p1_data, p2_data])
+        
+        # For player 1: win=1, loss=2, draw=0
+        # For player 2: win=2, loss=1, draw=0
+        # We need to track which perspective each row is from
+        p1_data = p1_data.with_columns([
             (pl.col("match_result") == 1).cast(pl.Int64).alias("won"),
             (pl.col("match_result") == 2).cast(pl.Int64).alias("lost"),
             (pl.col("match_result") == 0).cast(pl.Int64).alias("drawn")
         ])
         
-        # Player 2 perspective: final_mmr = starting_mmr - mmr_change
-        p2_matches = finalized_matches.select([
-            pl.col("player_2_discord_uid").alias("discord_uid"),
-            pl.col("player_2_race").alias("race"),
-            pl.col("played_at"),
-            pl.col("player_2_mmr").alias("starting_mmr"),
-            pl.col("mmr_change"),
-            (pl.col("player_2_mmr") - pl.col("mmr_change")).alias("final_mmr"),
-            pl.col("match_result")
-        ]).with_columns([
+        p2_data = p2_data.with_columns([
             (pl.col("match_result") == 2).cast(pl.Int64).alias("won"),
             (pl.col("match_result") == 1).cast(pl.Int64).alias("lost"),
             (pl.col("match_result") == 0).cast(pl.Int64).alias("drawn")
         ])
         
-        # Combine all matches
-        all_matches = pl.concat([p1_matches, p2_matches])
+        # Combine and aggregate
+        combined = pl.concat([p1_data, p2_data])
         
-        # === PART 2: Get last match per (player, race) for current MMR ===
-        last_matches = all_matches.sort("played_at", descending=True).group_by(
-            ["discord_uid", "race"]
-        ).agg([
-            pl.first("final_mmr").alias("current_mmr"),
-            pl.max("played_at").alias("last_played")
-        ])
-        
-        # === PART 3: Aggregate W-L-D stats across ALL matches ===
-        wld_stats = all_matches.group_by(["discord_uid", "race"]).agg([
+        aggregated = combined.group_by(["discord_uid", "race"]).agg([
             pl.count().alias("games_played"),
             pl.sum("won").alias("games_won"),
             pl.sum("lost").alias("games_lost"),
-            pl.sum("drawn").alias("games_drawn")
+            pl.sum("drawn").alias("games_drawn"),
+            pl.max("played_at").alias("last_played")
         ])
         
-        # === PART 4: Join MMR + W-L-D stats ===
-        reconciled = last_matches.join(wld_stats, on=["discord_uid", "race"], how="inner")
+        print(f"[MMR Reconciliation] Aggregated stats for {len(aggregated)} (discord_uid, race) combinations")
         
-        print(f"[MMR Reconciliation] Reconciled data for {len(reconciled)} (discord_uid, race) combinations")
-        
-        # === PART 5: Update mmrs_1v1 in memory and queue DB writes ===
+        # Now update mmrs_1v1_df with these values
         updates_made = 0
         players_affected = set()
         
         async with self._mmr_lock:
-            for row in reconciled.iter_rows(named=True):
+            for row in aggregated.iter_rows(named=True):
                 discord_uid = row["discord_uid"]
                 race = row["race"]
-                current_mmr = int(row["current_mmr"])
                 games_played = row["games_played"]
                 games_won = row["games_won"]
                 games_lost = row["games_lost"]
@@ -510,9 +493,8 @@ class DataAccessService:
                 matching_rows = self._mmrs_1v1_df.filter(mask)
                 
                 if len(matching_rows) > 0:
-                    # Update existing MMR + stats in memory
+                    # Update the existing row
                     self._mmrs_1v1_df = self._mmrs_1v1_df.with_columns([
-                        pl.when(mask).then(pl.lit(current_mmr)).otherwise(pl.col("mmr")).alias("mmr"),
                         pl.when(mask).then(pl.lit(games_played)).otherwise(pl.col("games_played")).alias("games_played"),
                         pl.when(mask).then(pl.lit(games_won)).otherwise(pl.col("games_won")).alias("games_won"),
                         pl.when(mask).then(pl.lit(games_lost)).otherwise(pl.col("games_lost")).alias("games_lost"),
@@ -522,6 +504,7 @@ class DataAccessService:
                     
                     # Queue database update
                     player_name = matching_rows[0, "player_name"]
+                    mmr = matching_rows[0, "mmr"]
                     
                     job = WriteJob(
                         job_type=WriteJobType.UPDATE_MMR,
@@ -529,7 +512,7 @@ class DataAccessService:
                             "discord_uid": discord_uid,
                             "player_name": player_name,
                             "race": race,
-                            "new_mmr": current_mmr,
+                            "mmr": mmr,
                             "games_played": games_played,
                             "games_won": games_won,
                             "games_lost": games_lost,
@@ -541,52 +524,6 @@ class DataAccessService:
                     
                     updates_made += 1
                     players_affected.add(discord_uid)
-                else:
-                    # Create new MMR entry for player with matches but no mmrs_1v1 record
-                    # Get player name from players_df
-                    player_mask = pl.col("discord_uid") == discord_uid
-                    player_rows = self._players_df.filter(player_mask) if self._players_df is not None else None
-                    
-                    if player_rows is not None and len(player_rows) > 0:
-                        player_name = player_rows[0, "player_name"]
-                    else:
-                        player_name = f"Player{discord_uid}"
-                    
-                    # Create new row in memory
-                    new_row = pl.DataFrame({
-                        "discord_uid": [discord_uid],
-                        "player_name": [player_name],
-                        "race": [race],
-                        "mmr": [current_mmr],
-                        "games_played": [games_played],
-                        "games_won": [games_won],
-                        "games_lost": [games_lost],
-                        "games_drawn": [games_drawn],
-                        "last_played": [last_played]
-                    })
-                    
-                    self._mmrs_1v1_df = pl.concat([self._mmrs_1v1_df, new_row], how="diagonal_relaxed")
-                    
-                    # Queue database create
-                    job = WriteJob(
-                        job_type=WriteJobType.CREATE_MMR,
-                        data={
-                            "discord_uid": discord_uid,
-                            "player_name": player_name,
-                            "race": race,
-                            "mmr": current_mmr,
-                            "games_played": games_played,
-                            "games_won": games_won,
-                            "games_lost": games_lost,
-                            "games_drawn": games_drawn
-                        },
-                        timestamp=time.time()
-                    )
-                    self._write_queue.put_nowait(job)
-                    
-                    updates_made += 1
-                    players_affected.add(discord_uid)
-                    print(f"[MMR Reconciliation] Created new entry for {discord_uid}/{race} (MMR: {current_mmr}, {games_played}G-{games_won}W-{games_lost}L-{games_drawn}D)")
         
         # Notify write worker
         if updates_made > 0:
@@ -614,8 +551,8 @@ class DataAccessService:
             print(f"[MMR Reconciliation] Current hour is {current_hour} UTC, outside midnight-1AM window")
             return False
         
-        print(f"[MMR Reconciliation] In midnight-1AM UTC window, will run reconciliation [SIKE IT'S FALSE]")
-        return False
+        print(f"[MMR Reconciliation] In midnight-1AM UTC window, will run reconciliation")
+        return True
     
     async def _get_last_reconciliation_timestamp(self) -> Optional[datetime]:
         """

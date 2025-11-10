@@ -1371,7 +1371,7 @@ class MatchFoundView(discord.ui.View):
             name="",
             value=(
                 f"- Server: `{server_display}`\n"
-                f"- In-Game Channel: `SCEvoLadder`\n"
+                f"- In-Game Channel: `{self.match_result.in_game_channel}`\n"
                 f"- Locked Alliances: `{EXPECTED_LOCKED_ALLIANCES}`"
             ),
             inline=True
