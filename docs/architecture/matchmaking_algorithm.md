@@ -1,6 +1,6 @@
-# Matchmaking Algorithm - 7-Stage Locally-Optimal System
+# Matchmaking Algorithm - 8-Stage Locally-Optimal System
 
-**Version**: 2.0 (Optimized)  
+**Version**: 2.1 (Priority-Filtered)  
 **Target**: 20-30 player queues during early launch  
 **Complexity**: O(n²) where n = queue size  
 **Performance**: < 0.1ms for 30 players
@@ -9,10 +9,10 @@
 
 ## Overview
 
-The matchmaking system operates in discrete waves (every 10-45 seconds) with a deterministic 7-stage pipeline that:
+The matchmaking system operates in discrete waves (every 10-45 seconds) with a deterministic 8-stage pipeline that:
 1. Balances BW and SC2 populations intelligently
 2. Minimizes MMR variance across all matches
-3. Respects wait time priorities
+3. Respects wait time priorities via pre-filtering and scoring
 4. Adapts to queue pressure dynamically
 5. Always matches BW vs SC2 (cross-race only)
 
@@ -20,6 +20,7 @@ The matchmaking system operates in discrete waves (every 10-45 seconds) with a d
 - **4-32% better match quality** (lower MMR differences)
 - **Locally-optimal** matching vs greedy first-come-first-served
 - **Smart "both" player** assignment based on skill balance
+- **Priority-based pre-filtering** to prevent queue jumping (v2.1)
 - **Least-squares refinement** to smooth MMR variance
 - **Lower pressure thresholds** (10%/20% vs 30%/50%) for small populations
 
@@ -156,7 +157,72 @@ max_diff = 100 + 5 × 35 = 275 MMR
 
 ---
 
-## Stage 4: Locally-Optimal Matching
+## Stage 4: Priority-Based Pre-Filtering
+
+**Goal**: Prevent fresh players from "stealing" matches from long-waiting players by filtering excess players based on priority.
+
+### Problem This Solves
+
+The matching algorithm only uses the **lead player's** wait cycles to determine MMR acceptance windows. This creates unfair bias:
+- Follow players with long wait times get zero benefit from expanded MMR windows
+- Fresh players on the larger side can match before veterans
+
+**Example**: Lead has 1 player (1500 MMR, 0 cycles). Follow has 2 players: (1700 MMR, 10 cycles) and (1550 MMR, 0 cycles). Without filtering, the fresh 1550 MMR player matches while the veteran waits.
+
+### Algorithm
+
+Before matching begins, if one side has more players than the other:
+
+```python
+def _filter_by_priority(lead_side, follow_side):
+    lead_count = len(lead_side)
+    follow_count = len(follow_side)
+    
+    if lead_count == follow_count:
+        return lead_side, follow_side  # No filtering needed
+    
+    if lead_count > follow_count:
+        # Lead side has excess - keep only highest priority players
+        sorted_lead = sorted(lead_side, key=lambda p: p.wait_cycles, reverse=True)
+        filtered_lead = sorted_lead[:follow_count]
+        return filtered_lead, follow_side
+    else:
+        # Follow side has excess - keep only highest priority players
+        sorted_follow = sorted(follow_side, key=lambda p: p.wait_cycles, reverse=True)
+        filtered_follow = sorted_follow[:lead_count]
+        return lead_side, filtered_follow
+```
+
+### Execution Order
+
+1. After `equalize_lists` assigns "both" players to BW or SC2
+2. After determining which side is lead and which is follow
+3. **Filter excess players by priority** ← This stage
+4. Proceed to candidate building and matching
+
+### Example
+
+**Before filtering:**
+- Lead: 1 player (1500 MMR, 0 cycles)
+- Follow: 2 players (1700 MMR, 10 cycles) and (1550 MMR, 0 cycles)
+
+**After filtering:**
+- Lead: 1 player (1500 MMR, 0 cycles)
+- Follow: 1 player (1700 MMR, 10 cycles) ← kept by priority
+- Filtered out: (1550 MMR, 0 cycles) ← removed from this wave
+
+**Outcome**: The veteran player (10 cycles) gets first consideration. If no match occurs this wave, both players remain in queue for the next wave with incremented wait_cycles.
+
+### Benefits
+
+1. **Eliminates queue jumping** - fresh players cannot steal matches from veterans
+2. **Fair priority enforcement** - wait_cycles determines candidacy, not just scoring
+3. **Maintains algorithm integrity** - existing matching logic remains unchanged
+4. **Deterministic** - clear priority ordering based on wait time
+
+---
+
+## Stage 5: Locally-Optimal Matching
 
 **Old approach (greedy)**: Process players by wait time, each picks their best match.  
 **New approach (locally-optimal)**: Consider all valid pairs, select globally.
@@ -209,7 +275,7 @@ Subtracting `wait_cycles × 20` from score gives long-waiters preference even wi
 
 ---
 
-## Stage 5: Least-Squares Refinement
+## Stage 6: Least-Squares Refinement
 
 After initial matching, perform **2 passes** of adjacent swaps to minimize total squared error.
 
@@ -263,7 +329,7 @@ Improvement: 99.2% reduction in error!
 
 ---
 
-## Stage 6: Match Creation
+## Stage 7: Match Creation
 
 For each finalized match pair:
 
@@ -295,7 +361,7 @@ For each finalized match pair:
 
 ---
 
-## Stage 7: Queue Cleanup
+## Stage 8: Queue Cleanup
 
 1. Update `recent_activity` timestamps for matched players
 2. Remove matched players from `matchmaker.players` list
@@ -316,10 +382,11 @@ For each finalized match pair:
 | 1 | Categorize | O(n) |
 | 2 | Equalize | O(n log n) (sorting) |
 | 3 | Pressure calc | O(1) |
-| 4 | Build candidates | O(n²) |
-| 4 | Sort + select | O(n² log n) |
-| 5 | Refinement | O(n) per pass, 2 passes |
-| 6-7 | Match creation | O(n) |
+| 4 | Priority filter | O(n log n) (sorting) |
+| 5 | Build candidates | O(n²) |
+| 5 | Sort + select | O(n² log n) |
+| 6 | Refinement | O(n) per pass, 2 passes |
+| 7-8 | Match creation | O(n) |
 
 **Total**: O(n² log n) ≈ O(n²) for practical n < 100
 

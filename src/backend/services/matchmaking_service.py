@@ -496,6 +496,51 @@ class Matchmaker:
 		
 		return bw_list, sc2_list, []
 
+	def _filter_by_priority(self, lead_side: List[Player], follow_side: List[Player]) -> Tuple[List[Player], List[Player]]:
+		"""
+		Filter players by priority to equalize sides before matching.
+		
+		If one side has more players, keep only the highest-priority players
+		(most wait_cycles) up to the count of the smaller side.
+		
+		Args:
+			lead_side: Lead side players list
+			follow_side: Follow side players list
+			
+		Returns:
+			Tuple of (filtered_lead, filtered_follow) with equal or near-equal sizes
+		"""
+		lead_count = len(lead_side)
+		follow_count = len(follow_side)
+		
+		# If sides are already equal, no filtering needed
+		if lead_count == follow_count:
+			return lead_side, follow_side
+		
+		# Determine which side is larger
+		if lead_count > follow_count:
+			# Lead side has excess players - keep only top priority players
+			target_count = follow_count
+			sorted_lead = sorted(lead_side, key=lambda p: p.wait_cycles, reverse=True)
+			filtered_lead = sorted_lead[:target_count]
+			
+			if len(filtered_lead) < lead_count:
+				removed = lead_count - len(filtered_lead)
+				print(f"   🔽 Filtered {removed} low-priority players from lead side (kept {len(filtered_lead)} highest priority)")
+			
+			return filtered_lead, follow_side
+		else:
+			# Follow side has excess players - keep only top priority players
+			target_count = lead_count
+			sorted_follow = sorted(follow_side, key=lambda p: p.wait_cycles, reverse=True)
+			filtered_follow = sorted_follow[:target_count]
+			
+			if len(filtered_follow) < follow_count:
+				removed = follow_count - len(filtered_follow)
+				print(f"   🔽 Filtered {removed} low-priority players from follow side (kept {len(filtered_follow)} highest priority)")
+			
+			return lead_side, filtered_follow
+
 	def _build_candidate_pairs(self, lead_side: List[Player], follow_side: List[Player],
 							  is_bw_match: bool) -> List[Tuple[float, Player, Player, int]]:
 		"""
@@ -742,6 +787,10 @@ class Matchmaker:
 				# SC2 list is smaller - use SC2 as lead side
 				lead_side, follow_side = sc2_list, bw_list
 				is_bw_match = False
+			
+			# Apply priority-based filtering before matching
+			lead_side, follow_side = self._filter_by_priority(lead_side, follow_side)
+			print(f"   🎯 After priority filtering: lead={len(lead_side)}, follow={len(follow_side)}")
 			
 			bw_matches = self.find_matches(lead_side, follow_side, is_bw_match)
 			
