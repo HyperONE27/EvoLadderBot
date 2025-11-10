@@ -131,11 +131,9 @@ def _get_filtered_leaderboard_dataframe(
     perf_filter = time.time()
     filter_time = (perf_filter - perf_best_race) * 1000
     
-    # Sort by MMR (descending), then by last_played (descending) for tie-breaking
-    # Only sort if we didn't just do best_race_only (which already sorted)
-    if not best_race_only:
-        df = df.sort(["mmr", "last_played"], descending=[True, True])
-    # Note: If best_race_only was enabled, data is already sorted from groupby operation
+    # Sort by global_rank (ascending) to display players in correct ranking order
+    # This ensures the leaderboard always shows players sorted by their true rank
+    df = df.sort("global_rank", descending=False)
     
     perf_sort = time.time()
     sort_time = (perf_sort - perf_filter) * 1000
