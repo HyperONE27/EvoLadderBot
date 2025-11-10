@@ -365,8 +365,7 @@ For each finalized match pair:
 
 1. Update `recent_activity` timestamps for matched players
 2. Remove matched players from `matchmaker.players` list
-3. Sync removal with `QueueService` for admin visibility
-4. Log final statistics:
+3. Log final statistics:
    - Total matches found
    - Remaining queue size
    - Match quality metrics (avg/min/max MMR diff)

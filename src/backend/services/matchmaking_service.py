@@ -141,7 +141,6 @@ class Matchmaker:
 		"""Add a player to the matchmaking pool with MMR lookup."""
 		from src.backend.services.performance_service import FlowTracker
 		from src.backend.services.data_access_service import DataAccessService
-		from src.backend.services.queue_service import get_queue_service
 		
 		flow = FlowTracker(f"matchmaker.add_player", user_id=player.discord_user_id)
 		
@@ -206,30 +205,16 @@ class Matchmaker:
 			# Log player activity
 			self.recent_activity[player.discord_user_id] = time.time()
 		
-		# Sync with QueueService for admin command visibility
-		queue_service = get_queue_service()
-		if queue_service:
-			await queue_service.add_player(player)
-			print(f"   Synced player {player.discord_user_id} to QueueService")
-		
 		flow.complete("success")
 
 	async def remove_player(self, discord_user_id: int) -> None:
 		"""Remove a player from the matchmaking pool by Discord ID."""
-		from src.backend.services.queue_service import get_queue_service
-		
 		async with self.lock:
 			before_count = len(self.players)
 			self.players = [p for p in self.players if p.discord_user_id != discord_user_id]
 			after_count = len(self.players)
 			print(f"🚪 Player with Discord ID {discord_user_id} left the queue")
 			print(f"   Players before removal: {before_count}, after: {after_count}")
-		
-		# Sync with QueueService for admin command visibility
-		queue_service = get_queue_service()
-		if queue_service:
-			await queue_service.remove_player(discord_user_id)
-			print(f"   Synced removal of player {discord_user_id} from QueueService")
 
 	async def remove_players_from_matchmaking_queue(self, discord_user_ids: List[int]) -> None:
 		"""
@@ -241,8 +226,6 @@ class Matchmaker:
 		Args:
 			discord_user_ids: List of Discord user IDs to remove from the queue
 		"""
-		from src.backend.services.queue_service import get_queue_service
-		
 		async with self.lock:
 			before_count = len(self.players)
 			self.players = [p for p in self.players if p.discord_user_id not in discord_user_ids]
@@ -250,12 +233,6 @@ class Matchmaker:
 			removed_count = before_count - after_count
 			print(f"🎯 Removed {removed_count} matched players from matchmaking queue")
 			print(f"   Players before removal: {before_count}, after: {after_count}")
-		
-		# Sync with QueueService for admin command visibility
-		queue_service = get_queue_service()
-		if queue_service:
-			await queue_service.remove_matched_players(discord_user_ids)
-			print(f"   Synced removal of {len(discord_user_ids)} players from QueueService")
 
 	async def release_queue_lock_for_players(self, discord_user_ids: List[int]) -> None:
 		"""
@@ -302,6 +279,27 @@ class Matchmaker:
 				print(f"🔓 Removed match view for player {discord_user_id} from channel {channel_id}")
 			
 			print(f"🔓 Released queue lock for player {discord_user_id}")
+
+	def get_queue_players(self) -> List[Player]:
+		"""
+		Get a snapshot of the current matchmaking queue players.
+		
+		Returns a copy of the players list for admin/monitoring purposes.
+		This is thread-safe as it returns a copy.
+		
+		Returns:
+			List of Player objects currently in queue
+		"""
+		return self.players.copy()
+	
+	def get_queue_size(self) -> int:
+		"""
+		Get the current number of players in the matchmaking queue.
+		
+		Returns:
+			Integer count of players in queue
+		"""
+		return len(self.players)
 
 	def set_match_callback(self, callback: Callable[[MatchResult, Callable[[Callable], None]], None]) -> None:
 		"""Set the callback function to be called when a match is found."""

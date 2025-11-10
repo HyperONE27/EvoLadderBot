@@ -154,14 +154,12 @@ class AdminService:
             DataFrame statistics, queue status, active matches, write queue depth,
             and process pool health.
         """
-        from src.backend.services.queue_service import get_queue_service
+        from src.backend.services.matchmaking_service import matchmaker
         from src.backend.services.match_completion_service import match_completion_service
         from src.backend.services.app_context import ranking_service
         
-        queue_service = get_queue_service()
-        
         # Get queue player details for display
-        queue_players_raw = self._get_queue_snapshot(queue_service) if queue_service else []
+        queue_players_raw = self._get_queue_snapshot_from_matchmaker()
         queue_player_strings = [
             f"<@{p['discord_id']}> ({', '.join(p['races'])}) - {p['wait_time']:.0f}s"
             for p in queue_players_raw[:50]  # Limit to 50 for display (X=25, 2X players)
@@ -182,7 +180,7 @@ class AdminService:
             'memory': self._get_memory_stats(),
             'data_frames': self._get_dataframe_stats(),
             'queue': {
-                'size': queue_service.get_queue_size() if queue_service else 0,
+                'size': matchmaker.get_queue_size(),
                 'players': queue_player_strings
             },
             'matches': {
@@ -250,12 +248,11 @@ class AdminService:
         
         return stats
     
-    def _get_queue_snapshot(self, queue_service) -> list:
-        """Get list of players currently in queue."""
-        if not queue_service:
-            return []
+    def _get_queue_snapshot_from_matchmaker(self) -> list:
+        """Get list of players currently in queue from matchmaker."""
+        from src.backend.services.matchmaking_service import matchmaker
         
-        players = queue_service.get_snapshot()
+        players = matchmaker.get_queue_players()
         return [
             {
                 'discord_id': p.discord_user_id,
@@ -342,12 +339,10 @@ class AdminService:
             queue status, active matches, and recent match history. All data is ready
             for display (names resolved, ranks calculated, etc.). Includes time_stats.
         """
-        from src.backend.services.queue_service import get_queue_service
+        from src.backend.services.matchmaking_service import matchmaker
         from src.backend.services.app_context import (
             countries_service, regions_service, races_service, ranking_service, user_info_service
         )
-        
-        queue_service = get_queue_service()
         
         # Get player info with time-stratified stats
         player_info = user_info_service.get_player_with_time_stats(discord_uid)
@@ -408,16 +403,17 @@ class AdminService:
         
         in_queue = False
         queue_info = None
-        if queue_service:
-            in_queue = await queue_service.is_player_in_queue(discord_uid)
-            if in_queue:
-                player_obj = await queue_service.get_player(discord_uid)
-                if player_obj:
+        in_queue = await matchmaker.is_player_in_queue(discord_uid)
+        if in_queue:
+            # Find the player in the queue
+            for player_obj in matchmaker.get_queue_players():
+                if player_obj.discord_user_id == discord_uid:
                     queue_info = {
                         'races': player_obj.preferences.selected_races,
                         'wait_time': time.time() - player_obj.queue_start_time,
                         'wait_cycles': player_obj.wait_cycles
                     }
+                    break
         
         # Active matches - check by match_result instead of status
         active_matches = []
@@ -1395,7 +1391,7 @@ class AdminService:
             was_in_queue = await matchmaker.is_player_in_queue(discord_uid)
             
             if was_in_queue:
-                # Remove from matchmaker (which syncs to QueueService automatically)
+                # Remove from matchmaker
                 await matchmaker.remove_player(discord_uid)
                 print(f"[AdminService] Removed player {discord_uid} from matchmaking queue")
                 
@@ -1617,7 +1613,6 @@ class AdminService:
             Dict with count of removed players
         """
         from src.backend.services.matchmaking_service import matchmaker
-        from src.backend.services.queue_service import get_queue_service
         
         try:
             # Get all player IDs from matchmaker before clearing
@@ -1626,12 +1621,6 @@ class AdminService:
                 count = len(player_ids)
                 matchmaker.players.clear()
                 print(f"[AdminService] EMERGENCY: Cleared matchmaker queue ({count} players)")
-            
-            # Also clear QueueService to ensure full sync
-            queue_service = get_queue_service()
-            if queue_service:
-                await queue_service.clear_queue()
-                print(f"[AdminService] EMERGENCY: Cleared QueueService")
             
             # Reset player state to idle and clear queue-locked state for all removed players
             for player_id in player_ids:

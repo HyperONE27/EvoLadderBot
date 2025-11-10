@@ -140,7 +140,7 @@ class LoadMonitor:
     async def _collect_metrics(self) -> LoadMetrics:
         """Collect current system metrics."""
         from src.backend.services.data_access_service import DataAccessService
-        from src.backend.services.queue_service import get_queue_service
+        from src.backend.services.matchmaking_service import matchmaker
         from src.backend.services.match_completion_service import match_completion_service
         
         # Get process info
@@ -156,9 +156,8 @@ class LoadMonitor:
         db_writes_completed = getattr(data_service, '_total_writes_completed', 0)
         db_writes_pending = getattr(data_service, '_total_writes_queued', 0) - db_writes_completed
         
-        # Get queue service metrics
-        queue_service = get_queue_service()
-        queued_players = queue_service.get_queue_size() if queue_service else 0
+        # Get matchmaking queue metrics
+        queued_players = matchmaker.get_queue_size()
         
         # Get match completion service metrics
         active_matches = len(match_completion_service.monitored_matches) if match_completion_service else 0

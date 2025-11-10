@@ -29,7 +29,6 @@ from src.backend.services.match_completion_service import MatchCompletionService
 from src.backend.services.matchmaking_service import matchmaker
 from src.backend.services.mmr_service import MMRService
 from src.backend.services.notification_service import initialize_notification_service
-from src.backend.services.queue_service import initialize_queue_service
 from src.backend.services.ranking_service import RankingService
 from src.backend.services.races_service import RacesService
 from src.backend.services.regions_service import RegionsService
@@ -128,7 +127,6 @@ match_completion_service = MatchCompletionService()
 
 # New event-driven matchmaking services
 notification_service = initialize_notification_service()
-queue_service = initialize_queue_service()
 
 # Message queue for Discord API calls (frontend service)
 from src.bot.message_queue import initialize_message_queue
@@ -162,7 +160,6 @@ __all__ = [
     "matchmaker",
     "match_completion_service",
     "notification_service",
-    "queue_service",
     # Admin services
     "admin_service",
     # Message queue (frontend service)

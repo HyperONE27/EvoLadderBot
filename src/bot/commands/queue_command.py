@@ -14,7 +14,6 @@ from src.backend.services.app_context import (
     maps_service,
     mmr_service,
     notification_service,
-    queue_service,
     races_service as race_service,
     regions_service,
     replay_service,
