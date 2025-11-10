@@ -510,7 +510,7 @@ class DataAccessService:
                 matching_rows = self._mmrs_1v1_df.filter(mask)
                 
                 if len(matching_rows) > 0:
-                    # Update MMR + stats in memory
+                    # Update existing MMR + stats in memory
                     self._mmrs_1v1_df = self._mmrs_1v1_df.with_columns([
                         pl.when(mask).then(pl.lit(current_mmr)).otherwise(pl.col("mmr")).alias("mmr"),
                         pl.when(mask).then(pl.lit(games_played)).otherwise(pl.col("games_played")).alias("games_played"),
@@ -541,6 +541,52 @@ class DataAccessService:
                     
                     updates_made += 1
                     players_affected.add(discord_uid)
+                else:
+                    # Create new MMR entry for player with matches but no mmrs_1v1 record
+                    # Get player name from players_df
+                    player_mask = pl.col("discord_uid") == discord_uid
+                    player_rows = self._players_df.filter(player_mask) if self._players_df is not None else None
+                    
+                    if player_rows is not None and len(player_rows) > 0:
+                        player_name = player_rows[0, "player_name"]
+                    else:
+                        player_name = f"Player{discord_uid}"
+                    
+                    # Create new row in memory
+                    new_row = pl.DataFrame({
+                        "discord_uid": [discord_uid],
+                        "player_name": [player_name],
+                        "race": [race],
+                        "mmr": [current_mmr],
+                        "games_played": [games_played],
+                        "games_won": [games_won],
+                        "games_lost": [games_lost],
+                        "games_drawn": [games_drawn],
+                        "last_played": [last_played]
+                    })
+                    
+                    self._mmrs_1v1_df = pl.concat([self._mmrs_1v1_df, new_row], how="diagonal_relaxed")
+                    
+                    # Queue database create
+                    job = WriteJob(
+                        job_type=WriteJobType.CREATE_MMR,
+                        data={
+                            "discord_uid": discord_uid,
+                            "player_name": player_name,
+                            "race": race,
+                            "mmr": current_mmr,
+                            "games_played": games_played,
+                            "games_won": games_won,
+                            "games_lost": games_lost,
+                            "games_drawn": games_drawn
+                        },
+                        timestamp=time.time()
+                    )
+                    self._write_queue.put_nowait(job)
+                    
+                    updates_made += 1
+                    players_affected.add(discord_uid)
+                    print(f"[MMR Reconciliation] Created new entry for {discord_uid}/{race} (MMR: {current_mmr}, {games_played}G-{games_won}W-{games_lost}L-{games_drawn}D)")
         
         # Notify write worker
         if updates_made > 0:
@@ -566,10 +612,10 @@ class DataAccessService:
         # Check if we're in the midnight-1AM UTC window
         if current_hour != 0:
             print(f"[MMR Reconciliation] Current hour is {current_hour} UTC, outside midnight-1AM window")
-            return True
+            return False
         
-        print(f"[MMR Reconciliation] In midnight-1AM UTC window, will run reconciliation")
-        return True
+        print(f"[MMR Reconciliation] In midnight-1AM UTC window, will run reconciliation [SIKE IT'S FALSE]")
+        return False
     
     async def _get_last_reconciliation_timestamp(self) -> Optional[datetime]:
         """
