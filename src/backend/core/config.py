@@ -39,19 +39,14 @@ def get_wal_path() -> Path:
     Get the path to the Write-Ahead Log (WAL) database file.
     
     Returns:
-        Path to write_log.db
-        - If PERSISTENT_VOLUME_PATH is set: <volume>/wal/write_log.db
-        - Otherwise (local dev): <project_root>/data/wal/write_log.db
+        Path to write_log.db in container-local storage (not persisted across restarts)
+        This avoids file locking issues with mounted volumes and cross-environment contamination.
+        Reconciliation from matches_1v1 table handles recovery on restart.
     """
-    if PERSISTENT_VOLUME_PATH:
-        # Production: Use persistent volume
-        base_path = Path(PERSISTENT_VOLUME_PATH)
-        wal_path = base_path / "wal" / "write_log.db"
-        return wal_path
-    else:
-        # Local development: Use project directory
-        wal_path = PROJECT_ROOT / "data" / "wal" / "write_log.db"
-        return wal_path
+    # Always use container-local storage (not mounted volume)
+    # This eliminates file locking issues between environments
+    wal_path = Path("data/wal.db")
+    return wal_path
 
 
 # Expose the WAL path as a module-level constant for easy import
