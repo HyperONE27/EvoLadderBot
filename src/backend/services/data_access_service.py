@@ -552,7 +552,7 @@ class DataAccessService:
             return False
         
         print(f"[MMR Reconciliation] In midnight-1AM UTC window, will run reconciliation")
-        return True
+        return False
     
     async def _get_last_reconciliation_timestamp(self) -> Optional[datetime]:
         """
