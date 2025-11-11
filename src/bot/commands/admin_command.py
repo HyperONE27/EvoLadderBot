@@ -225,8 +225,8 @@ def format_queue_embed(snapshot: dict) -> discord.Embed:
     
     # Pair up players: 0-1, 2-3, 4-5, ... 28-29
     for i in range(0, 30, 2):
-        left_player = players[i] if i < len(players) else "`        " + " " * 12 + "` `     `"
-        right_player = players[i + 1] if (i + 1) < len(players) else "`        " + " " * 12 + "` `     `"
+        left_player = players[i] if i < len(players) else "`           " + " " * 12 + "` `     `"
+        right_player = players[i + 1] if (i + 1) < len(players) else "`           " + " " * 12 + "` `     `"
         # Use multiple zero-width spaces between regular spaces to prevent collapse
         spacer = " \u200b \u200b \u200b \u200b \u200b \u200b \u200b "  # space, zwsp, zwsp, zwsp, zwsp, zwsp, zwsp, zwsp, space
         description += f"{left_player}{spacer}{right_player}\n"
