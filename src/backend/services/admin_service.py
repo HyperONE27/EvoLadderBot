@@ -216,9 +216,25 @@ class AdminService:
                 
                 # Get text-based components
                 rank_letter = rank[0].upper() if rank and rank != 'u_rank' else 'U'
-                race_short = races_service.get_race_short_name(rank_race) if rank_race else '??'
-                if race_short == rank_race:
-                    race_short = '??'
+                
+                # Get short names for both races (if present)
+                bw_short = races_service.get_race_short_name(bw_race) if bw_race else None
+                if bw_short == bw_race:
+                    bw_short = None
+                sc2_short = races_service.get_race_short_name(sc2_race) if sc2_race else None
+                if sc2_short == sc2_race:
+                    sc2_short = None
+                
+                # Format races: "Z1 T2", "Z1   ", "   T2", or "     "
+                if bw_short and sc2_short:
+                    races_str = f"{bw_short} {sc2_short}"
+                elif bw_short:
+                    races_str = f"{bw_short}   "
+                elif sc2_short:
+                    races_str = f"   {sc2_short}"
+                else:
+                    races_str = "     "
+                
                 country_code = country.upper() if country else '??'
                 
                 # Format player name: truncate to 12 chars, then pad to 12 chars
@@ -229,9 +245,9 @@ class AdminService:
                 wait_time_int = int(p['wait_time'])
                 wait_time_str = f"{wait_time_int:>4d}s"
                 
-                # Format: `A T1 KR ReBellioN   ` ` 794s`
+                # Format: `A Z1 T2 KR ReBellioN   ` ` 794s`
                 queue_player_strings.append(
-                    f"`{rank_letter} {race_short} {country_code} {player_name_padded}` `{wait_time_str}`"
+                    f"`{rank_letter} {races_str} {country_code} {player_name_padded}` `{wait_time_str}`"
                 )
             else:
                 # Empty slot - just blank spaces
