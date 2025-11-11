@@ -465,6 +465,9 @@ class Matchmaker:
 				if both_players_sorted:
 					bw_list.append(both_players_sorted.pop())
 		
+		# Calculate population balance after Step 3
+		current_pop_difference = abs(len(bw_list) - len(sc2_list))
+		
 		# Step 4: Calculate mean MMRs and rebalance if needed
 		if len(bw_list) > 0 and len(sc2_list) > 0:
 			bw_mean = sum(p.bw_mmr or config.MMR_DEFAULT for p in bw_list) / len(bw_list)
@@ -483,14 +486,20 @@ class Matchmaker:
 				
 				if mmr_delta > config.MM_BALANCE_THRESHOLD_MMR and both_in_bw:
 					# BW is stronger, move neutral player to SC2
-					player_to_move = both_in_bw[0]
-					bw_list.remove(player_to_move)
-					sc2_list.append(player_to_move)
+					# Only move if it doesn't worsen population balance
+					new_pop_difference = abs((len(bw_list) - 1) - (len(sc2_list) + 1))
+					if new_pop_difference <= current_pop_difference:
+						player_to_move = both_in_bw[0]
+						bw_list.remove(player_to_move)
+						sc2_list.append(player_to_move)
 				elif mmr_delta < -config.MM_BALANCE_THRESHOLD_MMR and both_in_sc2:
 					# SC2 is stronger, move neutral player to BW
-					player_to_move = both_in_sc2[0]
-					sc2_list.remove(player_to_move)
-					bw_list.append(player_to_move)
+					# Only move if it doesn't worsen population balance
+					new_pop_difference = abs((len(bw_list) + 1) - (len(sc2_list) - 1))
+					if new_pop_difference <= current_pop_difference:
+						player_to_move = both_in_sc2[0]
+						sc2_list.remove(player_to_move)
+						bw_list.append(player_to_move)
 		
 		return bw_list, sc2_list, []
 

@@ -16,8 +16,7 @@ from typing import Optional, List, Dict, Any
 import polars as pl
 
 from src.backend.services.data_access_service import DataAccessService
-from src.backend.services.app_context import mmr_service
-from src.bot.utils.discord_utils import get_race_emote, get_rank_emote, get_flag_emote
+from src.backend.services.app_context import mmr_service, races_service
 
 
 class AdminService:
@@ -150,6 +149,33 @@ class AdminService:
         """
         Get complete system state snapshot for debugging.
         
+        Returns formatted data for 3 Discord embeds displaying system state.
+        
+        Discord Embed Character Limits:
+            - Title: 256 chars max
+            - Description: 4096 chars max
+            - Field name: 256 chars max
+            - Field value: 1024 chars max
+            - Total across all embeds: 6000 chars max
+            - Max embeds per message: 10
+        
+        Current Usage (~2400 chars total, well under 6000 limit):
+            Embed 1 (System Stats): ~500 chars
+                - Title: "🔍 Admin System Snapshot" (~27 chars)
+                - 4 fields: Memory, DataFrames, Write Queue, Process Pool
+            
+            Embed 2 (Queue Status): ~950 chars (text-based format)
+                - Title: "🎮 Queue Status" (~15 chars)
+                - 30 player slots (15 per column × 2 columns, ~31 chars each)
+                - Format: `A T1 KR ReBellioN   ` ` 794s`
+                - Each line: 1 rank letter + 2 race + 2 country + 12 name + 4 time
+            
+            Embed 3 (Active Matches): ~1020 chars (text-based format)
+                - Title: "⚔️ Active Matches" (~17 chars)
+                - 15 match slots (~68 chars each)
+                - Format: `  638` `A T1 KR ReBellioN   ` `vs` `B T2 KR milbob      ` ` 794s`
+                - Each line: 5 match_id + 2×(1+2+2+12) + 4 time
+        
         Returns:
             Comprehensive dict with all system state including memory usage,
             DataFrame statistics, queue status, active matches, write queue depth,
@@ -160,15 +186,12 @@ class AdminService:
         from src.backend.services.app_context import ranking_service
         import time as time_module
         
-        # Get queue player details for display (always show 20 slots)
+        # Get queue player details for display (always show 30 slots)
         queue_players_raw = self._get_queue_snapshot_from_matchmaker()
         queue_player_strings = []
-        MAX_QUEUE_SLOTS = 20
+        MAX_QUEUE_SLOTS = 30
         
         for idx in range(1, MAX_QUEUE_SLOTS + 1):
-            # Format position with padding (4 chars)
-            position_padded = f"{idx:>2d}"
-            
             # Check if we have a player for this slot
             if idx <= len(queue_players_raw):
                 p = queue_players_raw[idx - 1]
@@ -191,11 +214,12 @@ class AdminService:
                 if rank_race:
                     rank = ranking_service.get_letter_rank(p['discord_id'], rank_race)
                 
-                # Get emotes
-                rank_emote = get_rank_emote(rank)
-                bw_emote = get_race_emote(bw_race) if bw_race else '✖️'
-                sc2_emote = get_race_emote(sc2_race) if sc2_race else '✖️'
-                flag_emote = get_flag_emote(country) if country else '◼️'
+                # Get text-based components
+                rank_letter = rank[0].upper() if rank and rank != 'u_rank' else 'U'
+                race_short = races_service.get_race_short_name(rank_race) if rank_race else '??'
+                if race_short == rank_race:
+                    race_short = '??'
+                country_code = country.upper() if country else '??'
                 
                 # Format player name: truncate to 12 chars, then pad to 12 chars
                 player_name_truncated = player_name[:12]
@@ -205,21 +229,22 @@ class AdminService:
                 wait_time_int = int(p['wait_time'])
                 wait_time_str = f"{wait_time_int:>4d}s"
                 
+                # Format: `A T1 KR ReBellioN   ` ` 794s`
                 queue_player_strings.append(
-                    f"{rank_emote} {bw_emote} {sc2_emote} {flag_emote} `{player_name_padded}` `{wait_time_str}`"
+                    f"`{rank_letter} {race_short} {country_code} {player_name_padded}` `{wait_time_str}`"
                 )
             else:
                 # Empty slot - just blank spaces
                 blank_name = " " * 12
                 blank_time = " " * 5
                 queue_player_strings.append(
-                    f"◼️ ◼️ ◼️ ◼️ `{blank_name}` `{blank_time}`"
+                    f"`        {blank_name}` `{blank_time}`"
                 )
         
-        # Get active match details for display (always show 10 slots)
+        # Get active match details for display (always show 15 slots)
         active_matches = list(match_completion_service.monitored_matches) if match_completion_service else []
         match_strings = []
-        MAX_MATCH_SLOTS = 10
+        MAX_MATCH_SLOTS = 15
         
         # Determine the maximum width needed for match IDs (minimum 5)
         max_id_width = 5
@@ -251,13 +276,17 @@ class AdminService:
                     p1_rank = ranking_service.get_letter_rank(p1_uid, p1_race) if p1_race else 'u_rank'
                     p2_rank = ranking_service.get_letter_rank(p2_uid, p2_race) if p2_race else 'u_rank'
                     
-                    # Get emotes
-                    p1_rank_emote = get_rank_emote(p1_rank)
-                    p2_rank_emote = get_rank_emote(p2_rank)
-                    p1_race_emote = get_race_emote(p1_race) if p1_race else '◼️'
-                    p2_race_emote = get_race_emote(p2_race) if p2_race else '◼️'
-                    p1_flag_emote = get_flag_emote(p1_country) if p1_country else '◼️'
-                    p2_flag_emote = get_flag_emote(p2_country) if p2_country else '◼️'
+                    # Get text-based components
+                    p1_rank_letter = p1_rank[0].upper() if p1_rank and p1_rank != 'u_rank' else 'U'
+                    p2_rank_letter = p2_rank[0].upper() if p2_rank and p2_rank != 'u_rank' else 'U'
+                    p1_race_short = races_service.get_race_short_name(p1_race) if p1_race else '??'
+                    if p1_race_short == p1_race:
+                        p1_race_short = '??'
+                    p2_race_short = races_service.get_race_short_name(p2_race) if p2_race else '??'
+                    if p2_race_short == p2_race:
+                        p2_race_short = '??'
+                    p1_country_code = p1_country.upper() if p1_country else '??'
+                    p2_country_code = p2_country.upper() if p2_country else '??'
                     
                     # Format player names: truncate to 12 chars, then pad to 12 chars
                     p1_name_truncated = p1_name[:12]
@@ -278,31 +307,32 @@ class AdminService:
                         # Calculate elapsed seconds using module-level datetime
                         now_utc = datetime.now(timezone.utc)
                         elapsed_seconds = int((now_utc - played_at_dt).total_seconds())
-                        elapsed_str = f"{elapsed_seconds:>4d}"
+                        elapsed_str = f"{elapsed_seconds:>4d}s"
                     else:
-                        elapsed_str = "   ?"
+                        elapsed_str = "   ?s"
                     
                     # Format match ID (dynamically sized, use as position)
                     match_id_padded = f"{match_id:>{max_id_width}d}"
                     
+                    # Format: `  638` `A T1 KR ReBellioN   ` vs `B T2 KR milbob      ` ` 794s`
                     match_strings.append(
-                        f"`{match_id_padded}` {p1_rank_emote} {p1_race_emote} {p1_flag_emote} `{p1_name_padded}` vs {p2_rank_emote} {p2_race_emote} {p2_flag_emote} `{p2_name_padded}` `{elapsed_str}`"
+                        f"`{match_id_padded}` `{p1_rank_letter} {p1_race_short} {p1_country_code} {p1_name_padded}` `vs` `{p2_rank_letter} {p2_race_short} {p2_country_code} {p2_name_padded}` `{elapsed_str}`"
                     )
                 else:
                     # Match data not found - show empty slot
                     blank_name = " " * 12
                     blank_id = " " * max_id_width
-                    blank_time = " " * 4
+                    blank_time = " " * 5
                     match_strings.append(
-                        f"`{blank_id}` ◼️ ◼️ ◼️ `{blank_name}` vs ◼️ ◼️ ◼️ `{blank_name}` `{blank_time}`"
+                        f"`{blank_id}` `        {blank_name}` `vs` `        {blank_name}` `{blank_time}`"
                     )
             else:
                 # Empty slot - just blank spaces
                 blank_name = " " * 12
                 blank_id = " " * max_id_width
-                blank_time = " " * 4
+                blank_time = " " * 5
                 match_strings.append(
-                    f"`{blank_id}` ◼️ ◼️ ◼️ `{blank_name}` vs ◼️ ◼️ ◼️ `{blank_name}` `{blank_time}`"
+                    f"`{blank_id}` `        {blank_name}` `vs` `        {blank_name}` `{blank_time}`"
                 )
         
         return {

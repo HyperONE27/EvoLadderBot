@@ -207,10 +207,10 @@ def format_system_stats_embed(snapshot: dict) -> discord.Embed:
 
 def format_queue_embed(snapshot: dict) -> discord.Embed:
     """
-    Format queue players into a separate embed with two columns.
+    Format queue players into a separate embed with two players per line.
     
-    Returns discord.Embed showing exactly 20 player slots (10 per column).
-    Players are formatted with leaderboard-style display using emotes and monospace text.
+    Returns discord.Embed showing exactly 30 player slots (2 per line, 15 lines).
+    Players are formatted with text-based display using monospace.
     """
     queue_size = snapshot['queue']['size']
     embed = discord.Embed(
@@ -220,38 +220,21 @@ def format_queue_embed(snapshot: dict) -> discord.Embed:
     
     players = snapshot['queue'].get('players', [])
     
-    # Set description with queue count
-    description = f"**Players in Queue:** {queue_size}"
-    if queue_size > 20:
-        description += f"\n_... and {queue_size - 20} more_"
+    # Build description with two players per line
+    description = f"**Players in Queue:** {queue_size}\n"
+    
+    # Pair up players: 0-1, 2-3, 4-5, ... 28-29
+    for i in range(0, 30, 2):
+        left_player = players[i] if i < len(players) else "`        " + " " * 12 + "` `     `"
+        right_player = players[i + 1] if (i + 1) < len(players) else "`        " + " " * 12 + "` `     `"
+        # Use multiple zero-width spaces between regular spaces to prevent collapse
+        spacer = " \u200b \u200b \u200b \u200b \u200b \u200b \u200b "  # space, zwsp, zwsp, zwsp, zwsp, zwsp, zwsp, zwsp, space
+        description += f"{left_player}{spacer}{right_player}\n"
+    
+    if queue_size > 30:
+        description += f"\n_... and {queue_size - 30} more_"
+    
     embed.description = description
-    
-    # Split players into two columns (first 10 and second 10)
-    # Build field text the same way leaderboard does (with trailing \n)
-    col1_text = ""
-    for player in players[:10]:
-        col1_text += player + "\n"
-    
-    col2_text = ""
-    for player in players[10:20]:
-        col2_text += player + "\n"
-    
-    # Add fields side by side with space separator (3 fields total)
-    embed.add_field(
-        name="Queue Status",
-        value=col1_text,
-        inline=True
-    )
-    embed.add_field(
-        name="",  # Single space for column separation
-        value="",  # Single space for column separation
-        inline=True
-    )
-    embed.add_field(
-        name="\u200b",  # Zero-width space like leaderboard uses
-        value=col2_text,
-        inline=True
-    )
     
     return embed
 
@@ -260,8 +243,8 @@ def format_matches_embed(snapshot: dict) -> discord.Embed:
     """
     Format active matches into a separate embed with description (not fields).
     
-    Returns discord.Embed showing exactly 10 match slots (with blanks if needed).
-    Matches are formatted with leaderboard-style display using emotes and monospace text.
+    Returns discord.Embed showing exactly 15 match slots (with blanks if needed).
+    Matches are formatted with text-based display using monospace.
     """
     match_count = snapshot['matches']['active']
     embed = discord.Embed(
@@ -271,12 +254,12 @@ def format_matches_embed(snapshot: dict) -> discord.Embed:
     
     matches = snapshot['matches'].get('match_list', [])
     
-    # Always show all 10 slots (admin_service generates exactly 10)
+    # Always show all 15 slots (admin_service generates exactly 15)
     description = f"**Active Matches:** {match_count}\n" + "\n".join(matches)
     
-    # Add "... and X more" if there are more than 10 matches
-    if match_count > 10:
-        description += f"\n_... and {match_count - 10} more_"
+    # Add "... and X more" if there are more than 15 matches
+    if match_count > 15:
+        description += f"\n_... and {match_count - 15} more_"
     
     embed.description = description
     
@@ -775,70 +758,6 @@ class AdminConfirmationView(View):
         print(f"🧹 [AdminConfirmationView] Timed out and cleaned up for admin {self._original_admin_id}")
 
 
-class AdminDismissView(discord.ui.View):
-    """Simple dismissal view for informational admin commands."""
-    
-    def __init__(self, timeout: int = None):
-        """Initialize view with a timeout and interaction check."""
-        super().__init__(timeout=timeout or GLOBAL_TIMEOUT)
-        self._original_admin_id: Optional[int] = None
-        self._interaction_to_delete: Optional[discord.Interaction] = None
-    
-    def set_admin(self, admin_id: int):
-        """Set the admin who initiated this view (the only one who can interact with buttons)."""
-        self._original_admin_id = admin_id
-    
-    def set_interaction(self, interaction: discord.Interaction):
-        """Store the interaction for deletion purposes."""
-        self._interaction_to_delete = interaction
-    
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Ensure only the original admin can interact with buttons."""
-        if interaction.user.id != self._original_admin_id:
-            try:
-                await queue_interaction_defer(interaction, ephemeral=True)
-            except discord.errors.NotFound:
-                pass
-            
-            try:
-                await queue_followup(
-                    interaction,
-                    embed=discord.Embed(
-                        title="🚫 Admin Button Restricted",
-                        description=f"Only <@{self._original_admin_id}> can interact with these buttons.",
-                        color=discord.Color.red()
-                    ),
-                    ephemeral=True
-                )
-            except Exception as e:
-                print(f"[AdminDismissView] Failed to send rejection message: {e}")
-            
-            return False
-        
-        return True
-    
-    @discord.ui.button(label="Dismiss", style=discord.ButtonStyle.secondary, emoji="🗑️")
-    async def dismiss_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Dismiss and delete the admin info message."""
-        try:
-            await interaction.response.defer()
-            if self._interaction_to_delete:
-                await self._interaction_to_delete.delete_original_response()
-            else:
-                await interaction.message.delete()
-            self.stop()
-            self.clear_items()
-            print(f"🧹 [AdminDismissView] Cleaned up for admin {self._original_admin_id}")
-        except Exception as e:
-            print(f"[AdminDismissView] Failed to delete message: {e}")
-            try:
-                await queue_followup(
-                    interaction,
-                    content="❌ Failed to delete message.",
-                    ephemeral=True
-                )
-            except:
-                pass
 
 
 def register_admin_commands(tree: app_commands.CommandTree):
@@ -862,13 +781,8 @@ def register_admin_commands(tree: app_commands.CommandTree):
         embed_queue = format_queue_embed(snapshot)
         embed_matches = format_matches_embed(snapshot)
         
-        # Create dismiss view for this informational command
-        view = AdminDismissView()
-        view.set_admin(interaction.user.id)
-        view.set_interaction(interaction)
-        
         # Send all 3 embeds
-        await queue_followup(interaction, embeds=[embed_stats, embed_queue, embed_matches], view=view)
+        await queue_followup(interaction, embeds=[embed_stats, embed_queue, embed_matches])
     
     @admin_group.command(name="player", description="[Admin] View player state")
     @app_commands.describe(user="Player's @mention, username, or Discord ID")
@@ -898,12 +812,7 @@ def register_admin_commands(tree: app_commands.CommandTree):
         
         embed = format_player_state(state, discord_user)
         
-        # Create dismiss view for this informational command
-        view = AdminDismissView()
-        view.set_admin(interaction.user.id)
-        view.set_interaction(interaction)
-        
-        await queue_followup(interaction, embed=embed, view=view)
+        await queue_followup(interaction, embed=embed)
     
     @admin_group.command(name="match", description="[Admin] View match state")
     @app_commands.describe(match_id="Match ID")
@@ -1199,17 +1108,11 @@ def register_admin_commands(tree: app_commands.CommandTree):
                 filename=f"match_{match_id}_{replay_files['player_2_name']}.SC2Replay"
             ))
         
-        # Create dismiss view for this informational command
-        view = AdminDismissView()
-        view.set_admin(interaction.user.id)
-        view.set_interaction(interaction)
-        
         await queue_followup(
             interaction,
             content=f"Match #{match_id} State",
             embeds=all_embeds if all_embeds else [embed],
-            files=files_to_attach,  # Changed from file= to files=
-            view=view
+            files=files_to_attach  # Changed from file= to files=
         )
     
     # Helper function to create confirmation views
