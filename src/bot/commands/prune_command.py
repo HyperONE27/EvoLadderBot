@@ -186,7 +186,7 @@ def register_prune_command(tree: app_commands.CommandTree):
     """Register the prune command"""
     @tree.command(
         name="prune",
-        description=f"Delete old bot messages (older than {int(GLOBAL_TIMEOUT/60)} minutes) to reduce lag"
+        description=f"Delete old bot messages (older than {RECENT_MESSAGE_PROTECTION_MINUTES} minutes) to reduce lag"
     )
     async def prune(interaction: discord.Interaction):
         await prune_command(interaction)
@@ -288,12 +288,12 @@ async def prune_command(interaction: discord.Interaction):
                 protected_recent_ids.append(message.id)
                 continue
             
-            # Skip if message contains queue-related content (programmatic detection)
-            # Only protects queue messages less than the configured protection period
-            if is_queue_related_message(message):
-                message_counts["protected_queue"] += 1
-                protected_queue_ids.append(message.id)
-                continue
+            # Queue message protection disabled - treat queue messages like any other message
+            # Code kept for potential future use
+            # if is_queue_related_message(message):
+            #     message_counts["protected_queue"] += 1
+            #     protected_queue_ids.append(message.id)
+            #     continue
             
             messages_to_delete.append(message)
             message_counts["to_delete"] += 1
@@ -341,7 +341,7 @@ async def prune_command(interaction: discord.Interaction):
     if not messages_to_delete:
         info_embed = discord.Embed(
             title="✅ No Messages to Prune",
-            description=f"No bot messages found that can be safely deleted.\n\nQueue-related messages less than {QUEUE_MESSAGE_PROTECTION_DAYS} days old are automatically protected.",
+            description=f"No bot messages found that can be safely deleted.\n\nMessages newer than {RECENT_MESSAGE_PROTECTION_MINUTES} minutes are automatically protected.",
             color=discord.Color.blue()
         )
         await queue_edit_original(interaction, embed=info_embed, view=None)
@@ -356,7 +356,7 @@ async def prune_command(interaction: discord.Interaction):
     confirm_embed = discord.Embed(
         title="🗑️ Confirm Message Deletion",
         description=f"**{len(messages_to_delete)} message(s)** will be deleted.\n\n"
-                   f"Queue-related messages less than {QUEUE_MESSAGE_PROTECTION_DAYS} days old are automatically protected from deletion.",
+                   f"Messages newer than {RECENT_MESSAGE_PROTECTION_MINUTES} minutes are automatically protected from deletion.",
         color=discord.Color.orange()
     )
     

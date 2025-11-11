@@ -115,11 +115,12 @@ QUEUE_SEARCHING_HEARTBEAT_SECONDS = MM_MATCH_INTERVAL_SECONDS / 2
 
 # Recent message protection (minutes) - protects very recent messages from deletion
 # This is a safety net to prevent deleting messages that might be prune-related
-RECENT_MESSAGE_PROTECTION_MINUTES = 5
+RECENT_MESSAGE_PROTECTION_MINUTES = 180
 
 # Queue message protection (days) - protects queue messages from deletion
 # Only queue messages less than this age are protected from pruning
-QUEUE_MESSAGE_PROTECTION_DAYS = 1
+# NOTE: Set to 0 to effectively disable queue message protection (code kept for future use)
+QUEUE_MESSAGE_PROTECTION_DAYS = 0
 
 # Prune command delay (seconds) - delay between message deletions to avoid rate limits
 PRUNE_DELETE_DELAY_SECONDS = 1
