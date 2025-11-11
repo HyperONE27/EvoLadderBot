@@ -119,7 +119,7 @@ RECENT_MESSAGE_PROTECTION_MINUTES = 5
 
 # Queue message protection (days) - protects queue messages from deletion
 # Only queue messages less than this age are protected from pruning
-QUEUE_MESSAGE_PROTECTION_DAYS = 3
+QUEUE_MESSAGE_PROTECTION_DAYS = 1
 
 # Prune command delay (seconds) - delay between message deletions to avoid rate limits
 PRUNE_DELETE_DELAY_SECONDS = 1
