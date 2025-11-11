@@ -726,6 +726,7 @@ class QueueSearchingView(discord.ui.View):
                 f"- Search interval: {matchmaker.MATCH_INTERVAL_SECONDS} seconds\n"
                 f"- Next match wave: <t:{next_wave_epoch}:R>\n"
                 f"- Unique players seen in the last 15 minutes: {stats['active_population']}\n"
+                f"- Ongoing matches: {len(match_completion_service.monitored_matches)}\n"
                 "- Current players queueing:\n"
                 f"  - Brood War: {stats['bw_only']}\n"
                 f"  - StarCraft II: {stats['sc2_only']}\n"

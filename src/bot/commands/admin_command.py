@@ -207,10 +207,10 @@ def format_system_stats_embed(snapshot: dict) -> discord.Embed:
 
 def format_queue_embed(snapshot: dict) -> discord.Embed:
     """
-    Format queue players into a separate embed with description (not fields).
+    Format queue players into a separate embed with two columns.
     
-    Returns discord.Embed showing up to 30 players in queue.
-    Character budget: 63 chars per player, ~1900 chars for 30 players.
+    Returns discord.Embed showing exactly 20 player slots (10 per column).
+    Players are formatted with leaderboard-style display using emotes and monospace text.
     """
     queue_size = snapshot['queue']['size']
     embed = discord.Embed(
@@ -218,23 +218,40 @@ def format_queue_embed(snapshot: dict) -> discord.Embed:
         color=discord.Color.green()
     )
     
-    if queue_size == 0:
-        embed.description = "No players currently in queue."
-    else:
-        players = snapshot['queue'].get('players', [])
-        player_count = len(players)
-        
-        # Show up to 30 players
-        displayed_players = players[:30]
-        player_lines = [f"  • {p}" for p in displayed_players]
-        
-        description = f"**Players in Queue:** {queue_size}\n" + "\n".join(player_lines)
-        
-        # Add "... and X more" if truncated
-        if player_count > 30:
-            description += f"\n_... and {player_count - 30} more_"
-        
-        embed.description = description
+    players = snapshot['queue'].get('players', [])
+    
+    # Set description with queue count
+    description = f"**Players in Queue:** {queue_size}"
+    if queue_size > 20:
+        description += f"\n_... and {queue_size - 20} more_"
+    embed.description = description
+    
+    # Split players into two columns (first 10 and second 10)
+    # Build field text the same way leaderboard does (with trailing \n)
+    col1_text = ""
+    for player in players[:10]:
+        col1_text += player + "\n"
+    
+    col2_text = ""
+    for player in players[10:20]:
+        col2_text += player + "\n"
+    
+    # Add fields side by side with space separator (3 fields total)
+    embed.add_field(
+        name="Queue Status",
+        value=col1_text,
+        inline=True
+    )
+    embed.add_field(
+        name="",  # Single space for column separation
+        value="",  # Single space for column separation
+        inline=True
+    )
+    embed.add_field(
+        name="\u200b",  # Zero-width space like leaderboard uses
+        value=col2_text,
+        inline=True
+    )
     
     return embed
 
@@ -243,9 +260,8 @@ def format_matches_embed(snapshot: dict) -> discord.Embed:
     """
     Format active matches into a separate embed with description (not fields).
     
-    Returns discord.Embed showing up to 15 active matches.
-    Character budget: 68 chars per match, ~1000 chars for 15 matches.
-    Total 3 embeds: stays under 6000 char limit with buffer.
+    Returns discord.Embed showing exactly 10 match slots (with blanks if needed).
+    Matches are formatted with leaderboard-style display using emotes and monospace text.
     """
     match_count = snapshot['matches']['active']
     embed = discord.Embed(
@@ -253,23 +269,16 @@ def format_matches_embed(snapshot: dict) -> discord.Embed:
         color=discord.Color.orange()
     )
     
-    if match_count == 0:
-        embed.description = "No active matches."
-    else:
-        matches = snapshot['matches'].get('match_list', [])
-        match_list_count = len(matches)
-        
-        # Show up to 15 matches
-        displayed_matches = matches[:15]
-        match_lines = [f"  • {m}" for m in displayed_matches]
-        
-        description = f"**Active Matches:** {match_count}\n" + "\n".join(match_lines)
-        
-        # Add "... and X more" if truncated
-        if match_list_count > 15:
-            description += f"\n_... and {match_list_count - 15} more_"
-        
-        embed.description = description
+    matches = snapshot['matches'].get('match_list', [])
+    
+    # Always show all 10 slots (admin_service generates exactly 10)
+    description = f"**Active Matches:** {match_count}\n" + "\n".join(matches)
+    
+    # Add "... and X more" if there are more than 10 matches
+    if match_count > 10:
+        description += f"\n_... and {match_count - 10} more_"
+    
+    embed.description = description
     
     return embed
 

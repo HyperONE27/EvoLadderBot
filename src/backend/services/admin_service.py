@@ -17,6 +17,7 @@ import polars as pl
 
 from src.backend.services.data_access_service import DataAccessService
 from src.backend.services.app_context import mmr_service
+from src.bot.utils.discord_utils import get_race_emote, get_rank_emote, get_flag_emote
 
 
 class AdminService:
@@ -157,34 +158,151 @@ class AdminService:
         from src.backend.services.matchmaking_service import matchmaker
         from src.backend.services.match_completion_service import match_completion_service
         from src.backend.services.app_context import ranking_service
+        import time as time_module
         
-        # Get queue player details for display
+        # Get queue player details for display (always show 20 slots)
         queue_players_raw = self._get_queue_snapshot_from_matchmaker()
         queue_player_strings = []
-        for p in queue_players_raw[:30]:  # Limit to 30 players for display
-            player_info = self.data_service.get_player_info(p['discord_id'])
-            player_name = player_info.get('player_name', 'Unknown') if player_info else 'Unknown'
-            discord_username = player_info.get('discord_username', 'Unknown') if player_info else 'Unknown'
-            queue_player_strings.append(
-                f"{player_name} ({discord_username}) ({', '.join(p['races'])}) - {p['wait_time']:.0f}s"
-            )
+        MAX_QUEUE_SLOTS = 20
         
-        # Get active match details for display
+        for idx in range(1, MAX_QUEUE_SLOTS + 1):
+            # Format position with padding (4 chars)
+            position_padded = f"{idx:>2d}"
+            
+            # Check if we have a player for this slot
+            if idx <= len(queue_players_raw):
+                p = queue_players_raw[idx - 1]
+                player_info = self.data_service.get_player_info(p['discord_id'])
+                player_name = player_info.get('player_name', 'Unknown') if player_info else 'Unknown'
+                country = player_info.get('country') if player_info else None
+                
+                # Determine which races the player is queueing with
+                bw_race = None
+                sc2_race = None
+                for race in p['races']:
+                    if race.startswith('bw_'):
+                        bw_race = race
+                    elif race.startswith('sc2_'):
+                        sc2_race = race
+                
+                # Get rank for the primary race (prefer BW if both, otherwise use whichever they have)
+                rank_race = bw_race if bw_race else sc2_race
+                rank = 'u_rank'
+                if rank_race:
+                    rank = ranking_service.get_letter_rank(p['discord_id'], rank_race)
+                
+                # Get emotes
+                rank_emote = get_rank_emote(rank)
+                bw_emote = get_race_emote(bw_race) if bw_race else '✖️'
+                sc2_emote = get_race_emote(sc2_race) if sc2_race else '✖️'
+                flag_emote = get_flag_emote(country) if country else '◼️'
+                
+                # Format player name: truncate to 12 chars, then pad to 12 chars
+                player_name_truncated = player_name[:12]
+                player_name_padded = f"{player_name_truncated:<12}"
+                
+                # Format wait time (4 chars, right-aligned, integer only)
+                wait_time_int = int(p['wait_time'])
+                wait_time_str = f"{wait_time_int:>4d}s"
+                
+                queue_player_strings.append(
+                    f"{rank_emote} {bw_emote} {sc2_emote} {flag_emote} `{player_name_padded}` `{wait_time_str}`"
+                )
+            else:
+                # Empty slot - just blank spaces
+                blank_name = " " * 12
+                blank_time = " " * 5
+                queue_player_strings.append(
+                    f"◼️ ◼️ ◼️ ◼️ `{blank_name}` `{blank_time}`"
+                )
+        
+        # Get active match details for display (always show 10 slots)
         active_matches = list(match_completion_service.monitored_matches) if match_completion_service else []
         match_strings = []
-        for match_id in active_matches[:15]:  # Limit to 15 matches for display
-            match_data = self.data_service.get_match(match_id)
-            if match_data:
-                p1_uid = match_data['player_1_discord_uid']
-                p2_uid = match_data['player_2_discord_uid']
-                p1_info = self.data_service.get_player_info(p1_uid)
-                p2_info = self.data_service.get_player_info(p2_uid)
-                p1_name = p1_info.get('player_name', 'Unknown') if p1_info else 'Unknown'
-                p2_name = p2_info.get('player_name', 'Unknown') if p2_info else 'Unknown'
-                p1_discord_username = p1_info.get('discord_username', 'Unknown') if p1_info else 'Unknown'
-                p2_discord_username = p2_info.get('discord_username', 'Unknown') if p2_info else 'Unknown'
+        MAX_MATCH_SLOTS = 10
+        
+        # Determine the maximum width needed for match IDs (minimum 5)
+        max_id_width = 5
+        if active_matches:
+            max_match_id = max(active_matches)
+            max_id_width = max(5, len(str(max_match_id)))
+        
+        for idx in range(MAX_MATCH_SLOTS):
+            # Check if we have a match for this slot
+            if idx < len(active_matches):
+                match_id = active_matches[idx]
+                match_data = self.data_service.get_match(match_id)
+                
+                if match_data:
+                    p1_uid = int(match_data['player_1_discord_uid'])
+                    p2_uid = int(match_data['player_2_discord_uid'])
+                    p1_info = self.data_service.get_player_info(p1_uid)
+                    p2_info = self.data_service.get_player_info(p2_uid)
+                    p1_name = p1_info.get('player_name', 'Unknown') if p1_info else 'Unknown'
+                    p2_name = p2_info.get('player_name', 'Unknown') if p2_info else 'Unknown'
+                    p1_country = p1_info.get('country') if p1_info else None
+                    p2_country = p2_info.get('country') if p2_info else None
+                    
+                    # Get race for each player in this match
+                    p1_race = match_data.get('player_1_race')
+                    p2_race = match_data.get('player_2_race')
+                    
+                    # Get rank for each player-race combination
+                    p1_rank = ranking_service.get_letter_rank(p1_uid, p1_race) if p1_race else 'u_rank'
+                    p2_rank = ranking_service.get_letter_rank(p2_uid, p2_race) if p2_race else 'u_rank'
+                    
+                    # Get emotes
+                    p1_rank_emote = get_rank_emote(p1_rank)
+                    p2_rank_emote = get_rank_emote(p2_rank)
+                    p1_race_emote = get_race_emote(p1_race) if p1_race else '◼️'
+                    p2_race_emote = get_race_emote(p2_race) if p2_race else '◼️'
+                    p1_flag_emote = get_flag_emote(p1_country) if p1_country else '◼️'
+                    p2_flag_emote = get_flag_emote(p2_country) if p2_country else '◼️'
+                    
+                    # Format player names: truncate to 12 chars, then pad to 12 chars
+                    p1_name_truncated = p1_name[:12]
+                    p1_name_padded = f"{p1_name_truncated:<12}"
+                    p2_name_truncated = p2_name[:12]
+                    p2_name_padded = f"{p2_name_truncated:<12}"
+                    
+                    # Calculate elapsed time since match was assigned
+                    played_at = match_data.get('played_at')
+                    if played_at:
+                        # Convert played_at to datetime if it's a string
+                        if isinstance(played_at, str):
+                            from datetime import datetime as dt_class
+                            played_at_dt = dt_class.fromisoformat(played_at.replace('Z', '+00:00'))
+                        else:
+                            played_at_dt = played_at
+                        
+                        # Calculate elapsed seconds using module-level datetime
+                        now_utc = datetime.now(timezone.utc)
+                        elapsed_seconds = int((now_utc - played_at_dt).total_seconds())
+                        elapsed_str = f"{elapsed_seconds:>4d}"
+                    else:
+                        elapsed_str = "   ?"
+                    
+                    # Format match ID (dynamically sized, use as position)
+                    match_id_padded = f"{match_id:>{max_id_width}d}"
+                    
+                    match_strings.append(
+                        f"`{match_id_padded}` {p1_rank_emote} {p1_race_emote} {p1_flag_emote} `{p1_name_padded}` vs {p2_rank_emote} {p2_race_emote} {p2_flag_emote} `{p2_name_padded}` `{elapsed_str}`"
+                    )
+                else:
+                    # Match data not found - show empty slot
+                    blank_name = " " * 12
+                    blank_id = " " * max_id_width
+                    blank_time = " " * 4
+                    match_strings.append(
+                        f"`{blank_id}` ◼️ ◼️ ◼️ `{blank_name}` vs ◼️ ◼️ ◼️ `{blank_name}` `{blank_time}`"
+                    )
+            else:
+                # Empty slot - just blank spaces
+                blank_name = " " * 12
+                blank_id = " " * max_id_width
+                blank_time = " " * 4
                 match_strings.append(
-                    f"Match #{match_id}: {p1_name} ({p1_discord_username}) vs {p2_name} ({p2_discord_username})"
+                    f"`{blank_id}` ◼️ ◼️ ◼️ `{blank_name}` vs ◼️ ◼️ ◼️ `{blank_name}` `{blank_time}`"
                 )
         
         return {
