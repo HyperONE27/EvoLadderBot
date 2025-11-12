@@ -229,11 +229,11 @@ class AdminService:
                 if bw_short and sc2_short:
                     races_str = f"{bw_short} {sc2_short}"
                 elif bw_short:
-                    races_str = f"{bw_short}   "
+                    races_str = f"{bw_short} __"
                 elif sc2_short:
-                    races_str = f"   {sc2_short}"
+                    races_str = f"__ {sc2_short}"
                 else:
-                    races_str = "     "
+                    races_str = "__ __"
                 
                 country_code = country.upper() if country else '??'
                 
@@ -250,11 +250,11 @@ class AdminService:
                     f"`{rank_letter} {races_str} {country_code} {player_name_padded}` `{wait_time_str}`"
                 )
             else:
-                # Empty slot - just blank spaces
-                blank_name = " " * 12
+                # Empty slot - just blank spaces (rank + space + races + space + country + space + name)
+                # = 1 + 1 + 5 + 1 + 2 + 1 + 12 = 23 chars total
                 blank_time = " " * 5
                 queue_player_strings.append(
-                    f"`        {blank_name}` `{blank_time}`"
+                    f"`{' ' * 23}` `{blank_time}`"
                 )
         
         # Get active match details for display (always show 15 slots)

@@ -773,6 +773,15 @@ class QueueSearchingView(discord.ui.View):
             embed = await loop.run_in_executor(None, match_view.get_embed)
             flow.checkpoint("generate_match_embed_complete")
             
+            # Step 3.5: Remove the Cancel Queue button from the original searching message
+            flow.checkpoint("remove_searching_view_components")
+            await queue_edit_original(
+                self.last_interaction,
+                embed=self.build_searching_embed(),
+                view=None
+            )
+            flow.checkpoint("searching_view_components_removed")
+            
             # Step 4: Send a new message with the match view
             flow.checkpoint("send_new_match_message")
             new_match_message = await queue_channel_send(self.channel, embed=embed, view=match_view)
@@ -1096,22 +1105,30 @@ class MatchFoundView(discord.ui.View):
         # Update dropdown states based on initial data
         self._update_dropdown_states()
     
-    async def _edit_original_message(self, embed: discord.Embed, view: discord.ui.View = None) -> bool:
+    async def _edit_original_message(self, embed: discord.Embed, view: Optional[discord.ui.View] = ...) -> bool:
         """
         Edit the original match message using the stored message ID.
         This uses the bot's permanent token, not the temporary interaction token.
         
+        Args:
+            embed: The embed to display
+            view: The view to attach. If ... (default), uses self. If None, removes all components.
+        
         Returns True if successful, False otherwise.
         """
         if not self.channel or not self.original_message_id:
+            print(f"⚠️ Cannot edit message: channel={self.channel}, message_id={self.original_message_id}")
             return False
         
         try:
             # Fetch the original message by ID using the bot's permanent token
             message = await self.channel.fetch_message(self.original_message_id)
             
+            # Determine which view to use: if default (...), use self; if None, pass None to remove components
+            view_to_use = self if view is ... else view
+            
             # Edit it using the bot's permanent token (never expires!)
-            await queue_message_edit(message, embed=embed, view=view or self)
+            await queue_message_edit(message, embed=embed, view=view_to_use)
             return True
         except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
             print(f"Failed to edit original message: {e}")
@@ -1530,15 +1547,14 @@ class MatchFoundView(discord.ui.View):
             if mapped_result:
                 self.match_result.match_result_confirmation_status = "Confirmed"
             
-            flow.checkpoint("disable_components")
-            # Disable components and update the original embed
-            self.disable_all_components()
+            flow.checkpoint("remove_components")
+            # Remove all components from the message (no longer needed)
             
             flow.checkpoint("update_embed_start")
             async with self.edit_lock:
                 # Edit the original message using bot token (never expires!)
                 embed = self.get_embed()
-                await self._edit_original_message(embed, self)
+                await self._edit_original_message(embed, view=None)
             flow.checkpoint("update_embed_complete")
             
             flow.checkpoint("send_final_embed_start")
@@ -1551,24 +1567,25 @@ class MatchFoundView(discord.ui.View):
             flow.complete("success")
             
         elif status == "abort":
-            print(f"📬 [DEBUG] Processing 'abort' status for match {self.match_result.match_id}")
+            player_id = self.match_result.player_1_discord_id if self.is_player1 else self.match_result.player_2_discord_id
+            print(f"📬 [DEBUG] Processing 'abort' status for match {self.match_result.match_id} (player {player_id}, is_player1={self.is_player1})")
             flow.checkpoint("process_abort_status")
             # Update the view's internal state to reflect the abort
             self.match_result.match_result = "aborted"
             self.match_result.match_result_confirmation_status = "Aborted"
             print(f"📬 [DEBUG] Updated match_result to 'aborted' for match {self.match_result.match_id}")
 
-            flow.checkpoint("disable_components")
-            # Immediately disable all components to prevent further actions
-            self.disable_all_components()
-            print(f"📬 [DEBUG] Disabled all components for match {self.match_result.match_id}")
+            flow.checkpoint("remove_components")
+            # Remove all components to prevent further actions
+            print(f"📬 [DEBUG] Removing all components for match {self.match_result.match_id} (player {player_id})")
 
             flow.checkpoint("update_abort_embed_start")
             # Update the embed with the abort information using bot token (persistent)
             async with self.edit_lock:
                 embed = self.get_embed()
-                await self._edit_original_message(embed, self)
-            print(f"📬 [DEBUG] Updated embed with abort info for match {self.match_result.match_id}")
+                success = await self._edit_original_message(embed, view=None)
+                print(f"📬 [DEBUG] Edit message result for player {player_id}: {success}")
+            print(f"📬 [DEBUG] Updated embed with abort info for match {self.match_result.match_id} (player {player_id})")
             flow.checkpoint("update_abort_embed_complete")
 
             flow.checkpoint("send_abort_embed_start")
@@ -1592,14 +1609,13 @@ class MatchFoundView(discord.ui.View):
             # Update the view's state to reflect the conflict
             self.match_result.match_result = "conflict"
             
-            flow.checkpoint("disable_components")
-            # Disable components and update the original embed
-            self.disable_all_components()
+            flow.checkpoint("remove_components")
+            # Remove all components from the message
             
             flow.checkpoint("update_conflict_embed_start")
             async with self.edit_lock:
                 embed = self.get_embed()
-                await self._edit_original_message(embed, self)
+                await self._edit_original_message(embed, view=None)
             flow.checkpoint("update_conflict_embed_complete")
 
             flow.checkpoint("send_conflict_embed_start")
@@ -1613,18 +1629,17 @@ class MatchFoundView(discord.ui.View):
 
         elif status == "confirmation_timeout":
             flow.checkpoint("process_confirmation_timeout")
-            # The backend has confirmed the confirmation window is closed.
-            # Disable the abort and confirm buttons.
-            self.abort_button.disabled = True
-            self.confirm_button.disabled = True
+            # The confirmation window has closed.
+            # Remove all interactive components since players can no longer abort/confirm.
+            # Result reporting (if needed) will be via replay upload.
             self.confirmation_window_closed = True
             
             flow.checkpoint("update_timeout_embed_start")
-            # Update the embed to show the abort window is closed
+            # Update the embed and remove all components
             async with self.edit_lock:
                 embed = self.get_embed()
-                await self._edit_original_message(embed, self)
-            print(f"📬 [DEBUG] Updated embed to show timeout for match {self.match_result.match_id}")
+                await self._edit_original_message(embed, view=None)
+            print(f"📬 [DEBUG] Updated embed and removed components for confirmation timeout match {self.match_result.match_id}")
             flow.checkpoint("update_timeout_embed_complete")
             print(f"📬 [DEBUG] 'confirmation_timeout' processing COMPLETE for match {self.match_result.match_id}")
             flow.complete("success")
@@ -2088,23 +2103,21 @@ class MatchAbortButton(discord.ui.Button):
         if success:
             flow.checkpoint("abort_succeeded")
             # The backend will now handle notifications.
-            # We just need to update the UI to a disabled state.
+            # Remove all components immediately for the aborter.
             
             flow.checkpoint("update_ui_start")
-            # Update button label
-            remaining_aborts = user_info_service.get_remaining_aborts(player_discord_uid)
-            self.label = f"Match Aborted ({remaining_aborts} left this month)"
-
-            self.parent_view.disable_all_components()
+            # Update the match result state
+            self.parent_view.match_result.match_result = "aborted"
+            self.parent_view.match_result.match_result_confirmation_status = "Aborted"
             
             flow.checkpoint("send_abort_ui_update")
-            # Update the embed to show abort status temporarily
-            # The backend will send the final authoritative state
+            # Remove all components from the aborter's view
+            # The backend notification will handle the opponent's view
             async with self.parent_view.edit_lock:
                 await queue_interaction_edit(
                     interaction,
                     embed=self.parent_view.get_embed(), 
-                    view=self.parent_view
+                    view=None
                 )
             flow.checkpoint("send_abort_ui_complete")
             flow.complete("success")

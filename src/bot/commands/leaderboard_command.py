@@ -300,48 +300,45 @@ class LeaderboardView(discord.ui.View):
         data_fetch_time = time.perf_counter()
         # print(f"[Filter Perf] Data fetch: {(data_fetch_time - filter_start)*1000:.2f}ms")
         
-        # Create a new view with current selections to maintain state
-        new_view = LeaderboardView(
-            leaderboard_service=self.leaderboard_service,
-            current_page=self.current_page,
-            country_filter=self.country_filter,
-            race_filter=self.race_filter,
-            best_race_only=self.best_race_only,
-            rank_filter=self.rank_filter,
-            country_page1_selection=self.country_page1_selection,
-            country_page2_selection=self.country_page2_selection
-        )
+        # ✅ Reuse the current view instance (no re-creation)
+        view = self
         
         view_creation_time = time.perf_counter()
         # print(f"[Filter Perf] View creation: {(view_creation_time - data_fetch_time)*1000:.2f}ms")
         
-        # Update button states based on data
+        # ✅ Update button states and pagination dropdown in-place
         total_pages = data.get("total_pages", 1)
         current_page = data.get("current_page", 1)
         button_states = self.leaderboard_service.get_button_states(current_page, total_pages)
         
-        # Update button states and pagination dropdown
-        for item in new_view.children:
+        for item in self.children:
             if isinstance(item, PreviousPageButton):
                 item.disabled = button_states["previous_disabled"]
             elif isinstance(item, NextPageButton):
                 item.disabled = button_states["next_disabled"]
             elif isinstance(item, PageNavigationSelect):
-                # Replace with updated pagination dropdown
-                new_view.remove_item(item)
-                new_view.add_item(PageNavigationSelect(total_pages, current_page))
+                # Update dropdown options in-place instead of recreating
+                item.options = [
+                    discord.SelectOption(
+                        label=f"Page {page}",
+                        value=f"page_{page}",
+                        default=(page == current_page)
+                    )
+                    for page in range(1, total_pages + 1)
+                ]
+                item.placeholder = f"Page {current_page}/{total_pages}"
         
         button_update_time = time.perf_counter()
         # print(f"[Filter Perf] Button updates: {(button_update_time - view_creation_time)*1000:.2f}ms")
         
-        # Generate embed
-        embed = new_view.get_embed(data)
+        # ✅ Generate embed using same view
+        embed = self.get_embed(data)
         embed_generation_time = time.perf_counter()
         # print(f"[Filter Perf] Embed generation: {(embed_generation_time - button_update_time)*1000:.2f}ms")
         
-        # Discord API call - this is where the lag might be
+        # ✅ Discord API call — reuse same view (lighter payload)
         discord_api_start = time.perf_counter()
-        await queue_interaction_edit(interaction, embed=embed, view=new_view)
+        await queue_interaction_edit(interaction, embed=embed, view=self)
         discord_api_end = time.perf_counter()
         
         discord_api_time = (discord_api_end - discord_api_start) * 1000

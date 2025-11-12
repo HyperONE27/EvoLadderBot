@@ -290,6 +290,13 @@
   - ✅ /admin unblock_queue
   - ✅ /owner admin
 
+### November 11, 2025
+- ⏰ Fixed `/admin snapshot` embed blanks being the wrong width
+- ⏰ Fixed an issue where MMR difference optimization in the matchmaking algorithm could cause a player queuing with both BW and SC2 to be matched against themselves
+- ⏰ Fixed an issue with buttons and dropdowns being displayed after no longer needed, causing client end lag and server memory leaks
+- ⏰ 
+- ⏰ 
+
 ## PRE-BETA
 
 - Command timeouts:

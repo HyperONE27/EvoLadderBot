@@ -570,6 +570,10 @@ class Matchmaker:
 			max_diff = self.max_diff(lead_player.wait_cycles)
 			
 			for follow_player in follow_side:
+				# Skip self-matching
+				if lead_player.discord_user_id == follow_player.discord_user_id:
+					continue
+				
 				follow_mmr = follow_player.get_effective_mmr(not is_bw_match) or 0
 				mmr_diff = abs(lead_mmr - follow_mmr)
 				
@@ -676,6 +680,11 @@ class Matchmaker:
 							 (p2_lead_mmr - p1_follow_mmr) ** 2)
 				
 				if error_after < error_before:
+					# Ensure swap doesn't create self-matches
+					if (p1_lead.discord_user_id == p2_follow.discord_user_id or 
+						p2_lead.discord_user_id == p1_follow.discord_user_id):
+						continue
+					
 					# Check if swap respects MMR windows
 					max_diff_p1 = self.max_diff(p1_lead.wait_cycles)
 					max_diff_p2 = self.max_diff(p2_lead.wait_cycles)
@@ -772,6 +781,13 @@ class Matchmaker:
 		# Equalize BW and SC2 lists using both_races players
 		bw_list, sc2_list, remaining_z = self.equalize_lists(bw_list, sc2_list, both_races)
 		
+		# Validate equalization produced disjoint sets
+		bw_ids = {p.discord_user_id for p in bw_list}
+		sc2_ids = {p.discord_user_id for p in sc2_list}
+		overlap = bw_ids & sc2_ids
+		if overlap:
+			raise RuntimeError(f"Equalization produced overlapping lists: {overlap}")
+		
 		print(f"   📊 After equalization: BW={len(bw_list)}, SC2={len(sc2_list)}, Remaining Z={len(remaining_z)}")
 		
 		# Log skill balance after equalization
@@ -826,6 +842,13 @@ class Matchmaker:
 		# Process matches
 		matched_players = set()
 		for p1, p2 in matches:
+			# Validate no self-matching
+			if p1.discord_user_id == p2.discord_user_id:
+				raise RuntimeError(
+					f"CRITICAL: Self-match detected for player {p1.user_id} "
+					f"(discord_id: {p1.discord_user_id}). This should never happen."
+				)
+			
 			print(f"✅ Match found: {p1.user_id} vs {p2.user_id}")
 			available_maps = self._get_available_maps(p1, p2)
 			if not available_maps:
