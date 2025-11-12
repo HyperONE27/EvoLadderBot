@@ -300,43 +300,39 @@ class LeaderboardView(discord.ui.View):
         data_fetch_time = time.perf_counter()
         # print(f"[Filter Perf] Data fetch: {(data_fetch_time - filter_start)*1000:.2f}ms")
         
-        # ✅ Reuse the current view instance (no re-creation)
-        view = self
-        
         view_creation_time = time.perf_counter()
         # print(f"[Filter Perf] View creation: {(view_creation_time - data_fetch_time)*1000:.2f}ms")
         
-        # ✅ Update button states and pagination dropdown in-place
+        # ✅ Reuse this same view but rebuild all components to maintain exact order
         total_pages = data.get("total_pages", 1)
         current_page = data.get("current_page", 1)
         button_states = self.leaderboard_service.get_button_states(current_page, total_pages)
         
-        for item in self.children:
-            if isinstance(item, PreviousPageButton):
-                item.disabled = button_states["previous_disabled"]
-            elif isinstance(item, NextPageButton):
-                item.disabled = button_states["next_disabled"]
-            elif isinstance(item, PageNavigationSelect):
-                # Update dropdown options in-place instead of recreating
-                item.options = [
-                    discord.SelectOption(
-                        label=f"Page {page}",
-                        value=f"page_{page}",
-                        default=(page == current_page)
-                    )
-                    for page in range(1, total_pages + 1)
-                ]
-                item.placeholder = f"Page {current_page}/{total_pages}"
+        # 🔄 Rebuild ALL components to ensure perfect order consistency and visual state updates
+        # This ensures `default=True` selections work and button order never changes
+        for child in list(self.children):
+            self.remove_item(child)
+        
+        # Add fresh components with current defaults (exact original order from __init__)
+        self.add_item(PreviousPageButton(disabled=button_states["previous_disabled"]))
+        self.add_item(NextPageButton(disabled=button_states["next_disabled"]))
+        self.add_item(RankFilterButton(disabled=False, rank_filter=self.rank_filter))
+        self.add_item(BestRaceOnlyButton(disabled=False, best_race_only=self.best_race_only))
+        self.add_item(ClearFiltersButton())
+        self.add_item(RaceFilterSelect(self.leaderboard_service, self.race_filter))
+        self.add_item(CountryFilterPage1Select(self.countries, self.country_page1_selection))
+        self.add_item(CountryFilterPage2Select(self.countries, self.country_page2_selection))
+        self.add_item(PageNavigationSelect(total_pages, current_page))
         
         button_update_time = time.perf_counter()
         # print(f"[Filter Perf] Button updates: {(button_update_time - view_creation_time)*1000:.2f}ms")
         
-        # ✅ Generate embed using same view
+        # ✅ Generate updated embed with current data
         embed = self.get_embed(data)
         embed_generation_time = time.perf_counter()
         # print(f"[Filter Perf] Embed generation: {(embed_generation_time - button_update_time)*1000:.2f}ms")
         
-        # ✅ Discord API call — reuse same view (lighter payload)
+        # ✅ Edit using same view instance
         discord_api_start = time.perf_counter()
         await queue_interaction_edit(interaction, embed=embed, view=self)
         discord_api_end = time.perf_counter()
