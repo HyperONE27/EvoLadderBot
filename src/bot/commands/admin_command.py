@@ -225,9 +225,9 @@ def format_queue_embed(snapshot: dict) -> discord.Embed:
     
     # Pair up players: 0-1, 2-3, 4-5, ... 28-29
     for i in range(0, 30, 2):
-        # Format: rank + space + race + space + race + space + country + space + name(12)
-        # = 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 12 = 23 chars, then ` ` then 5 chars for time
-        blank_slot = "`" + " " * 23 + "` `" + " " * 5 + "`"
+        # Format: rank1 + space + race1 + space + rank2 + space + race2 + space + country + space + name(12)
+        # = 1 + 1 + 2 + 1 + 1 + 1 + 2 + 1 + 2 + 1 + 12 = 25 chars, then ` ` then 5 chars for time
+        blank_slot = "`" + " " * 25 + "` `" + " " * 5 + "`"
         left_player = players[i] if i < len(players) else blank_slot
         right_player = players[i + 1] if (i + 1) < len(players) else blank_slot
         # Use multiple zero-width spaces between regular spaces to prevent collapse

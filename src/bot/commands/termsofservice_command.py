@@ -7,9 +7,7 @@ from src.backend.services.app_context import (
     command_guard_service as guard_service
 )
 from src.bot.utils.discord_utils import send_ephemeral_response
-from src.bot.components.confirm_embed import ConfirmEmbedView
 from src.bot.components.command_guard_embeds import create_command_guard_error_embed
-from src.bot.components.confirm_restart_cancel_buttons import ConfirmRestartCancelButtons
 from src.bot.utils.command_decorators import dm_only
 from src.bot.config import GLOBAL_TIMEOUT
 from src.backend.services.performance_service import FlowTracker
@@ -88,22 +86,7 @@ async def termsofservice_command(interaction: discord.Interaction):
                 icon_url=BOT_ICON_URL
             )
             
-            # Create view with Close button
-            class ConfirmView(discord.ui.View):
-                pass
-            
-            confirm_view = ConfirmView(timeout=GLOBAL_TIMEOUT)
-            close_buttons = ConfirmRestartCancelButtons.create_buttons(
-                reset_target=confirm_view,
-                include_confirm=False,
-                include_restart=False,
-                include_cancel=True,
-                cancel_label="Close"
-            )
-            for button in close_buttons:
-                confirm_view.add_item(button)
-            
-            await queue_interaction_edit(interaction, embed=confirm_embed, view=confirm_view)
+            await queue_interaction_edit(interaction, embed=confirm_embed, view=None)
 
         @discord.ui.button(label="I Decline These Terms", emoji="✖️", style=discord.ButtonStyle.danger)
         async def decline_terms(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -132,23 +115,8 @@ async def termsofservice_command(interaction: discord.Interaction):
                 text="You may use /termsofservice to review the terms again if you change your mind.",
                 icon_url=BOT_ICON_URL
             )
-            
-            # Create view with Close button
-            class DeclineView(discord.ui.View):
-                pass
-            
-            decline_view = DeclineView(timeout=GLOBAL_TIMEOUT)
-            close_buttons = ConfirmRestartCancelButtons.create_buttons(
-                reset_target=decline_view,
-                include_confirm=False,
-                include_restart=False,
-                include_cancel=True,
-                cancel_label="Close"
-            )
-            for button in close_buttons:
-                decline_view.add_item(button)
 
-            await queue_interaction_edit(interaction, embed=decline_embed, view=decline_view)
+            await queue_interaction_edit(interaction, embed=decline_embed, view=None)
 
     confirm_view = TOSConfirmView()
 

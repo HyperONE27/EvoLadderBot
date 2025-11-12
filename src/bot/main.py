@@ -64,7 +64,23 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     """Handle replay file detection for active match views."""
+    # Log SC2Replay detection at the entry point
+    if message.attachments and any(a.filename.endswith('.SC2Replay') for a in message.attachments):
+        logger.info(f"[Replay Detected] Channel={message.channel.id}, Author={message.author.name} ({message.author.id}), File={message.attachments[0].filename}")
+    
     await handle_replay_message(message, bot)
+
+@bot.event
+async def on_disconnect():
+    logger.warning("⚠️ [Discord Gateway] Bot disconnected")
+
+@bot.event
+async def on_resumed():
+    logger.info("✅ [Discord Gateway] Connection resumed")
+
+@bot.event  
+async def on_connect():
+    logger.info("🔗 [Discord Gateway] Bot connected")
 
 def register_commands(bot: commands.Bot):
     # register_activate_command(bot.tree)  # DISABLED: Obsolete command

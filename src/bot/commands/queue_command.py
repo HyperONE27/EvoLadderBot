@@ -2585,12 +2585,18 @@ async def on_message(message: discord.Message, bot=None):
             break  # Take the first SC2Replay file and ignore the rest
     
     if not replay_attachment:
+        # Log if there were attachments but none were SC2Replay files
+        if message.attachments:
+            print(f"[ReplayUpload] Non-replay attachments in channel {message.channel.id}, ignoring")
         return
     
     # Find the corresponding match view from the channel map
     match_view = channel_to_match_view_map.get(message.channel.id)
     
     if not match_view:
+        print(f"⚠️ [ReplayUpload] No match view for channel {message.channel.id}")
+        print(f"   Uploader: {message.author.name} ({message.author.id}), File: {replay_attachment.filename}")
+        print(f"   Registered channels: {list(channel_to_match_view_map.keys())}")
         return
     
     flow = FlowTracker(f"replay_upload", user_id=message.author.id)

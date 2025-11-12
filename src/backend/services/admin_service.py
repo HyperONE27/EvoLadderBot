@@ -164,11 +164,11 @@ class AdminService:
                 - Title: "🔍 Admin System Snapshot" (~27 chars)
                 - 4 fields: Memory, DataFrames, Write Queue, Process Pool
             
-            Embed 2 (Queue Status): ~950 chars (text-based format)
+            Embed 2 (Queue Status): ~1050 chars (text-based format)
                 - Title: "🎮 Queue Status" (~15 chars)
-                - 30 player slots (15 per column × 2 columns, ~31 chars each)
-                - Format: `A T1 KR ReBellioN   ` ` 794s`
-                - Each line: 1 rank letter + 2 race + 2 country + 12 name + 4 time
+                - 30 player slots (15 per column × 2 columns, ~35 chars each)
+                - Format: `A Z1 B T2 KR ReBellioN   ` ` 794s`
+                - Each line: 9 ranks+races + 2 country + 12 name + 5 time
             
             Embed 3 (Active Matches): ~1020 chars (text-based format)
                 - Title: "⚔️ Active Matches" (~17 chars)
@@ -208,14 +208,17 @@ class AdminService:
                     elif race.startswith('sc2_'):
                         sc2_race = race
                 
-                # Get rank for the primary race (prefer BW if both, otherwise use whichever they have)
-                rank_race = bw_race if bw_race else sc2_race
-                rank = 'u_rank'
-                if rank_race:
-                    rank = ranking_service.get_letter_rank(p['discord_id'], rank_race)
+                # Get rank for each race separately
+                bw_rank = 'u_rank'
+                sc2_rank = 'u_rank'
+                if bw_race:
+                    bw_rank = ranking_service.get_letter_rank(p['discord_id'], bw_race)
+                if sc2_race:
+                    sc2_rank = ranking_service.get_letter_rank(p['discord_id'], sc2_race)
                 
-                # Get text-based components
-                rank_letter = rank[0].upper() if rank and rank != 'u_rank' else 'U'
+                # Get rank letters
+                bw_rank_letter = bw_rank[0].upper() if bw_rank and bw_rank != 'u_rank' else 'U'
+                sc2_rank_letter = sc2_rank[0].upper() if sc2_rank and sc2_rank != 'u_rank' else 'U'
                 
                 # Get short names for both races (if present)
                 bw_short = races_service.get_race_short_name(bw_race) if bw_race else None
@@ -225,15 +228,15 @@ class AdminService:
                 if sc2_short == sc2_race:
                     sc2_short = None
                 
-                # Format races: "Z1 T2", "Z1   ", "   T2", or "     "
+                # Format ranks + races: "A Z1 B T2", "A Z1 _ __", "_ __ B T2", or "_ __ _ __"
                 if bw_short and sc2_short:
-                    races_str = f"{bw_short} {sc2_short}"
+                    races_str = f"{bw_rank_letter} {bw_short} {sc2_rank_letter} {sc2_short}"
                 elif bw_short:
-                    races_str = f"{bw_short} __"
+                    races_str = f"{bw_rank_letter} {bw_short} - --"
                 elif sc2_short:
-                    races_str = f"__ {sc2_short}"
+                    races_str = f"- -- {sc2_rank_letter} {sc2_short}"
                 else:
-                    races_str = "__ __"
+                    races_str = "- -- - --"
                 
                 country_code = country.upper() if country else '??'
                 
@@ -245,16 +248,16 @@ class AdminService:
                 wait_time_int = int(p['wait_time'])
                 wait_time_str = f"{wait_time_int:>4d}s"
                 
-                # Format: `A Z1 T2 KR ReBellioN   ` ` 794s`
+                # Format: `A Z1 B T2 KR ReBellioN   ` ` 794s`
                 queue_player_strings.append(
-                    f"`{rank_letter} {races_str} {country_code} {player_name_padded}` `{wait_time_str}`"
+                    f"`{races_str} {country_code} {player_name_padded}` `{wait_time_str}`"
                 )
             else:
-                # Empty slot - just blank spaces (rank + space + races + space + country + space + name)
-                # = 1 + 1 + 5 + 1 + 2 + 1 + 12 = 23 chars total
+                # Empty slot - just blank spaces (ranks+races + space + country + space + name)
+                # = 9 + 1 + 2 + 1 + 12 = 25 chars total
                 blank_time = " " * 5
                 queue_player_strings.append(
-                    f"`{' ' * 23}` `{blank_time}`"
+                    f"`{' ' * 25}` `{blank_time}`"
                 )
         
         # Get active match details for display (always show 15 slots)
