@@ -2022,9 +2022,11 @@ class MatchConfirmButton(discord.ui.Button):
                 await queue_edit_original(interaction, embed=current_embed, view=self.parent_view)
             
             # Provide feedback to the user
+            from src.bot.components.match_confirmation_embed import create_player_confirmation_embed
+            confirmation_embed = create_player_confirmation_embed(match_id)
             await queue_followup(
                 interaction,
-                content="✅ You have confirmed the match! Waiting for your opponent.",
+                embed=confirmation_embed,
                 ephemeral=True
             )
         except Exception as e:

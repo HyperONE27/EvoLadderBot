@@ -312,13 +312,18 @@
 - ⏰ Players who have been waiting a long time don't get priority if they are on follow side of matchmaking
 - ⏰ Explanation of opponent match confirm and opponent match reported notifications is confusing
 - ⏰ Explanation of replay validation results is confusing
-- ⏰ Update the maps from TLMC21 versions to ladder versions
-- ⏰ Swap out Death Valley?
+- ✅ Update the maps from TLMC21 versions to ladder versions
+- ✅ Swap out Death Valley for Ruby Rock
 - ⏰ 
 
 ### ANNOUNCEMENT: November 13, 2025
 
 ## General Changes
+- Map pool updated:
+  - `[TLMC21] Celestial Enclave` replaced with `Celestial Enclave LE`
+  - `[SC:Evo] Death Valley (데스밸리)` replaced with `Ruby Rock LE`
+  - `[TLMC21] Mothership` replaced with `Mothership LE`
+- 
 
 ## Bug Fixes
 
