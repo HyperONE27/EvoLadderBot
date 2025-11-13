@@ -2,22 +2,13 @@
     "maps": {
         "season_alpha": [
             {
-                "name": "[TLMC21] Celestial Enclave",
+                "name": "Celestial Enclave LE",
                 "short_name": "Celestial Enclave",
-                "author": "OfficialTLMC",
-                "am_link": "battlenet:://starcraft/map/1/368673",
-                "eu_link": "battlenet:://starcraft/map/2/259722",
-                "as_link": "battlenet:://starcraft/map/3/186202",
+                "author": "Blizzard Entertainment",
+                "am_link": "battlenet:://starcraft/map/1/369157",
+                "eu_link": "battlenet:://starcraft/map/2/260081",
+                "as_link": "battlenet:://starcraft/map/3/186928",
                 "game": "sc2"
-            },
-            {
-                "name": "[SC:Evo] Death Valley (데스밸리)",
-                "short_name": "Death Valley",
-                "author": "SCEvoLadder",
-                "am_link": "battlenet:://starcraft/map/1/367495",
-                "eu_link": "battlenet:://starcraft/map/2/258890",
-                "as_link": "battlenet:://starcraft/map/3/184685",
-                "game": "bw"
             },
             {
                 "name": "[SC:Evo] Holy World (홀리월드)",
@@ -47,12 +38,12 @@
                 "game": "sc2"
             },
             {
-                "name": "[TLMC21] Mothership",
+                "name": "Mothership LE",
                 "short_name": "Mothership",
-                "author": "OfficialTLMC",
-                "am_link": "battlenet:://starcraft/map/1/368676",
-                "eu_link": "battlenet:://starcraft/map/2/259724",
-                "as_link": "battlenet:://starcraft/map/3/186204",
+                "author": "Blizzard Entertainment",
+                "am_link": "battlenet:://starcraft/map/1/369158",
+                "eu_link": "battlenet:://starcraft/map/2/260082",
+                "as_link": "battlenet:://starcraft/map/3/186929",
                 "game": "sc2"
             },
             {
@@ -63,6 +54,15 @@
                 "eu_link": "battlenet:://starcraft/map/2/258902",
                 "as_link": "battlenet:://starcraft/map/3/184696",
                 "game": "bw"
+            },
+            {
+                "name": "Ruby Rock LE",
+                "short_name": "Ruby Rock",
+                "author": "Blizzard Entertainment",
+                "am_link": "battlenet:://starcraft/map/1/369160",
+                "eu_link": "battlenet:://starcraft/map/2/260084",
+                "as_link": "battlenet:://starcraft/map/3/186931",
+                "game": "sc2"
             },
             {
                 "name": "[SC:Evo] Sylphid (실피드)",

@@ -296,21 +296,32 @@
 - ✅ Fixed an issue with buttons and dropdowns being displayed after no longer needed, causing client end lag and server memory leaks
 - ✅ Fixed an issue with `/leaderboard` generating an entirely new embed instead of editing the existong one
 
+
+### November 12, 2025
+- ✅ Uploading listener for replays on `/queue` MatchFoundView can quietly fail
+- ✅ Some commands have unnecessary terminal embed buttons, like `/profile` and `/termsofservice`, causing unnecessary lag
+
 ### November 12-15, 2025
 - ⏰ Race condition when mutating `_players_df` exists that causes MatchFoundView to not properly load components
 - ⏰ `/admin snapshot ` only shows rank for ONE of the races being queued with, not both
-- ✅ Uploading listener for replays on `/queue` MatchFoundView can quietly fail
-- ✅ Some commands have unnecessary terminal embed buttons, like `/profile` and `/termsofservice`, causing unnecessary lag
 - ⏰ Maybe automatically set `view=None` on `/leaderboard` when `GLOBAL_TIMEOUT` elapses?
 - ⏰ Add a third alternate ID
 - ⏰ Rework `/setup` flow so users can read an embed before setting up the modal
   - ⏰ Explain that main ID, BattleTag, and alternate IDs will be used for name matching in replays
 - ⏰ Implement automating match reporting based on replay parsing verification results
+- ⏰ Players who have been waiting a long time don't get priority if they are on follow side of matchmaking
+- ⏰ Explanation of opponent match confirm and opponent match reported notifications is confusing
+- ⏰ Explanation of replay validation results is confusing
+- ⏰ Update the maps from TLMC21 versions to ladder versions
+- ⏰ Swap out Death Valley?
 - ⏰ 
-- ⏰ 
-- ⏰ 
-- ⏰ 
-- ⏰ 
+
+### ANNOUNCEMENT: November 13, 2025
+
+## General Changes
+
+## Bug Fixes
+
 
 ## PRE-BETA
 
