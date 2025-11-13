@@ -2040,7 +2040,7 @@ class MatchConfirmButton(discord.ui.Button):
             await queue_followup(
                 interaction,
                 embed=confirmation_embed,
-                ephemeral=True
+                ephemeral=False
             )
         except Exception as e:
             print(f"Error confirming match {match_id} for player {player_discord_uid}: {e}")

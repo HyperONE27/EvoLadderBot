@@ -14,8 +14,8 @@ def create_player_confirmation_embed(match_id: int) -> discord.Embed:
     embed = discord.Embed(
         title=f"Match #{match_id} - ✅ You Confirmed The Match!",
         description=(
-            "You have confirmed the match!\n\n"
-            "Once you and your opponent have BOTHconfirmed, you can proceed with your lobby game."
+            "You have confirmed the match!\n"
+            "Once you and your opponent have BOTH confirmed, you can proceed with your lobby game."
         ),
         color=discord.Color.green()
     )
