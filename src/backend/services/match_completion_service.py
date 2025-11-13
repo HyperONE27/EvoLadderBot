@@ -155,11 +155,9 @@ class MatchCompletionService:
                 
                 opponent_uid = player_2_uid if player_discord_uid == player_1_uid else player_1_uid
                 
-                # Get confirming player's name
-                confirming_player_name = (
-                    match_data['player_1_name'] if player_discord_uid == player_1_uid 
-                    else match_data['player_2_name']
-                )
+                # Get confirming player's name from player info
+                confirming_player_info = data_access_service.get_player_info(player_discord_uid)
+                confirming_player_name = confirming_player_info.get('player_name', str(player_discord_uid))
                 
                 # Get bot instance to fetch user
                 bot = get_bot_instance()
