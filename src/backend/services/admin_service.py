@@ -17,6 +17,7 @@ import polars as pl
 
 from src.backend.services.data_access_service import DataAccessService
 from src.backend.services.app_context import mmr_service, races_service
+from src.bot.config import ADMIN_MATCH_LOG_CHANNEL_ID
 
 
 class AdminService:
@@ -1982,17 +1983,14 @@ class AdminService:
                 print(f"[AdminService] Cannot forward match {match_id} - bot instance not available")
                 return False
             
-            # Admin monitoring channel ID
-            ADMIN_CHANNEL_ID = 1435182864290287636
-            
-            channel = bot.get_channel(ADMIN_CHANNEL_ID)
+            channel = bot.get_channel(ADMIN_MATCH_LOG_CHANNEL_ID)
             if not channel:
-                print(f"[AdminService] Cannot forward match {match_id} - admin channel {ADMIN_CHANNEL_ID} not found")
+                print(f"[AdminService] Cannot forward match {match_id} - admin channel {ADMIN_MATCH_LOG_CHANNEL_ID} not found")
                 return False
             
             # Send the embed to the admin channel with optional content
             await channel.send(content=content, embed=embed)
-            print(f"[AdminService] Forwarded match {match_id} result to admin channel {ADMIN_CHANNEL_ID}")
+            print(f"[AdminService] Forwarded match {match_id} result to admin channel {ADMIN_MATCH_LOG_CHANNEL_ID}")
             return True
             
         except Exception as e:

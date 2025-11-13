@@ -25,7 +25,8 @@ CREATE TABLE players (
     remaining_aborts        INTEGER DEFAULT 3,
     player_state            TEXT DEFAULT 'idle',
     shield_battery_bug      BOOLEAN DEFAULT FALSE,
-    is_banned               BOOLEAN DEFAULT FALSE
+    is_banned               BOOLEAN DEFAULT FALSE,
+    read_quick_start_guide  BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE player_action_logs (
@@ -36,8 +37,7 @@ CREATE TABLE player_action_logs (
     old_value               TEXT,
     new_value               TEXT,
     changed_at              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    changed_by              TEXT DEFAULT 'player' NOT NULL,
-    FOREIGN KEY (discord_uid) REFERENCES players(discord_uid)
+    changed_by              TEXT DEFAULT 'player' NOT NULL
 );
 
 CREATE TABLE command_calls (
@@ -45,8 +45,7 @@ CREATE TABLE command_calls (
     discord_uid             BIGINT NOT NULL,
     player_name             TEXT NOT NULL,
     command                 TEXT NOT NULL,
-    called_at               TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (discord_uid) REFERENCES players(discord_uid)
+    called_at               TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE replays (
@@ -64,12 +63,12 @@ CREATE TABLE replays (
     observers               TEXT NOT NULL,
     map_name                TEXT NOT NULL,
     duration                INTEGER NOT NULL,
+    uploaded_at             TIMESTAMPTZ NOT NULL,
     game_privacy            TEXT NOT NULL,
     game_speed              TEXT NOT NULL,
     game_duration_setting   TEXT NOT NULL,
     locked_alliances        TEXT NOT NULL,
-    cache_handles           TEXT NOT NULL,          -- NEW: JSON array of mod cache handle URLs
-    uploaded_at             TIMESTAMPTZ NOT NULL
+    cache_handles           TEXT NOT NULL             -- NEW: JSON array of mod cache handle URLs
 );
 
 CREATE TABLE mmrs_1v1 (
@@ -83,7 +82,6 @@ CREATE TABLE mmrs_1v1 (
     games_lost              INTEGER DEFAULT 0,
     games_drawn             INTEGER DEFAULT 0,
     last_played             TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (discord_uid) REFERENCES players(discord_uid),
     UNIQUE(discord_uid, race)
 );
 
@@ -106,17 +104,14 @@ CREATE TABLE matches_1v1 (
     player_1_replay_path    TEXT,
     player_1_replay_time    TIMESTAMPTZ,
     player_2_replay_path    TEXT,
-    player_2_replay_time    TIMESTAMPTZ,
-    FOREIGN KEY (player_1_discord_uid) REFERENCES players(discord_uid),
-    FOREIGN KEY (player_2_discord_uid) REFERENCES players(discord_uid)
+    player_2_replay_time    TIMESTAMPTZ
 );
 
 CREATE TABLE preferences_1v1 (
     id                      SERIAL PRIMARY KEY,
     discord_uid             BIGINT NOT NULL UNIQUE,
     last_chosen_races       TEXT,
-    last_chosen_vetoes      TEXT,
-    FOREIGN KEY (discord_uid) REFERENCES players(discord_uid)
+    last_chosen_vetoes      TEXT
 );
 
 CREATE TABLE admin_actions (
@@ -128,8 +123,7 @@ CREATE TABLE admin_actions (
     target_match_id         INTEGER,
     action_details          JSONB NOT NULL,
     reason                  TEXT,
-    performed_at            TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (admin_discord_uid) REFERENCES players(discord_uid)
+    performed_at            TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- =============================================
