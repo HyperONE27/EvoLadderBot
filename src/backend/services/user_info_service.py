@@ -242,15 +242,13 @@ class UserInfoService:
             else:
                 raise
         
-        # Post-creation cache sync: ensure player is visible in _players_df
-        # This guards against Polars DataFrame mutation timing issues
-        for attempt in range(3):
-            player = self.get_player(discord_uid)
-            if player is not None:
-                break
-            await asyncio.sleep(0)  # Yield to event loop
-        else:
-            print(f"[UserInfoService] WARNING: Player {discord_uid} not visible after creation")
+        # Verify player was created successfully (should always succeed with lock)
+        player = self.get_player(discord_uid)
+        if player is None:
+            raise RuntimeError(
+                f"[UserInfoService] Player {discord_uid} not visible after creation - "
+                f"DataAccessService lock failed or player creation failed"
+            )
         
         return discord_uid
     

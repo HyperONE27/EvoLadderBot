@@ -1104,6 +1104,19 @@ class MatchFoundView(discord.ui.View):
 
         # Update dropdown states based on initial data
         self._update_dropdown_states()
+        
+        # ADDED: Validate all components were successfully created
+        # This provides explicit failure detection rather than silent failure
+        expected_count = 4  # 2 buttons (confirm, abort) + 2 selects (result, confirm)
+        actual_count = len(self.children)
+        if actual_count != expected_count:
+            component_types = [type(c).__name__ for c in self.children]
+            raise RuntimeError(
+                f"[MatchFoundView] Component creation failed for match {match_result.match_id}: "
+                f"{actual_count}/{expected_count} components created. "
+                f"Components: {component_types}. "
+                f"This indicates player data missing from DataAccessService."
+            )
     
     async def _edit_original_message(self, embed: discord.Embed, view: Optional[discord.ui.View] = ...) -> bool:
         """
@@ -2200,11 +2213,24 @@ class MatchResultSelect(discord.ui.Select):
         # Get player names from DataAccessService (in-memory, instant)
         from src.backend.services.data_access_service import DataAccessService
         data_service = DataAccessService()
+        
         p1_info = data_service.get_player_info(match_result.player_1_discord_id)
-        self.p1_name = p1_info.get('player_name') if p1_info else str(match_result.player_1_user_id)
+        if not p1_info:
+            raise ValueError(
+                f"[MatchResultSelect] Player 1 not found in DataAccessService: "
+                f"discord_uid={match_result.player_1_discord_id} for match {match_result.match_id}. "
+                f"This should never happen - indicates DataFrame race condition."
+            )
+        self.p1_name = p1_info.get('player_name') or str(match_result.player_1_user_id)
         
         p2_info = data_service.get_player_info(match_result.player_2_discord_id)
-        self.p2_name = p2_info.get('player_name') if p2_info else str(match_result.player_2_user_id)
+        if not p2_info:
+            raise ValueError(
+                f"[MatchResultSelect] Player 2 not found in DataAccessService: "
+                f"discord_uid={match_result.player_2_discord_id} for match {match_result.match_id}. "
+                f"This should never happen - indicates DataFrame race condition."
+            )
+        self.p2_name = p2_info.get('player_name') or str(match_result.player_2_user_id)
         
         # Create options for the dropdown
         options = [

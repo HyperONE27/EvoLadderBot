@@ -42,6 +42,7 @@ class AdminService:
         Clear all queue-lock states for a player.
         
         This removes the player from:
+        - matchmaker queue (prevents orphaned queue entries)
         - queue_searching_view_manager (active queue views)
         - match_results (active match results)
         - channel_to_match_view_map (active match views)
@@ -55,6 +56,12 @@ class AdminService:
                 match_results,
                 channel_to_match_view_map
             )
+            from src.backend.services.matchmaking_service import matchmaker
+            
+            # CRITICAL FIX: Always remove from matchmaker first
+            # This is idempotent - safe to call even if player not in queue
+            # Prevents state where player is matchable but unsubscribed
+            await matchmaker.remove_player(discord_uid)
             
             # Clear from queue searching view manager
             await queue_searching_view_manager.unregister(discord_uid, deactivate=True)
