@@ -323,7 +323,8 @@
   - `[TLMC21] Celestial Enclave` replaced with `Celestial Enclave LE`
   - `[SC:Evo] Death Valley (데스밸리)` replaced with `Ruby Rock LE`
   - `[TLMC21] Mothership` replaced with `Mothership LE`
-- re
+- `/queue` searching embed is now replaced when 
+  - Players were previously trying to interact
 
 ## Bug Fixes
 - Fixed an issue where players have been waiting for a long time did not get priority matchmaking

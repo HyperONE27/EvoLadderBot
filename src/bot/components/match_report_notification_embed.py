@@ -22,7 +22,10 @@ def create_opponent_report_notification_embed(
         description=(
             f"{reporting_player_name} reported: **{report_text}**\n\n"
             "If you're seeing this, it likely means you have not reported the match result yet. "
-            "**Please do so as soon as possible.**"
+            "**Please do so as soon as possible:\n**"
+            "- 1. Attach the replay file to a chat message and send it here.\n"
+            "- 2. The bot will respond automatically with the replay parsing results.\n."
+            "- 3. Scroll up to the Match Information embed and use the dropdown menus to report the result."
         ),
         color=discord.Color.blurple()
     )
