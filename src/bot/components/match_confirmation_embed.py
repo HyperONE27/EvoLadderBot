@@ -15,7 +15,8 @@ def create_player_confirmation_embed(match_id: int) -> discord.Embed:
         title=f"Match #{match_id} - ✅ You Confirmed The Match!",
         description=(
             "You have confirmed the match!\n"
-            "Once you and your opponent have BOTH confirmed, you can proceed with your lobby game."
+            "Once you and your opponent have BOTH confirmed,\n"
+            "you can proceed with your lobby game."
         ),
         color=discord.Color.green()
     )
@@ -37,7 +38,8 @@ def create_opponent_confirmation_embed(match_id: int, confirming_player_name: st
         title=f"Match #{match_id} - ✅ Your Opponent Confirmed The Match!",
         description=(
             f"Your opponent, **{confirming_player_name}**, confirmed the match!\n"
-            "Once you and your opponent have BOTH confirmed, you can proceed with your lobby game."
+            "Once you and your opponent have BOTH confirmed,\n"
+            "you can proceed with your lobby game."
         ),
         color=discord.Color.green()
     )
