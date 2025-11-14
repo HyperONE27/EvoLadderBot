@@ -465,7 +465,7 @@ class JoinQueueButton(discord.ui.Button):
         searching_view.start_status_updates()
         
         flow.checkpoint("build_and_send_embed_start")
-        await queue_edit_original(
+        original_message = await queue_edit_original(
             interaction,
             embed=searching_view.build_searching_embed(),
             view=searching_view
@@ -475,10 +475,9 @@ class JoinQueueButton(discord.ui.Button):
         # Store the interaction so we can update the message when match is found
         searching_view.set_interaction(interaction)
         
-        # Capture channel and message ID for persistent tracking
+        # Capture channel and message ID for persistent tracking (avoids race condition)
         flow.checkpoint("capture_message_context")
         searching_view.channel = interaction.channel
-        original_message = await interaction.original_response()
         searching_view.message_id = original_message.id
         flow.checkpoint("capture_message_context_complete")
         

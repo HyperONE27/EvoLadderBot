@@ -302,8 +302,8 @@
 - ✅ Some commands have unnecessary terminal embed buttons, like `/profile` and `/termsofservice`, causing unnecessary lag
 
 ### November 12-15, 2025
-- ⏰ Race condition when mutating `_players_df` exists that causes MatchFoundView to not properly load components
-- ⏰ `/admin snapshot ` only shows rank for ONE of the races being queued with, not both
+- ✅ Race condition when mutating `_players_df` exists that causes MatchFoundView to not properly load components
+- ✅ `/admin snapshot ` only shows rank for ONE of the races being queued with, not both
 - ⏰ Maybe automatically set `view=None` on `/leaderboard` when `GLOBAL_TIMEOUT` elapses?
 - ⏰ Add a third alternate ID
 - ⏰ Rework `/setup` flow so users can read an embed before setting up the modal
@@ -314,7 +314,7 @@
 - ⏰ Explanation of replay validation results is confusing
 - ✅ Update the maps from TLMC21 versions to ladder versions
 - ✅ Swap out Death Valley for Ruby Rock
-- ⏰ 
+- ⏰ Fix cross-tables for China
 
 ### ANNOUNCEMENT: November 13, 2025
 
@@ -323,9 +323,13 @@
   - `[TLMC21] Celestial Enclave` replaced with `Celestial Enclave LE`
   - `[SC:Evo] Death Valley (데스밸리)` replaced with `Ruby Rock LE`
   - `[TLMC21] Mothership` replaced with `Mothership LE`
-- 
+- re
 
 ## Bug Fixes
+
+
+## Other Notices
+- It is normal for 
 
 
 ## PRE-BETA
