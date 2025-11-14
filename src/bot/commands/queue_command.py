@@ -772,14 +772,16 @@ class QueueSearchingView(discord.ui.View):
             embed = await loop.run_in_executor(None, match_view.get_embed)
             flow.checkpoint("generate_match_embed_complete")
             
-            # Step 3.5: Remove the Cancel Queue button from the original searching message
-            flow.checkpoint("remove_searching_view_components")
+            # Step 3.5: Replace searching message with "Match Found!" embed and remove buttons
+            flow.checkpoint("replace_with_match_found_embed")
+            from src.bot.components.match_found_embed import create_match_found_embed
+            match_found_embed = create_match_found_embed(match_result.match_id)
             await queue_edit_original(
                 self.last_interaction,
-                embed=self.build_searching_embed(),
+                embed=match_found_embed,
                 view=None
             )
-            flow.checkpoint("searching_view_components_removed")
+            flow.checkpoint("match_found_embed_shown")
             
             # Step 4: Send a new message with the match view
             flow.checkpoint("send_new_match_message")

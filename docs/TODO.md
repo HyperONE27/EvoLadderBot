@@ -326,7 +326,9 @@
 - re
 
 ## Bug Fixes
-
+- Fixed an issue where players have been waiting for a long time did not get priority matchmaking
+- Clarified wording on the Match Confirmation embed: both messages now explain that **both you and your opponent** must confirm the match before it is safe to play
+- 
 
 ## Other Notices
 - It is normal for 
