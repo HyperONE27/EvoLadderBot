@@ -62,9 +62,17 @@ async def leaderboard_service_with_mock_data():
     
     # Load MMR data from CSV
     mmrs_data = pl.read_csv(csv_path)
+    
+    # Update all last_played timestamps to be recent (within 2 weeks) so players are ranked
+    from datetime import datetime, timezone
+    current_time = datetime.now(timezone.utc)
+    mmrs_data = mmrs_data.with_columns([
+        pl.lit(current_time).alias("last_played")
+    ])
+    
     data_service._mmrs_1v1_df = mmrs_data
     
-    print(f"\n[Fixture] Loaded {len(mmrs_data)} MMR records from snapshot")
+    print(f"\n[Fixture] Loaded {len(mmrs_data)} MMR records from snapshot (with updated timestamps)")
     
     # Create minimal players DataFrame (just discord_uid and player_name from MMR data)
     # Extract unique discord_uids and player_names
@@ -78,9 +86,6 @@ async def leaderboard_service_with_mock_data():
         pl.lit(None).alias("alt_player_name_2"),
     ])
     data_service._players_df = players_data
-    
-    # Mark cache as valid so get_leaderboard_data doesn't try to reload from database
-    data_service.mark_leaderboard_cache_valid()
     
     print(f"[Fixture] Created {len(players_data)} unique players")
     
