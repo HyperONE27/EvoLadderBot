@@ -321,11 +321,14 @@ async def queue_user_send(
     return await future
 
 
+MISSING = object()  # Sentinel value for "parameter not provided"
+
+
 async def queue_message_edit(
     message: discord.Message,
-    content: Optional[str] = None,
-    embed: Optional[discord.Embed] = None,
-    view: Optional[discord.ui.View] = None,
+    content=MISSING,
+    embed=MISSING,
+    view=MISSING,
     **kwargs
 ) -> discord.Message:
     """
@@ -333,9 +336,9 @@ async def queue_message_edit(
     
     Args:
         message: The Discord message object to edit
-        content: Text content to update
-        embed: Embed to update
-        view: View to update
+        content: Text content to update (MISSING means don't change, None means clear)
+        embed: Embed to update (MISSING means don't change, None means clear)
+        view: View to update (MISSING means don't change, None means clear)
         **kwargs: Additional arguments for edit
         
     Returns:
@@ -347,12 +350,17 @@ async def queue_message_edit(
     queue = get_message_queue()
     
     async def operation():
-        return await message.edit(
-            content=content,
-            embed=embed,
-            view=view,
-            **kwargs
-        )
+        # Build edit kwargs, only including explicitly provided values
+        edit_kwargs = {}
+        if content is not MISSING:
+            edit_kwargs['content'] = content
+        if embed is not MISSING:
+            edit_kwargs['embed'] = embed
+        if view is not MISSING:
+            edit_kwargs['view'] = view
+        edit_kwargs.update(kwargs)
+        
+        return await message.edit(**edit_kwargs)
     
     future = await queue.enqueue_notification(operation)
     return await future

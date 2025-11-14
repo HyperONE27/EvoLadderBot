@@ -50,6 +50,7 @@ async def send_ephemeral_response(
     content: Optional[str] = None,
     embed: Optional[discord.Embed] = None,
     view: Optional[discord.ui.View] = None,
+    fetch_response: bool = False,
     **kwargs
 ):
     """
@@ -62,15 +63,16 @@ async def send_ephemeral_response(
         content: Text content to send
         embed: Embed to send
         view: View to send
+        fetch_response: If True, fetch and return the message object after sending
         **kwargs: Additional arguments for send_message
         
     Returns:
-        None (interaction responses don't return message objects)
+        Message object if fetch_response=True, None otherwise
     """
     ephemeral_kwargs = get_ephemeral_kwargs(interaction)
     
     # Route through message queue
-    return await queue_interaction_response(
+    await queue_interaction_response(
         interaction=interaction,
         content=content,
         embed=embed,
@@ -78,6 +80,11 @@ async def send_ephemeral_response(
         ephemeral=ephemeral_kwargs["ephemeral"],
         **kwargs
     )
+    
+    # Fetch the message object if requested
+    if fetch_response:
+        return await interaction.original_response()
+    return None
 
 
 async def edit_ephemeral_response(

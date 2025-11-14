@@ -67,6 +67,7 @@ def _get_required_int_env(key: str) -> int:
 
 # Discord Bot Configuration
 EVOLADDERBOT_TOKEN = _get_required_env("EVOLADDERBOT_TOKEN")
+ADMIN_MATCH_LOG_CHANNEL_ID = _get_required_int_env("ADMIN_MATCH_LOG_CHANNEL_ID")
 
 # Worker processes for multiprocessing (replay parsing)
 WORKER_PROCESSES = _get_required_int_env("WORKER_PROCESSES")

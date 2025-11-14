@@ -465,7 +465,7 @@ class JoinQueueButton(discord.ui.Button):
         searching_view.start_status_updates()
         
         flow.checkpoint("build_and_send_embed_start")
-        await queue_edit_original(
+        original_message = await queue_edit_original(
             interaction,
             embed=searching_view.build_searching_embed(),
             view=searching_view
@@ -475,10 +475,9 @@ class JoinQueueButton(discord.ui.Button):
         # Store the interaction so we can update the message when match is found
         searching_view.set_interaction(interaction)
         
-        # Capture channel and message ID for persistent tracking
+        # Capture channel and message ID for persistent tracking (avoids race condition)
         flow.checkpoint("capture_message_context")
         searching_view.channel = interaction.channel
-        original_message = await interaction.original_response()
         searching_view.message_id = original_message.id
         flow.checkpoint("capture_message_context_complete")
         
@@ -773,14 +772,16 @@ class QueueSearchingView(discord.ui.View):
             embed = await loop.run_in_executor(None, match_view.get_embed)
             flow.checkpoint("generate_match_embed_complete")
             
-            # Step 3.5: Remove the Cancel Queue button from the original searching message
-            flow.checkpoint("remove_searching_view_components")
+            # Step 3.5: Replace searching message with "Match Found!" embed and remove buttons
+            flow.checkpoint("replace_with_match_found_embed")
+            from src.bot.components.match_found_embed import create_match_found_embed
+            match_found_embed = create_match_found_embed(match_result.match_id)
             await queue_edit_original(
                 self.last_interaction,
-                embed=self.build_searching_embed(),
+                embed=match_found_embed,
                 view=None
             )
-            flow.checkpoint("searching_view_components_removed")
+            flow.checkpoint("match_found_embed_shown")
             
             # Step 4: Send a new message with the match view
             flow.checkpoint("send_new_match_message")
@@ -1104,6 +1105,19 @@ class MatchFoundView(discord.ui.View):
 
         # Update dropdown states based on initial data
         self._update_dropdown_states()
+        
+        # ADDED: Validate all components were successfully created
+        # This provides explicit failure detection rather than silent failure
+        expected_count = 4  # 2 buttons (confirm, abort) + 2 selects (result, confirm)
+        actual_count = len(self.children)
+        if actual_count != expected_count:
+            component_types = [type(c).__name__ for c in self.children]
+            raise RuntimeError(
+                f"[MatchFoundView] Component creation failed for match {match_result.match_id}: "
+                f"{actual_count}/{expected_count} components created. "
+                f"Components: {component_types}. "
+                f"This indicates player data missing from DataAccessService."
+            )
     
     async def _edit_original_message(self, embed: discord.Embed, view: Optional[discord.ui.View] = ...) -> bool:
         """
@@ -2022,10 +2036,12 @@ class MatchConfirmButton(discord.ui.Button):
                 await queue_edit_original(interaction, embed=current_embed, view=self.parent_view)
             
             # Provide feedback to the user
+            from src.bot.components.match_confirmation_embed import create_player_confirmation_embed
+            confirmation_embed = create_player_confirmation_embed(match_id)
             await queue_followup(
                 interaction,
-                content="✅ You have confirmed the match! Waiting for your opponent.",
-                ephemeral=True
+                embed=confirmation_embed,
+                ephemeral=False
             )
         except Exception as e:
             print(f"Error confirming match {match_id} for player {player_discord_uid}: {e}")
@@ -2198,11 +2214,24 @@ class MatchResultSelect(discord.ui.Select):
         # Get player names from DataAccessService (in-memory, instant)
         from src.backend.services.data_access_service import DataAccessService
         data_service = DataAccessService()
+        
         p1_info = data_service.get_player_info(match_result.player_1_discord_id)
-        self.p1_name = p1_info.get('player_name') if p1_info else str(match_result.player_1_user_id)
+        if not p1_info:
+            raise ValueError(
+                f"[MatchResultSelect] Player 1 not found in DataAccessService: "
+                f"discord_uid={match_result.player_1_discord_id} for match {match_result.match_id}. "
+                f"This should never happen - indicates DataFrame race condition."
+            )
+        self.p1_name = p1_info.get('player_name') or str(match_result.player_1_user_id)
         
         p2_info = data_service.get_player_info(match_result.player_2_discord_id)
-        self.p2_name = p2_info.get('player_name') if p2_info else str(match_result.player_2_user_id)
+        if not p2_info:
+            raise ValueError(
+                f"[MatchResultSelect] Player 2 not found in DataAccessService: "
+                f"discord_uid={match_result.player_2_discord_id} for match {match_result.match_id}. "
+                f"This should never happen - indicates DataFrame race condition."
+            )
+        self.p2_name = p2_info.get('player_name') or str(match_result.player_2_user_id)
         
         # Create options for the dropdown
         options = [

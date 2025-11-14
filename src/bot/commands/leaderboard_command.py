@@ -14,7 +14,7 @@ from src.bot.components.command_guard_embeds import create_command_guard_error_e
 from src.bot.config import GLOBAL_TIMEOUT
 from src.bot.utils.discord_utils import get_flag_emote, get_race_emote, get_rank_emote, send_ephemeral_response
 from src.bot.utils.command_decorators import auto_apply_dm_guard
-from src.bot.utils.message_helpers import queue_interaction_edit
+from src.bot.utils.message_helpers import queue_interaction_edit, queue_message_edit
 
 
 # Register Command
@@ -89,7 +89,13 @@ async def leaderboard_command(interaction: discord.Interaction):
     flow.checkpoint("discord_api_call_start")
     import time
     discord_api_start = time.perf_counter()
-    await send_ephemeral_response(interaction, embed=embed, view=view)
+    
+    # Store message reference for timeout handling (fetch_response avoids race condition)
+    original_message = await send_ephemeral_response(
+        interaction, embed=embed, view=view, fetch_response=True
+    )
+    view.message = original_message
+    
     discord_api_end = time.perf_counter()
     discord_api_time = (discord_api_end - discord_api_start) * 1000
     print(f"[Initial Command] Discord API call: {discord_api_time:.2f}ms")
@@ -559,6 +565,14 @@ class LeaderboardView(discord.ui.View):
     def _get_rank_emote(self, rank: str) -> str:
         """Get the Discord rank emote for a rank code."""
         return get_rank_emote(rank)
+    
+    async def on_timeout(self):
+        """Handle view timeout by removing interactive components"""
+        if hasattr(self, 'message') and self.message:
+            try:
+                await queue_message_edit(self.message, view=None)
+            except discord.HTTPException:
+                pass
 
 
 class PreviousPageButton(discord.ui.Button):

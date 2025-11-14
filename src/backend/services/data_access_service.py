@@ -114,6 +114,7 @@ class DataAccessService:
         self._write_event = asyncio.Event()  # Event-driven notification for write worker
         self._init_lock = asyncio.Lock()
         self._mmr_lock = asyncio.Lock()  # Lock for thread-safe MMR DataFrame updates
+        self._players_df_lock = asyncio.Lock()  # Lock for thread-safe players DataFrame updates
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None  # Store a reference to the main loop
 
         # Write-Ahead Log (WAL) for durable write queue
@@ -2210,7 +2211,8 @@ class DataAccessService:
         
         # Apply updates to DataFrame if any
         if updates:
-            self._players_df = self._players_df.with_columns(**updates)
+            async with self._players_df_lock:
+                self._players_df = self._players_df.with_columns(**updates)
             
             # Queue database write
             job = WriteJob(
@@ -2267,41 +2269,43 @@ class DataAccessService:
             True if successful, False if player already exists
         """
         if self._players_df is None:
-            print("[DataAccessService] WARNING: Players DataFrame not initialized")
-            return False
+            raise RuntimeError("[DataAccessService] Players DataFrame not initialized")
         
-        # Check if player already exists
-        if self.player_exists(discord_uid):
-            print(f"[DataAccessService] WARNING: Player {discord_uid} already exists")
-            return False
+        # CRITICAL: Lock the entire check-and-add operation atomically
+        async with self._players_df_lock:
+            # Check if player already exists (inside lock to prevent TOCTOU)
+            if self.player_exists(discord_uid):
+                print(f"[DataAccessService] Player {discord_uid} already exists")
+                return False
+            
+            # Create new row - matches PostgreSQL schema order exactly
+            new_row = pl.DataFrame({
+                "discord_uid": [discord_uid],
+                "discord_username": [discord_username],
+                "player_name": [player_name],
+                "battletag": [battletag],
+                "alt_player_name_1": [None],
+                "alt_player_name_2": [None],
+                "country": [country],
+                "region": [region],
+                "accepted_tos": [False],
+                "accepted_tos_date": [None],
+                "completed_setup": [False],
+                "completed_setup_date": [None],
+                "activation_code": [None],
+                "created_at": [None],
+                "updated_at": [None],
+                "remaining_aborts": [3],
+                "player_state": ["idle"],
+                "shield_battery_bug": [False],
+                "is_banned": [False],
+            })
+            
+            # Append to existing DataFrame (atomic within lock)
+            self._players_df = pl.concat([self._players_df, new_row], how="diagonal")
+        # Lock released here - player is now atomically visible to all readers
         
-        # Create new row - matches PostgreSQL schema order exactly
-        new_row = pl.DataFrame({
-            "discord_uid": [discord_uid],
-            "discord_username": [discord_username],
-            "player_name": [player_name],
-            "battletag": [battletag],
-            "alt_player_name_1": [None],
-            "alt_player_name_2": [None],
-            "country": [country],
-            "region": [region],
-            "accepted_tos": [False],
-            "accepted_tos_date": [None],
-            "completed_setup": [False],
-            "completed_setup_date": [None],
-            "activation_code": [None],
-            "created_at": [None],
-            "updated_at": [None],
-            "remaining_aborts": [3],
-            "player_state": ["idle"],
-            "shield_battery_bug": [False],
-            "is_banned": [False],
-        })
-        
-        # Append to existing DataFrame
-        self._players_df = pl.concat([self._players_df, new_row], how="diagonal")
-        
-        # Queue database write
+        # Queue database write (outside lock - doesn't need protection)
         job = WriteJob(
             job_type=WriteJobType.CREATE_PLAYER,
             data={

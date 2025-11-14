@@ -567,7 +567,7 @@ class Matchmaker:
 		
 		for lead_player in lead_side:
 			lead_mmr = lead_player.get_effective_mmr(is_bw_match) or 0
-			max_diff = self.max_diff(lead_player.wait_cycles)
+			lead_max_diff = self.max_diff(lead_player.wait_cycles)
 			
 			for follow_player in follow_side:
 				# Skip self-matching
@@ -575,9 +575,12 @@ class Matchmaker:
 					continue
 				
 				follow_mmr = follow_player.get_effective_mmr(not is_bw_match) or 0
+				follow_max_diff = self.max_diff(follow_player.wait_cycles)
 				mmr_diff = abs(lead_mmr - follow_mmr)
 				
-				if mmr_diff <= max_diff:
+				# Match is valid if EITHER player's expanded window accepts it
+				# This ensures long-waiting players on both sides benefit from expanded windows
+				if mmr_diff <= lead_max_diff or mmr_diff <= follow_max_diff:
 					# Score: squared MMR diff minus wait priority
 					# Lower score = better match
 					wait_priority = (lead_player.wait_cycles + follow_player.wait_cycles)
@@ -685,14 +688,20 @@ class Matchmaker:
 						p2_lead.discord_user_id == p1_follow.discord_user_id):
 						continue
 					
-					# Check if swap respects MMR windows
-					max_diff_p1 = self.max_diff(p1_lead.wait_cycles)
-					max_diff_p2 = self.max_diff(p2_lead.wait_cycles)
+					# Check if swap respects MMR windows - check BOTH players in each new pairing
+					max_diff_p1_lead = self.max_diff(p1_lead.wait_cycles)
+					max_diff_p2_lead = self.max_diff(p2_lead.wait_cycles)
+					max_diff_p1_follow = self.max_diff(p1_follow.wait_cycles)
+					max_diff_p2_follow = self.max_diff(p2_follow.wait_cycles)
 					
 					new_diff_p1 = abs(p1_lead_mmr - p2_follow_mmr)
 					new_diff_p2 = abs(p2_lead_mmr - p1_follow_mmr)
 					
-					if new_diff_p1 <= max_diff_p1 and new_diff_p2 <= max_diff_p2:
+					# Each match is valid if either player in the pair accepts the MMR diff
+					match1_valid = (new_diff_p1 <= max_diff_p1_lead or new_diff_p1 <= max_diff_p2_follow)
+					match2_valid = (new_diff_p2 <= max_diff_p2_lead or new_diff_p2 <= max_diff_p1_follow)
+					
+					if match1_valid and match2_valid:
 						# Perform swap
 						match_list[i] = (p1_lead, p2_follow)
 						match_list[i + 1] = (p2_lead, p1_follow)
@@ -1196,10 +1205,11 @@ class Matchmaker:
 				opponent_user = await bot.fetch_user(opponent_uid)
 				
 				# Create notification embed (blurple color)
-				notification_embed = discord.Embed(
-					title=f"Match #{match_id} - 📝 Your Opponent Reported",
-					description=f"{reporting_player_name} reported: **{report_text}**\n\nIf you're seeing this, it likely means you have not reported the match result yet. **Please do so as soon as possible.**",
-					color=discord.Color.blurple()
+				from src.bot.components.match_report_notification_embed import create_opponent_report_notification_embed
+				notification_embed = create_opponent_report_notification_embed(
+					match_id, 
+					reporting_player_name, 
+					report_text
 				)
 				
 				# Send via message queue (low priority, delayed delivery)
