@@ -69,12 +69,17 @@ def _get_filtered_leaderboard_dataframe(
     """
     perf_start = time.time()
     
-    # FIRST: Apply best_race_only filter if enabled
-    # This MUST happen BEFORE other filters to ensure correct rank distribution
-    # when the rank filter is subsequently applied
+    # FIRST: Always exclude unranked players (u_rank) from leaderboard display
+    # This MUST happen BEFORE best_race_only to ensure we pick the best RANKED race
+    # Unranked players are stored but only shown in /profile and /queue
+    df = df.filter(pl.col("rank") != "u_rank")
+    
+    # SECOND: Apply best_race_only filter if enabled
+    # This MUST happen AFTER u_rank filtering to ensure we pick best RANKED race
+    # and BEFORE other filters to ensure correct rank distribution
     if best_race_only:
-        # Group by discord_uid and keep only the highest MMR entry (their best race)
-        # Sort first, then group and take first (highest MMR per player)
+        # Group by discord_uid and keep only the highest MMR entry (their best ranked race)
+        # Sort first, then group and take first (highest MMR per player among ranked races)
         df = (df
             .sort(["mmr", "last_played"], descending=[True, True])
             .group_by("discord_uid", maintain_order=True)
@@ -118,10 +123,6 @@ def _get_filtered_leaderboard_dataframe(
     if rank_filter:
         # Filter by specific rank (e.g., "s_rank", "a_rank")
         filter_conditions.append(pl.col("rank") == rank_filter)
-    
-    # Always exclude unranked players (u_rank) from leaderboard display
-    # Unranked players are stored but only shown in /profile and /queue
-    filter_conditions.append(pl.col("rank") != "u_rank")
     
     # Apply all filters at once using Polars' optimized all_horizontal combinator
     # This is fully vectorized and more efficient than manually combining with &
