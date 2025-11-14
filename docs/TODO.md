@@ -323,16 +323,22 @@
   - `[TLMC21] Celestial Enclave` replaced with `Celestial Enclave LE`
   - `[SC:Evo] Death Valley (데스밸리)` replaced with `Ruby Rock LE`
   - `[TLMC21] Mothership` replaced with `Mothership LE`
-- `/queue` searching embed is now replaced when 
-  - Players were previously trying to interact
-
+- `/queue` "Searching..." embed is now replaced with a short message when a match is found
+- Clarified wording on the Match Confirmation embed: both messages now explain that **both you and your opponent** must confirm the match before it is safe to play
+- Added match reporting instructions to "Match #{number} - 📝 Your Opponent Reported" embed
+- `/leaderboard` buttons and dropdowns are removed after 15 minutes (global timeout cooldown)
+  - This should reduce client lag on lower-end devices
+- Adjusted server assignemnt tables for China and Taiwan/Hong Kong/Macau regions
 ## Bug Fixes
 - Fixed an issue where players have been waiting for a long time did not get priority matchmaking
-- Clarified wording on the Match Confirmation embed: both messages now explain that **both you and your opponent** must confirm the match before it is safe to play
-- 
-
+- Fixed an issue with player data sychronization at match creation, causing some players to not receive notifications that a match was found
 ## Other Notices
-- It is normal for 
+- It is normal for buttons from old messages (>15 minutes, or >2.5 hours for `/queue`-related messages) to become unresponsive
+  - This is NOT a bug
+- `/setup` requires you to press the `✅ Confirm` button in order for your changes to be accepted.
+  - This is NOT a bug
+- Please include full screenshots of your DMs/interactions with the bot when reporting bugs
+  - We cannot thoroughly investigate issues without these screenshots and ladder staff have been instructed to de-prioritize reports that do not include documentation
 
 
 ## PRE-BETA
