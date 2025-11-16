@@ -701,19 +701,22 @@ class QueueSearchingView(discord.ui.View):
             if not await queue_searching_view_manager.has_view(self.player.discord_user_id):
                 break
             await asyncio.sleep(QUEUE_SEARCHING_HEARTBEAT_SECONDS)
-            if not self.is_active or self.last_interaction is None:
+            if not self.is_active:
                 continue
             async with self.status_lock:
+                # Double-check is_active after acquiring lock (match found deactivates view)
                 if not self.is_active:
                     continue
-                try:
-                    await queue_edit_original(
-                        self.last_interaction,
-                        embed=self.build_searching_embed(),
-                        view=self
-                    )
-                except Exception:
-                    pass
+                # Use message-based edit to work even after 15+ minutes in queue
+                if self.channel and self.message_id:
+                    try:
+                        message = await self.channel.fetch_message(self.message_id)
+                        await queue_message_edit(message, embed=self.build_searching_embed(), view=self)
+                    except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                        print(f"⚠️ Could not update searching status for player {self.player.discord_user_id}: {e}")
+                        break
+                else:
+                    break
 
     def build_searching_embed(self) -> discord.Embed:
         stats = matchmaker.get_queue_snapshot()
@@ -776,12 +779,20 @@ class QueueSearchingView(discord.ui.View):
             flow.checkpoint("replace_with_match_found_embed")
             from src.bot.components.match_found_embed import create_match_found_embed
             match_found_embed = create_match_found_embed(match_result.match_id)
-            await queue_edit_original(
-                self.last_interaction,
-                embed=match_found_embed,
-                view=None
-            )
-            flow.checkpoint("match_found_embed_shown")
+            
+            # Use message-based edit instead of interaction-based edit
+            # This works even if player has been in queue for >15 minutes (after interaction token expires)
+            if self.channel and self.message_id:
+                try:
+                    message = await self.channel.fetch_message(self.message_id)
+                    await queue_message_edit(message, embed=match_found_embed, view=None)
+                    flow.checkpoint("match_found_embed_shown")
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                    print(f"⚠️ Could not edit searching message for player {self.player.discord_user_id}: {e}")
+                    flow.checkpoint("match_found_embed_edit_failed")
+            else:
+                print(f"⚠️ No channel/message_id stored for player {self.player.discord_user_id}, cannot edit searching message")
+                flow.checkpoint("match_found_embed_no_message_id")
             
             # Step 4: Send a new message with the match view
             flow.checkpoint("send_new_match_message")
@@ -2186,10 +2197,19 @@ class MatchResultConfirmSelect(discord.ui.Select):
         flow.checkpoint("update_discord_message_start")
         # Update the message to show the final state before backend processing
         async with self.parent_view.edit_lock:
-            await queue_interaction_edit(
-                interaction,
-                embed=self.parent_view.get_embed(), view=self.parent_view
-            )
+            # Try interaction edit first (works if <15 min), fallback to message edit
+            try:
+                await queue_interaction_edit(
+                    interaction,
+                    embed=self.parent_view.get_embed(), view=self.parent_view
+                )
+            except discord.HTTPException as e:
+                # Interaction expired, use message-based edit
+                if self.parent_view.channel and self.parent_view.original_message_id:
+                    message = await self.parent_view.channel.fetch_message(self.parent_view.original_message_id)
+                    await queue_message_edit(message, embed=self.parent_view.get_embed(), view=self.parent_view)
+                else:
+                    raise
         flow.checkpoint("update_discord_message_complete")
 
         flow.checkpoint("record_player_report_start")
@@ -2299,10 +2319,19 @@ class MatchResultSelect(discord.ui.Select):
         # Update the message (DO NOT call _update_dropdown_states() as it would reset our changes)
         self.parent_view.last_interaction = interaction
         async with self.parent_view.edit_lock:
-            await queue_interaction_edit(
-                interaction,
-                embed=self.parent_view.get_embed(), view=self.parent_view
-            )
+            # Try interaction edit first (works if <15 min), fallback to message edit
+            try:
+                await queue_interaction_edit(
+                    interaction,
+                    embed=self.parent_view.get_embed(), view=self.parent_view
+                )
+            except discord.HTTPException as e:
+                # Interaction expired, use message-based edit
+                if self.parent_view.channel and self.parent_view.original_message_id:
+                    message = await self.parent_view.channel.fetch_message(self.parent_view.original_message_id)
+                    await queue_message_edit(message, embed=self.parent_view.get_embed(), view=self.parent_view)
+                else:
+                    raise
         flow.checkpoint("update_message_complete")
         flow.complete("success")
     
@@ -2344,16 +2373,14 @@ class MatchResultSelect(discord.ui.Select):
     async def update_embed_with_mmr_changes(self):
         """Update the embed to show MMR changes"""
         try:
-            # Update the original message with new embed
-            if hasattr(self.parent_view, 'last_interaction') and self.parent_view.last_interaction:
+            # Use message-based edit to work even after 15+ minutes
+            if self.parent_view.channel and self.parent_view.original_message_id:
+                message = await self.parent_view.channel.fetch_message(self.parent_view.original_message_id)
                 embed = self.parent_view.get_embed()
-                await queue_edit_original(
-                    self.parent_view.last_interaction,
-                    embed=embed,
-                    view=self.parent_view
-                )
-            
-        except Exception as e:
+                await queue_message_edit(message, embed=embed, view=self.parent_view)
+            else:
+                print(f"⚠️ No channel/message_id stored, cannot update MMR changes")
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
             print(f"❌ Error updating embed with MMR changes: {e}")
     
     # Removed handle_disagreement - no longer needed with individual reporting
@@ -2372,7 +2399,8 @@ class MatchResultSelect(discord.ui.Select):
         # Notify both players about the result
         for player_id in [self.parent_view.match_result.player_1_discord_id, self.parent_view.match_result.player_2_discord_id]:
             other_view = await queue_searching_view_manager.get_view(player_id)
-            if other_view and hasattr(other_view, 'last_interaction') and other_view.last_interaction:
+            if other_view and isinstance(other_view, MatchFoundView):
+                if other_view.channel and other_view.original_message_id:
                     try:
                         # Disable the dropdown in the other player's view
                         for item in other_view.children:
@@ -2380,21 +2408,21 @@ class MatchResultSelect(discord.ui.Select):
                                 item.disabled = True
                                 item.placeholder = f"Selected: {item.get_selected_label()}"
                         
-                        # Update the other player's message
-                        await queue_edit_original(
-                            other_view.last_interaction,
-                            embeds=[original_embed, result_embed],
-                            view=other_view
-                        )
-                    except:
-                        pass  # Interaction might be expired
+                        # Update the other player's message using message-based edit
+                        message = await other_view.channel.fetch_message(other_view.original_message_id)
+                        await queue_message_edit(message, embeds=[original_embed, result_embed], view=other_view)
+                    except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                        print(f"⚠️ Could not notify player {player_id} of result: {e}")
+                else:
+                    print(f"⚠️ No channel/message_id for player {player_id}, cannot notify of result")
     
     async def notify_other_player_disagreement(self, original_embed, disagreement_embed):
         """Notify the other player about the disagreement"""
         # Notify both players about the disagreement
         for player_id in [self.parent_view.match_result.player_1_discord_id, self.parent_view.match_result.player_2_discord_id]:
             other_view = await queue_searching_view_manager.get_view(player_id)
-            if other_view and hasattr(other_view, 'last_interaction') and other_view.last_interaction:
+            if other_view and isinstance(other_view, MatchFoundView):
+                if other_view.channel and other_view.original_message_id:
                     try:
                         # Disable the dropdown in the other player's view
                         for item in other_view.children:
@@ -2402,14 +2430,13 @@ class MatchResultSelect(discord.ui.Select):
                                 item.disabled = True
                                 item.placeholder = f"Selected: {item.get_selected_label()}"
                         
-                        # Update the other player's message
-                        await queue_edit_original(
-                            other_view.last_interaction,
-                            embeds=[original_embed, disagreement_embed],
-                            view=other_view
-                        )
-                    except:
-                        pass  # Interaction might be expired
+                        # Update the other player's message using message-based edit
+                        message = await other_view.channel.fetch_message(other_view.original_message_id)
+                        await queue_message_edit(message, embeds=[original_embed, disagreement_embed], view=other_view)
+                    except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                        print(f"⚠️ Could not notify player {player_id} of disagreement: {e}")
+                else:
+                    print(f"⚠️ No channel/message_id for player {player_id}, cannot notify of disagreement")
     
     async def record_player_report(self, result: str):
         """Record a player's individual report for the match"""
@@ -2435,16 +2462,14 @@ class MatchResultSelect(discord.ui.Select):
     async def update_embed_with_mmr_changes(self):
         """Update the embed to show MMR changes"""
         try:
-            # Update the original message with new embed
-            if hasattr(self.parent_view, 'last_interaction') and self.parent_view.last_interaction:
+            # Use message-based edit to work even after 15+ minutes
+            if self.parent_view.channel and self.parent_view.original_message_id:
+                message = await self.parent_view.channel.fetch_message(self.parent_view.original_message_id)
                 embed = self.parent_view.get_embed()
-                await queue_edit_original(
-                    self.parent_view.last_interaction,
-                    embed=embed,
-                    view=self.parent_view
-                )
-            
-        except Exception as e:
+                await queue_message_edit(message, embed=embed, view=self.parent_view)
+            else:
+                print(f"⚠️ No channel/message_id stored, cannot update MMR changes")
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
             print(f"❌ Error updating embed with MMR changes: {e}")
     
     # Removed handle_disagreement_silent - no longer needed with individual reporting
