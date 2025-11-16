@@ -1,4 +1,5 @@
-from typing import List, Optional
+from typing import Dict, List, Optional
+import asyncio
 
 import discord
 from discord import app_commands
@@ -15,6 +16,32 @@ from src.bot.config import GLOBAL_TIMEOUT
 from src.bot.utils.discord_utils import get_flag_emote, get_race_emote, get_rank_emote, send_ephemeral_response
 from src.bot.utils.command_decorators import auto_apply_dm_guard
 from src.bot.utils.message_helpers import queue_interaction_edit, queue_message_edit
+
+
+class LeaderboardViewManager:
+    """Manage active leaderboard views to prevent garbage collection."""
+    
+    def __init__(self) -> None:
+        self._views: Dict[int, "LeaderboardView"] = {}
+        self._lock = asyncio.Lock()
+    
+    async def register(self, user_id: int, view: "LeaderboardView") -> None:
+        """Register a view to keep it alive until timeout."""
+        async with self._lock:
+            # Replace any existing view for this user
+            old_view = self._views.get(user_id)
+            self._views[user_id] = view
+            if old_view and old_view is not view:
+                old_view.stop()
+    
+    async def unregister(self, user_id: int) -> None:
+        """Unregister a view (called on timeout)."""
+        async with self._lock:
+            self._views.pop(user_id, None)
+
+
+# Module-level instance
+leaderboard_view_manager = LeaderboardViewManager()
 
 
 # Register Command
@@ -49,8 +76,11 @@ async def leaderboard_command(interaction: discord.Interaction):
         return
     
     flow.checkpoint("create_view_start")
-    view = LeaderboardView(leaderboard_service)
+    view = LeaderboardView(leaderboard_service, user_id=interaction.user.id)
     flow.checkpoint("create_view_complete")
+    
+    # Register view to prevent garbage collection
+    await leaderboard_view_manager.register(interaction.user.id, view)
     
     # Get initial data to set proper button states
     flow.checkpoint("fetch_leaderboard_data_start")
@@ -250,6 +280,7 @@ class LeaderboardView(discord.ui.View):
     
     def __init__(self, 
                  leaderboard_service: LeaderboardService,
+                 user_id: int = None,
                  current_page: int = 1,
                  country_filter: Optional[List[str]] = None,
                  race_filter: Optional[List[str]] = None,
@@ -259,6 +290,7 @@ class LeaderboardView(discord.ui.View):
                  country_page2_selection: Optional[List[str]] = None):
         super().__init__(timeout=GLOBAL_TIMEOUT)
         self.leaderboard_service = leaderboard_service
+        self.user_id = user_id
         
         # Get countries for filter from service
         self.countries = leaderboard_service.country_service.get_common_countries()
@@ -567,7 +599,12 @@ class LeaderboardView(discord.ui.View):
         return get_rank_emote(rank)
     
     async def on_timeout(self):
-        """Handle view timeout by removing interactive components"""
+        """Handle view timeout by removing interactive components and unregistering from manager"""
+        # Unregister from view manager to allow garbage collection
+        if self.user_id:
+            await leaderboard_view_manager.unregister(self.user_id)
+        
+        # Remove interactive components from the message
         if hasattr(self, 'message') and self.message:
             try:
                 await queue_message_edit(self.message, view=None)
