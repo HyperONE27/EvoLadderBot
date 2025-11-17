@@ -764,9 +764,9 @@ class Matchmaker:
 		# Operate on a copy of the list to prevent race conditions from new players joining
 		current_players = self.players.copy()
 		
-		if len(current_players) < 2:
+		if not current_players:
 			flow.complete("not_enough_players")
-			return  # Silent when not enough players
+			return  # Silent when queue is empty
 
 		print("🎯 Attempting to match players with advanced algorithm...")
 		
@@ -774,6 +774,11 @@ class Matchmaker:
 		# Increment wait cycles for all players
 		for player in current_players:
 			player.wait_cycles += 1
+		
+		# After incrementing, ensure we have enough players to proceed
+		if len(current_players) < 2:
+			flow.complete("not_enough_players")
+			return  # Silent when not enough players
 
 		flow.checkpoint("categorize_players")
 		# Categorize players into original lists
