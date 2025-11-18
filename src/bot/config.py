@@ -101,7 +101,7 @@ SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "replays")  # Default b
 # =============================================================================
 
 # Timeout configurations (in seconds)
-GLOBAL_TIMEOUT = 900  # 15 minutes - for most Discord interaction Views
+GLOBAL_TIMEOUT = 450  # 7.5 minutes - for most Discord interaction Views
 QUEUE_TIMEOUT = 9000  # 2.5 hours - for queue-related Views in queue_command
 
 # The current map pool season to be used by the matchmaking service
