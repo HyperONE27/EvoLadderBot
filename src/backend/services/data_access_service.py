@@ -550,10 +550,10 @@ class DataAccessService:
         # Check if we're in the midnight-1AM UTC window
         if current_hour != 0:
             print(f"[MMR Reconciliation] Current hour is {current_hour} UTC, outside midnight-1AM window")
-            return False
+            return True
         
         print(f"[MMR Reconciliation] In midnight-1AM UTC window, will run reconciliation")
-        return False
+        return True
     
     async def _get_last_reconciliation_timestamp(self) -> Optional[datetime]:
         """
