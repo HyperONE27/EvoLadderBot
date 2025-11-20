@@ -343,24 +343,50 @@
 
 ## PRE-BETA
 
-- Command timeouts:
-  - ⏰ Check that everything lasts as long as it needs to
+- Orchestrator:
+  - ⏰ Complete global OrchestratorState container (centralized state access)
+  - ⏰ Move coordination logic from services → orchestrator flows
+  - ⏰ Add clean orchestration paths for queueing, matchmaking, result handling
+  - ⏰ Ensure orchestrator is sole owner of state transitions (strict contracts)
+
+- Service Refactor:
+  - ⏰ Convert all services to stateless, pure I/O modules (contract-in → contract-out)
+  - ⏰ Extract dataclasses for all inputs/outputs (QueueRequest, MatchResult, etc.)
+  - ⏰ Add unified DataAccessService for all DB reads/writes
+  - ⏰ Replace implicit mutation with explicit state update calls
+  - ⏰ Add standardized error/result enums for orchestrator branching
+
+- Command Timeouts:
+  - ⏰ Ensure all long-running interactions handle Discord’s 15-minute limit cleanly
+  - ⏰ Add fallback ephemeral responses when tokens expire
+
 - Gamemodes:
-  - ⏰ Add support for no-party 2v2s
-  - ⏰ Add support for forming parties
-  - ⏰ Add support for party-okay 2v2s
+  - ⏰ Implement no-party 2v2 queue (auto team formation from solos)
+  - ⏰ Add minimal party create/invite/leave flows
+  - ⏰ Add party-allowed 2v2 queue path shared with solos
+
 - Localization:
-  - ⏰ Add support for koKR and other languages
-  - ⏰ Replace 1 million hardcoded formatted strings...sobbing
+  - ⏰ Add koKR + 1–2 additional languages (UI strings only)
+  - ⏰ Replace priority hardcoded strings with locale lookups
+  - ⏰ Keep admin-written mailbox content EN/KO with fallback notice
+
 - Matchmaking:
-  - ⏰ Add relative ping weights for each matchup in the cross-table
-  - ⏰ More ping-aware algorithm to reduce bad matches at lower MMRs
-  - ⏰ FIGURE OUT HOW TO BALANCE LOW PING MATCHING WITH FAIREST MMR MATCHING
-    - ⏰ High MMR/top competitive players are used to playing across oceans and continents
-    - ⏰ Low MMR players just want to not fight the game
-    - ⏰ Tune the matchmaker to prefer low ping at lower MMR at expense of MMR fairness? Default to strict MMR fairness higher up??? Is this fair?
+  - ⏰ Add ping penalty weighting to matchup scoring
+  - ⏰ Implement MMR–ping tradeoff curve (low MMR = ping priority, high MMR = fairness)
+  - ⏰ Expose weights as config so they can be tuned live during Beta
+
 - Scaling:
-  - Add extra API keys to handle Korean, Simplified Chinese, Spanish, Portugese, and German
+  - ⏰ Add extra API keys/shards for KR, CN, ES, PT, DE usage spikes
+  - ⏰ Add per-locale rate limit fallback logic
+
+- Stripe (Payments):
+  - ⏰ Set up Stripe account + pricing (Base tier + Cosmetic/QoL)
+  - ⏰ Add WebhookService to process subscription events (created, canceled, renewals)
+  - ⏰ Implement SubscriptionService to track user entitlements in DB
+  - ⏰ Add simple “/premium” or “/subscribe” command linking to Stripe Checkout
+  - ⏰ Add entitlements check (queue priority, game cap lift, cosmetics)
+
+
 
 ## PRE-RELEASE
 
