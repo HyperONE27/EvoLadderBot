@@ -369,3 +369,64 @@
   - ⏰ Wire up Paddle 
   - ❌ Add columns to `players` table for managing subscription status
   - ⏰ Create a new `subscriptions` table to handle subscription status management
+
+===
+
+Hi all,
+
+Before I go to bed tonight, I wanted to check in with everyone about the state of the ladder so far.
+
+It's been just under 2 weeks since the alpha launch, and we have about 120 players who have played at least one game on the ladder. Those players have played a total of over 1700 games, or shy of 150 games per day.
+
+In the grand scheme of StarCraft II, that's not much.
+
+But the ladder alpha isn't defined by the number of people who play it — it's defined by the idea that even for all the inconveniences that a third-party StarCraft II ladder will never be able solve, people will still show up for the love of the game. People will play it because **SC: Evo Complete offers something that only the StarCraft community can build.**
+
+The alpha phase of the ladder has been the most intense and rewarding experience I've had as a software engineer, and I'm grateful every day to be doing work that has a visible impact. Every single one of you who queued up for the ladder, reported bugs, or provided your thoughts on the feedback channels is not just simply an integral member of the community, but a co-contributor to what the ladder will become.
+
+This project only works because real players show up and care. And you're one of them.
+
+## What's Next
+
+I'm going quieter on visible updates for a while. Not because development is slowing down, but because the next phase requires rebuilding the bot code from the ground up. It's the kind of work that isn't flashy — but it's essential. For that, I need to discontinue active work on the alpha. This means content and feature updates and bug fixes will be minimal.
+
+The alpha proves that the ladder *can* exist. But the beta has to prove something more — that a third-party StarCraft II platform can be just as seamless and rewarding of an experience as anything Blizzard-official.
+
+To do that, the foundation has to be right. The alpha codebase was built on sand, as a proof-of-concept: perfect for iteration, terrible for scale. The beta codebase will be set in bedrock: durable, resilient, and ready for anything the ladder will ever need.
+
+## Roadmap for the Beta
+
+Not only does the ladder code need to be rewritten, but the list of planned new features is ambitious.
+
+The beta will serve as the testing grounds for the following:
+
+- Full locale support for:
+  - 🇺🇸 enUS
+  - 🇰🇷 koKR
+  - 🇨🇳 zhCN
+  - 🇲🇽 esMX
+  - 🇷🇺 ruRU
+  - These language communities form the core of our playerbase.
+- New gamemodes:
+  - 2v2
+  - 3v3
+  - FFA
+  - and other alternative gamemodes.
+- Better matchmaking: more sensitive to wait times, concurrent player activity, and regional separation (especially at lower MMRs).
+- Better match reporting: significantly more automation and far fewer manual reports. Match results will be processed from just one player uploading a file.
+- Better sense of activity:
+  - While current queue attempts in off-hours are shockingly high, most players leave quickly, missing each other by minutes.
+  - The beta will feature tools to help players know when they can expect matches, without enabling sniping or dodging.
+- Better analytics: expanding beyond basic Win/Loss/Draw into richer match history insights.
+- Better admin tools: stronger monitoring and integrity systems to keep the ladder fair.
+- And more.
+
+The scope of this undertaking is the grandest of anything I've done before. Each new feature brings its own challenges, and the rebuild will likely take one to two months — perhaps more. But I'm doing it all with a clear goal: the beta cannot just be a hobby project. It needs to be built with all the attention and care that a serious, legitimate platform deserves.
+
+## Thanks again for playing the ladder alpha.
+
+In a few months, the ladder beta will be the star of the show, but it won't be alone. I can't share details yet, but there's more on the way. You won't want to miss it.
+
+I'll see you all again soon with something worthy of a proper beta.
+
+— HyperONE
