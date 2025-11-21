@@ -590,14 +590,21 @@ class DatabaseWriter:
         games_played: int = 0,
         games_won: int = 0,
         games_lost: int = 0,
-        games_drawn: int = 0
+        games_drawn: int = 0,
+        last_played: str = None
     ) -> bool:
         """
         Create or update a player's 1v1 MMR for a specific race.
         
+        Args:
+            last_played: Optional timestamp string. If not provided, uses current timestamp.
+        
         Returns:
             True if successful.
         """
+        if last_played is None:
+            last_played = get_timestamp()
+        
         result = self.adapter.execute_write(
             """
             INSERT INTO mmrs_1v1 (
@@ -623,7 +630,7 @@ class DatabaseWriter:
                 "games_won": games_won,
                 "games_lost": games_lost,
                 "games_drawn": games_drawn,
-                "last_played": get_timestamp()
+                "last_played": last_played
             }
         )
         return result
