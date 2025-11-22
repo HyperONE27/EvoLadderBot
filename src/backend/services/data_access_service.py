@@ -507,17 +507,31 @@ class DataAccessService:
                     player_name = matching_rows[0, "player_name"]
                     mmr = matching_rows[0, "mmr"]
                     
+                    # Convert last_played datetime to ISO format string for JSON serialization
+                    if isinstance(last_played, str):
+                        last_played_str = last_played
+                    elif last_played is not None:
+                        # Handle both Python datetime and Polars datetime
+                        if hasattr(last_played, 'strftime'):
+                            last_played_str = last_played.strftime("%Y-%m-%dT%H:%M:%S%z")
+                        else:
+                            # Fallback to isoformat
+                            last_played_str = str(last_played)
+                    else:
+                        last_played_str = None
+                    
                     job = WriteJob(
                         job_type=WriteJobType.UPDATE_MMR,
                         data={
                             "discord_uid": discord_uid,
                             "player_name": player_name,
                             "race": race,
-                            "mmr": mmr,
+                            "new_mmr": mmr,
                             "games_played": games_played,
                             "games_won": games_won,
                             "games_lost": games_lost,
-                            "games_drawn": games_drawn
+                            "games_drawn": games_drawn,
+                            "last_played": last_played_str
                         },
                         timestamp=time.time()
                     )
@@ -550,10 +564,10 @@ class DataAccessService:
         # Check if we're in the midnight-1AM UTC window
         if current_hour != 0:
             print(f"[MMR Reconciliation] Current hour is {current_hour} UTC, outside midnight-1AM window")
-            return False
+            return True
         
         print(f"[MMR Reconciliation] In midnight-1AM UTC window, will run reconciliation")
-        return False
+        return True
     
     async def _get_last_reconciliation_timestamp(self) -> Optional[datetime]:
         """
@@ -975,7 +989,8 @@ class DataAccessService:
                         job.data['games_played'],
                         job.data['games_won'],
                         job.data['games_lost'],
-                        job.data['games_drawn']
+                        job.data['games_drawn'],
+                        job.data.get('last_played')
                     )
                 else:
                     # MMR-only update (from admin) - only update MMR, not game stats
@@ -1008,7 +1023,8 @@ class DataAccessService:
                     job.data.get('games_played', 0),
                     job.data.get('games_won', 0),
                     job.data.get('games_lost', 0),
-                    job.data.get('games_drawn', 0)
+                    job.data.get('games_drawn', 0),
+                    job.data.get('last_played')
                 )
             
             elif job.job_type == WriteJobType.LOG_PLAYER_ACTION:
