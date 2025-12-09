@@ -1,0 +1,23 @@
+{
+    "maps": {
+        "season_alpha": [
+            {
+                "name": "Map One",
+                "short_name": "Map1",
+                "am_link": "",
+                "eu_link": "",
+                "as_link": ""
+            }
+        ],
+        "season_1": [
+            {
+                "name": "Map Two",
+                "short_name": "Map2",
+                "am_link": "",
+                "eu_link": "",
+                "as_link": ""
+            }
+        ]
+    }
+}
+

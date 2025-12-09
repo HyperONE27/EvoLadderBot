@@ -1,0 +1,14 @@
+{
+    "residential_regions": [
+        {"code": "NAW", "name": "Western North America"},
+        {"code": "EUW", "name": "Western Europe"}
+    ],
+    "game_servers": [
+        {"code": "USW", "name": "Western United States", "region_code": "AM"},
+        {"code": "EUC", "name": "Central Europe", "region_code": "EU"}
+    ],
+    "game_regions": [
+        {"code": "AM", "name": "Americas"},
+        {"code": "EU", "name": "Europe"}
+    ]
+}
