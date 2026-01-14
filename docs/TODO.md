@@ -359,6 +359,8 @@
     - ⏰ High MMR/top competitive players are used to playing across oceans and continents
     - ⏰ Low MMR players just want to not fight the game
     - ⏰ Tune the matchmaker to prefer low ping at lower MMR at expense of MMR fairness? Default to strict MMR fairness higher up??? Is this fair?
+  - ⏰ Match confirmation alert should be separate from match information display
+    - ⏰ Players should have to confirm they are available to play before they can see any information about the match
 - Scaling:
   - Add extra API keys to handle Korean, Simplified Chinese, Spanish, Portugese, and German
 
