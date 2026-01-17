@@ -362,7 +362,9 @@
   - ⏰ Match confirmation alert should be separate from match information display
     - ⏰ Players should have to confirm they are available to play before they can see any information about the match
 - Scaling:
-  - Add extra API keys to handle Korean, Simplified Chinese, Spanish, Portugese, and German
+  - ⏰ Add extra API keys to handle Korean, Simplified Chinese, Spanish, Portugese, and German
+- Setup:
+  - ⏰ Make setup instructions less vague, e.g. people don't know what "user ID" means (but we cannot afford to use too many characters to explain it)
 
 ## PRE-RELEASE
 
