@@ -202,6 +202,3 @@ data/replays/**
 # that provides crash-resistant durability for pending database writes
 data/wal/
 data/wal/**
-
-# Admins
-data/misc/**
