@@ -26,4 +26,3 @@ def create_banned_embed() -> tuple[discord.Embed, discord.ui.View]:
         view.add_item(button)
     
     return embed, view
-
