@@ -50,6 +50,8 @@ class MatchCompletionService:
             cls._instance.match_confirmations: Dict[int, Set[int]] = {}
             # Track reminder tasks: (match_id, player_discord_uid) -> asyncio.Task
             cls._instance.reminder_tasks: Dict[Tuple[int, int], asyncio.Task] = {}
+            # Callbacks fired when both players have confirmed (before match info is revealed)
+            cls._instance.both_confirmed_callbacks: Dict[int, List[Callable]] = {}
             # Initialize logger
             cls._instance.logger = logging.getLogger(__name__)
         return cls._instance
@@ -105,19 +107,32 @@ class MatchCompletionService:
             return
         
         self.monitored_matches.remove(match_id)
-        
+
         task = self.monitoring_tasks.pop(match_id, None)
         if task:
             task.cancel()
-        
+
         # Clean up callbacks and locks
         self.notification_callbacks.pop(match_id, None)
+        self.both_confirmed_callbacks.pop(match_id, None)
         self.processing_locks.pop(match_id, None)
         self.match_confirmations.pop(match_id, None)
         self.reminder_tasks.pop(match_id, None)
 
         print(f"🛑 Stopped monitoring match {match_id}")
-    
+
+    def register_both_confirmed_callback(self, match_id: int, callback: Callable) -> None:
+        """
+        Register a callback to be invoked when both players have confirmed a match.
+
+        Each registered callback is called (as an asyncio task) exactly once, the
+        moment the second player presses Confirm.  Callbacks are keyed by match_id
+        and removed after firing so they cannot be called twice.
+        """
+        if match_id not in self.both_confirmed_callbacks:
+            self.both_confirmed_callbacks[match_id] = []
+        self.both_confirmed_callbacks[match_id].append(callback)
+
     async def confirm_match(self, match_id: int, player_discord_uid: int) -> bool:
         """
         Record that a player has confirmed the match.
@@ -189,16 +204,21 @@ class MatchCompletionService:
             # Check if both players have confirmed
             if len(self.match_confirmations[match_id]) == 2:
                 self.logger.info(f"Both players confirmed match {match_id}, cancelling auto-abort timer")
-                
+
                 # Cancel the auto-abort timer
                 task = self.monitoring_tasks.pop(match_id, None)
                 if task:
                     task.cancel()
                     self.logger.info(f"Auto-abort timer cancelled for match {match_id}")
-                
+
                 # Clean up confirmations
                 self.match_confirmations.pop(match_id, None)
-            
+
+                # Notify frontends that both players confirmed so they can reveal match details
+                callbacks = self.both_confirmed_callbacks.pop(match_id, [])
+                for cb in callbacks:
+                    asyncio.create_task(cb())
+
             return True
     
     async def wait_for_match_completion(self, match_id: int, timeout: int = 30) -> Optional[dict]:
