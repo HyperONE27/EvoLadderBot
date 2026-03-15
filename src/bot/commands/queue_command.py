@@ -1135,27 +1135,34 @@ class MatchNotificationView(discord.ui.View):
             return
         self._superseded = True
 
-        # Update the notification message to show the confirmed state
-        confirmed_embed = discord.Embed(
-            title=f"✅ Match #{self.match_result.match_id} Confirmed!",
-            description="Both players confirmed. Match details are now available below.",
-            color=discord.Color.green(),
-        )
-        async with self.edit_lock:
-            await self._edit_original_message(confirmed_embed, view=None)
+        try:
+            # Update the notification message to show the confirmed state
+            confirmed_embed = discord.Embed(
+                title=f"✅ Match #{self.match_result.match_id} Confirmed!",
+                description="Both players confirmed. Match details are now available below.",
+                color=discord.Color.green(),
+            )
+            async with self.edit_lock:
+                await self._edit_original_message(confirmed_embed, view=None)
 
-        if not self.channel:
-            return
+            if not self.channel:
+                print(f"⚠️ [MatchNotificationView] No channel set for match {self.match_result.match_id}, cannot send MatchFoundView")
+                return
 
-        # Create and send the full match view
-        match_view = MatchFoundView(self.match_result, self.is_player1)
-        loop = asyncio.get_running_loop()
-        embed = await loop.run_in_executor(None, match_view.get_embed)
-        new_message = await queue_channel_send(self.channel, embed=embed, view=match_view)
-        match_view.channel = new_message.channel
-        match_view.original_message_id = new_message.id
-        await match_view.register_for_replay_detection(self.channel.id)
-        self._cleanup()
+            # Create and send the full match view
+            match_view = MatchFoundView(self.match_result, self.is_player1)
+            loop = asyncio.get_running_loop()
+            embed = await loop.run_in_executor(None, match_view.get_embed)
+            new_message = await queue_channel_send(self.channel, embed=embed, view=match_view)
+            match_view.channel = new_message.channel
+            match_view.original_message_id = new_message.id
+            await match_view.register_for_replay_detection(self.channel.id)
+        except Exception as e:
+            print(f"❌ [MatchNotificationView] Error in _on_both_confirmed for match {self.match_result.match_id}: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            self._cleanup()
 
     async def _handle_backend_notification(self, status: str, data: dict):
         """Handle backend events that occur during the pre-confirmation window."""
@@ -1214,6 +1221,9 @@ class MatchFoundView(discord.ui.View):
         # Register this view's notification handler with the backend
         if hasattr(match_result, "register_completion_callback"):
             match_result.register_completion_callback(self.handle_completion_notification)
+
+        # Kept for get_embed() references; the actual abort window is managed by MatchNotificationView
+        self.abort_deadline = get_current_unix_timestamp() + matchmaker.ABORT_TIMER_SECONDS
 
         # Add match result reporting dropdown
         self.result_select = MatchResultSelect(match_result, is_player1, self)
@@ -1613,28 +1623,6 @@ class MatchFoundView(discord.ui.View):
         
         embed.add_field(name="\u3164", value="\u3164", inline=False)
 
-        abort_validity_value = (
-            f"You can use the 🛑 **Abort Match** button if you are unable to play.\n"
-            f"Aborting matches has no MMR penalty, but you have a limited number per month.\n" 
-            f"**Abusing this feature (e.g., dodging matchups/opponents, repeatedly aborting at "
-            f"the last second, wasting the time of others, etc.) will result in a BAN.**\n"
-            f"You can only abort the match before <t:{self.abort_deadline}:T> (<t:{self.abort_deadline}:R>)."
-        )
-        embed.add_field(name="**💨 Can't play? Need to leave? Abort the match!**", value=abort_validity_value, inline=False)
-
-        embed.add_field(name="\u3164", value="\u3164", inline=False)
-
-        embed.add_field(
-            name="⚠️ YOU MUST CONFIRM THE MATCH BELOW, BEFORE IT STARTS! ⚠️",
-            value=(
-                f"Press ✅ **Confirm Match** as soon as you see this. "
-                f"This tells the system you are here and ready to play. "
-                f"If you do not confirm, you will automatically be dropped from the match by <t:{self.abort_deadline}:T> (<t:{self.abort_deadline}:R>). "
-                f"**Dropping too many matches will result in a BAN.**"
-            ),
-            inline=True
-        )
-    
         embed.add_field(name="**ℹ️ To report the match result, upload a replay.**", value="The dropdown menus below will unlock and allow you to report the match result, once you upload a replay.", inline=True)
 
         total_time = (time.perf_counter() - start_time) * 1000
