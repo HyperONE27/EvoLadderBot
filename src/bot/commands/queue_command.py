@@ -2527,6 +2527,34 @@ class StarCraftRaceSelect(discord.ui.Select):
         await self.view.update_embed(interaction)
 
 
+def _determine_report_value_from_replay(match_result, replay_info: dict) -> int:
+    """
+    Map parsed replay result (0=draw, 1=replay_p1_wins, 2=replay_p2_wins) to a
+    match report value (0=draw, 1=match_p1_wins, 2=match_p2_wins).
+
+    Uses the assigned races to detect whether the SC2 lobby slot order aligns
+    with the match assignment order, then flips the result if they are swapped.
+
+    For mirror matchups (both players the same race) the replay slot order is
+    assumed to match the match assignment order, which may occasionally be
+    incorrect; in that case a conflict will surface and require admin resolution.
+    """
+    replay_result = replay_info.get('result', 0)
+
+    if replay_result == 0:
+        return 0  # Draw — position mapping is irrelevant
+
+    match_p1_race = match_result.player_1_race
+    replay_p1_race = replay_info.get('player_1_race', '')
+
+    if match_p1_race == replay_p1_race:
+        # Slot order matches match assignment order
+        return replay_result
+    else:
+        # Slots are swapped relative to match assignment
+        return 3 - replay_result  # 1 → 2, 2 → 1
+
+
 async def store_replay_background(match_id: int, player_id: int, replay_bytes: bytes, replay_info: dict, channel) -> Optional[dict]:
     """
     Store replay and return verification results.
@@ -2790,18 +2818,38 @@ async def on_message(message: discord.Message, bot=None):
                 unix_epoch = int(time.time())
                 match_view.match_result.replay_uploaded = "Yes"
                 match_view.match_result.replay_upload_time = unix_epoch
-                
+
                 # Update the view for the player who uploaded the replay
                 match_view._update_dropdown_states()
-                
+
                 # FIX: Ensure abort button remains disabled if the confirmation window is closed
                 if match_view.confirmation_window_closed:
                     match_view.abort_button.disabled = True
-                
+
                 # Edit the original message using bot token (never expires!)
                 embed = match_view.get_embed()
                 await match_view._edit_original_message(embed, match_view)
-                
+
+                # Auto-report for both players if races + map + timestamp all passed.
+                # This removes the need for either player to manually select a result.
+                can_auto_report = verif and all([
+                    verif['races']['success'],
+                    verif['map']['success'],
+                    verif['timestamp']['success']
+                ])
+
+                if can_auto_report:
+                    from src.backend.services.matchmaking_service import matchmaker
+                    report_value = _determine_report_value_from_replay(
+                        match_view.match_result, replay_info
+                    )
+                    mid = match_view.match_result.match_id
+                    p1_uid = match_view.match_result.player_1_discord_id
+                    p2_uid = match_view.match_result.player_2_discord_id
+                    await matchmaker.record_match_result(mid, p1_uid, report_value)
+                    await matchmaker.record_match_result(mid, p2_uid, report_value)
+                    print(f"✅ Auto-reported result {report_value} for both players in match {mid}")
+
                 print(f"✅ Replay verified and dropdowns unlocked for match {match_view.match_result.match_id}")
             else:
                 # Validation failed - re-lock dropdowns
