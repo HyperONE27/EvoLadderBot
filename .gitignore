@@ -196,6 +196,8 @@ markdown_cursor/
 # Test Assets
 tests/test_data/test_replay_files/**
 data/replays/**
+supabase_replays_download/**
+scripts/download_supabase_replays.py
 
 # Write-Ahead Log (WAL) for DataAccessService
 # This directory contains the ephemeral SQLite write queue
